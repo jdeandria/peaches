@@ -114,6 +114,14 @@ abstract final class Fmt {
     MatchupStatus.complete => 'Final',
   };
 
+  static String seasonStatus(SeasonStatus status) => switch (status) {
+    SeasonStatus.draft => 'Draft',
+    SeasonStatus.scheduled => 'Scheduled',
+    SeasonStatus.active => 'Active',
+    SeasonStatus.complete => 'Complete',
+    SeasonStatus.cancelled => 'Cancelled',
+  };
+
   static String roundStatus(RoundStatus status) => switch (status) {
     RoundStatus.scheduled => 'Upcoming',
     RoundStatus.open => 'Open',

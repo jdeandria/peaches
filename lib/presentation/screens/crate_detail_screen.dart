@@ -159,7 +159,7 @@ class _SeasonSection extends ConsumerWidget {
       children: [
         SectionHeader(
           season.name,
-          trailing: Chip(label: Text(season.status.name)),
+          trailing: Chip(label: Text(Fmt.seasonStatus(season.status))),
         ),
         AsyncView(
           value: standings,

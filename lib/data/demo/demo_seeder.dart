@@ -90,7 +90,7 @@ final class DemoSeeder {
     final crate = await _crateService.createCrate(
       ownerPeachId: 'ada',
       name: 'Weekend Warriors',
-      description: 'Mon / Wed / Fri, forty minutes, no excuses.',
+      description: 'Three days a week, forty minutes, no excuses.',
       now: created,
     );
     for (final id in const [currentPeachId, 'ben', 'cho', 'dev']) {
@@ -140,8 +140,10 @@ final class DemoSeeder {
       await _seasonService.openRound(roundId: round.id, now: now);
       if (round.date == today) break;
       for (final matchup in await _seasons.matchupsInRound(round.id)) {
+        // Log on the round's own evening so history reads naturally.
+        final loggedAt = round.date.toDateTime().add(const Duration(hours: 18));
         for (final peachId in matchup.peachIds) {
-          await _logPlausibly(matchup, peachId, random, now);
+          await _logPlausibly(matchup, peachId, random, loggedAt);
         }
       }
       await _seasonService.closeRound(roundId: round.id);
