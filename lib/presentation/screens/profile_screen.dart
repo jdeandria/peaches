@@ -6,6 +6,7 @@ import '../../application/season_service.dart';
 import '../../domain/models/peach.dart';
 import '../../domain/models/training.dart';
 import '../widgets/async_view.dart';
+import '../widgets/tonal_card.dart';
 
 /// The current Peach's settings.
 class ProfileScreen extends ConsumerWidget {
@@ -62,8 +63,8 @@ class _ProfileBody extends ConsumerWidget {
           child: Text(peach.displayName, style: theme.textTheme.titleLarge),
         ),
         const SectionHeader('Fitness level'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+        TonalCard(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -94,6 +95,7 @@ class _ProfileBody extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: SegmentedButton<UnitSystem>(
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: UnitSystem.metric, label: Text('Metric')),
               ButtonSegment(
@@ -107,26 +109,39 @@ class _ProfileBody extends ConsumerWidget {
           ),
         ),
         const SectionHeader('Exercises'),
-        ListTile(
-          leading: const Icon(Icons.fitness_center_outlined),
-          title: Text('$capabilityCount exercises you can do'),
-          subtitle: const Text('Manage them in the Exercises tab'),
+        TonalListCard(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.fitness_center_outlined),
+              title: Text('$capabilityCount exercises you can do'),
+              subtitle: const Text('Manage them in the Exercises tab'),
+            ),
+          ],
         ),
         if (ref.watch(authServiceProvider).availableProviders.isNotEmpty) ...[
           const SectionHeader('Account'),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Sign out'),
-            subtitle: Text(peach.email ?? ''),
-            onTap: () => ref.read(authServiceProvider).signOut(),
+          TonalListCard(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Sign out'),
+                subtitle: Text(peach.email ?? ''),
+                onTap: () => ref.read(authServiceProvider).signOut(),
+              ),
+            ],
           ),
         ],
         const SectionHeader('About'),
-        const ListTile(
-          leading: Icon(Icons.info_outline),
-          title: Text('Peaches'),
-          subtitle: Text('Version 0.1.0'),
+        const TonalListCard(
+          children: [
+            ListTile(
+              leading: Icon(Icons.info_outline),
+              title: Text('Peaches'),
+              subtitle: Text('Version 0.1.0'),
+            ),
+          ],
         ),
+        const SizedBox(height: 24),
       ],
     );
   }

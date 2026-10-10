@@ -10,6 +10,7 @@ import '../../domain/models/workout_log.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
 import '../widgets/matchup_tile.dart';
+import '../widgets/tonal_card.dart';
 
 /// What the Peach should do today: open matchups first, then history.
 class TodayScreen extends ConsumerWidget {
@@ -21,9 +22,27 @@ class TodayScreen extends ConsumerWidget {
     final logs = ref.watch(myLogsProvider);
     final today = ref.watch(todayProvider);
     ref.watch(syncSeasonsProvider);
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Today')),
+      appBar: AppBar(
+        title: const Text('Today'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(24),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                Fmt.longDay(today),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: AsyncView(
         value: matchups,
         data: (all) {
@@ -38,19 +57,11 @@ class TodayScreen extends ConsumerWidget {
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Text(
-                    Fmt.longDay(today),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
                 const SectionHeader('Open matchups'),
                 if (open.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
+                  const TonalCard(
+                    variant: TonalCardVariant.outlined,
+                    margin: EdgeInsets.symmetric(horizontal: 16),
                     child: Text('No workout due. Enjoy the rest day.'),
                   )
                 else
@@ -71,11 +82,12 @@ class TodayScreen extends ConsumerWidget {
                   value: logs,
                   compact: true,
                   data: (list) => list.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
+                      ? const TonalCard(
+                          variant: TonalCardVariant.outlined,
+                          margin: EdgeInsets.symmetric(horizontal: 16),
                           child: Text('Nothing logged yet.'),
                         )
-                      : Column(
+                      : TonalListCard(
                           children: [
                             for (final log in list.take(10)) _LogTile(log: log),
                           ],
@@ -99,6 +111,7 @@ class _LogTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catalog = ref.watch(catalogProvider);
+    final scheme = Theme.of(context).colorScheme;
     final names = log.entries
         .map((e) => catalog.byId(e.exerciseId)?.name ?? e.exerciseId)
         .take(3)
@@ -107,6 +120,7 @@ class _LogTile extends ConsumerWidget {
     return ListTile(
       leading: Icon(
         log.isSubmitted ? Icons.check_circle_outline : Icons.edit_outlined,
+        color: log.isSubmitted ? scheme.primary : scheme.onSurfaceVariant,
       ),
       title: Text(date),
       subtitle: Text(
@@ -114,9 +128,15 @@ class _LogTile extends ConsumerWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: log.matchupId == null
-          ? const Text('Free')
-          : Text(log.isSubmitted ? 'Submitted' : 'In progress'),
+      trailing: Text(
+        log.matchupId == null
+            ? 'Free'
+            : log.isSubmitted
+            ? 'Submitted'
+            : 'In progress',
+        style: Theme.of(context).textTheme.labelMedium
+            ?.copyWith(color: scheme.onSurfaceVariant),
+      ),
       onTap: log.matchupId == null
           ? null
           : () => context.goNamed(

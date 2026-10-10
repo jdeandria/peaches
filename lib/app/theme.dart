@@ -54,11 +54,29 @@ abstract final class PeachesTheme {
         scrolledUnderElevation: 2,
         centerTitle: false,
       ),
+      // Stock Cards match TonalCard's elevated variant at rest; interactive
+      // surfaces should use TonalCard so they lift on hover and press.
       cardTheme: CardThemeData(
-        elevation: 0,
+        elevation: 1,
         color: scheme.surfaceContainerLow,
+        shadowColor: scheme.shadow,
+        surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: scheme.surfaceContainerHighest,
+        side: BorderSide.none,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant.withValues(alpha: 0.5),
+        space: 1,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        linearTrackColor: scheme.surfaceContainerHighest,
+        linearMinHeight: 6,
+        borderRadius: BorderRadius.circular(3),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scheme.surfaceContainer,

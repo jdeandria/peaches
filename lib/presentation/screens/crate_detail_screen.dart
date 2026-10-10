@@ -12,6 +12,7 @@ import '../../domain/services/round_robin_scheduler.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
 import '../widgets/standings_table.dart';
+import '../widgets/tonal_card.dart';
 
 /// Members, the current Season's standings and rounds, and owner actions.
 class CrateDetailScreen extends ConsumerWidget {
@@ -82,21 +83,36 @@ class _CrateBody extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 88),
         children: [
-          if (crate.description.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text(crate.description),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Wrap(
-              spacing: 8,
+          TonalCard(
+            variant: TonalCardVariant.filled,
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Chip(label: Text(Fmt.goal(crate.settings.goal))),
-                Chip(
-                  label: Text('${crate.settings.workoutDurationMinutes} min'),
+                if (crate.description.isNotEmpty) ...[
+                  Text(crate.description),
+                  const SizedBox(height: 12),
+                ],
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(
+                      avatar: const Icon(Icons.flag_outlined, size: 18),
+                      label: Text(Fmt.goal(crate.settings.goal)),
+                    ),
+                    Chip(
+                      avatar: const Icon(Icons.timer_outlined, size: 18),
+                      label: Text(
+                        '${crate.settings.workoutDurationMinutes} min',
+                      ),
+                    ),
+                    Chip(
+                      avatar: const Icon(Icons.key_outlined, size: 18),
+                      label: Text('Code ${crate.inviteCode}'),
+                    ),
+                  ],
                 ),
-                Chip(label: Text('Code ${crate.inviteCode}')),
               ],
             ),
           ),
@@ -108,8 +124,11 @@ class _CrateBody extends ConsumerWidget {
                   list.where((s) => s.isOpen).firstOrNull ?? list.firstOrNull;
               if (current == null) {
                 return const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('No Season yet. The owner can start one.'),
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: TonalCard(
+                    variant: TonalCardVariant.outlined,
+                    child: Text('No Season yet. The owner can start one.'),
+                  ),
                 );
               }
               return _SeasonSection(season: current, canManage: canManage);
@@ -119,7 +138,7 @@ class _CrateBody extends ConsumerWidget {
           AsyncView(
             value: members,
             compact: true,
-            data: (list) => Column(
+            data: (list) => TonalListCard(
               children: [
                 for (final p in list)
                   ListTile(
@@ -159,7 +178,10 @@ class _SeasonSection extends ConsumerWidget {
       children: [
         SectionHeader(
           season.name,
-          trailing: Chip(label: Text(Fmt.seasonStatus(season.status))),
+          trailing: Chip(
+            label: Text(Fmt.seasonStatus(season.status)),
+            visualDensity: VisualDensity.compact,
+          ),
         ),
         AsyncView(
           value: standings,
@@ -177,7 +199,7 @@ class _SeasonSection extends ConsumerWidget {
         AsyncView(
           value: rounds,
           compact: true,
-          data: (list) => Column(
+          data: (list) => TonalListCard(
             children: [
               for (final r in list)
                 _RoundTile(

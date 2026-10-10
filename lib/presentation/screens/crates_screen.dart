@@ -8,6 +8,7 @@ import '../../domain/models/crate.dart';
 import '../../domain/models/training.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
+import '../widgets/tonal_card.dart';
 
 /// The Crates the current Peach belongs to, with create / join actions.
 class CratesScreen extends ConsumerWidget {
@@ -32,7 +33,7 @@ class CratesScreen extends ConsumerWidget {
                 message: 'Create a Crate or join one with an invite code.',
               )
             : ListView.builder(
-                padding: const EdgeInsets.only(bottom: 88),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
                 itemCount: list.length,
                 itemBuilder: (context, i) => _CrateTile(crate: list[i]),
               ),
@@ -84,21 +85,102 @@ class _CrateTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final members = ref.watch(crateMembersProvider(crate.id));
     final count = members.value?.length;
-    return ListTile(
-      leading: const CircleAvatar(child: Icon(Icons.inventory_2_outlined)),
-      title: Text(crate.name),
-      subtitle: Text(
-        [
-          if (count != null) '$count ${count == 1 ? 'Peach' : 'Peaches'}',
-          Fmt.goal(crate.settings.goal),
-          '${crate.settings.workoutDurationMinutes} min',
-        ].join(' · '),
-      ),
-      trailing: const Icon(Icons.chevron_right),
+    return TonalCard(
+      margin: const EdgeInsets.only(bottom: 12),
       onTap: () =>
           context.goNamed(Routes.crate, pathParameters: {'crateId': crate.id}),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: scheme.secondaryContainer,
+                foregroundColor: scheme.onSecondaryContainer,
+                child: const Icon(Icons.inventory_2_outlined),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(crate.name, style: theme.textTheme.titleMedium),
+                    if (crate.description.isNotEmpty)
+                      Text(
+                        crate.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              if (count != null)
+                _Tag(
+                  icon: Icons.people_outline,
+                  label: '$count ${count == 1 ? 'Peach' : 'Peaches'}',
+                ),
+              _Tag(
+                icon: Icons.flag_outlined,
+                label: Fmt.goal(crate.settings.goal),
+              ),
+              _Tag(
+                icon: Icons.timer_outlined,
+                label: '${crate.settings.workoutDurationMinutes} min',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A small label on a surface-container-highest pill (one tone above the
+/// card it sits on).
+class _Tag extends StatelessWidget {
+  const _Tag({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

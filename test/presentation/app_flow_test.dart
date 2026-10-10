@@ -19,7 +19,14 @@ void main() {
     await tester.tap(find.byIcon(Icons.person_outline));
     await tester.pumpAndSettle();
     expect(find.text('You'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('exercises you can do'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.textContaining('exercises you can do'), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, 2000));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Imperial'));
     await tester.pumpAndSettle();
     final me = await app.peaches.getById('me');

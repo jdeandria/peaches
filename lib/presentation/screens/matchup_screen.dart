@@ -11,6 +11,7 @@ import '../../domain/models/workout_log.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
 import '../widgets/set_logger_sheet.dart';
+import '../widgets/tonal_card.dart';
 
 /// The generated workout for a matchup, with per-exercise logging and a
 /// live score. The same workout is shown to both Peaches.
@@ -168,22 +169,26 @@ class _MatchupBodyState extends ConsumerState<_MatchupBody> {
         padding: const EdgeInsets.only(bottom: 24),
         children: [
           _Header(matchup: matchup, workout: workout, submitted: submitted),
-          for (final block in workout.blocks) ...[
-            SectionHeader(Fmt.block(block.type)),
-            for (final item in block.items)
-              _ItemTile(
-                item: item,
-                exercise: catalog.byId(item.exerciseId),
-                entry: currentLog?.entryForItem(item.id),
-                onTap: editable && catalog.byId(item.exerciseId) != null
-                    ? () => _logItem(
-                        item,
-                        catalog.byId(item.exerciseId)!,
-                        currentLog,
-                      )
-                    : null,
-              ),
-          ],
+          for (final block in workout.blocks)
+            _BlockCard(
+              title: Fmt.block(block.type),
+              scored: block.items.any((i) => i.isScored),
+              children: [
+                for (final item in block.items)
+                  _ItemTile(
+                    item: item,
+                    exercise: catalog.byId(item.exerciseId),
+                    entry: currentLog?.entryForItem(item.id),
+                    onTap: editable && catalog.byId(item.exerciseId) != null
+                        ? () => _logItem(
+                            item,
+                            catalog.byId(item.exerciseId)!,
+                            currentLog,
+                          )
+                        : null,
+                  ),
+              ],
+            ),
         ],
       ),
     );
@@ -213,76 +218,122 @@ class _Header extends ConsumerWidget {
     final window = ref.watch(roundWindowProvider(matchup.roundId)).value;
     final now = ref.watch(clockProvider)();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                matchup.isBye
-                    ? 'Bye week'
-                    : 'You vs ${opponent?.displayName ?? '…'}',
-                style: theme.textTheme.titleLarge,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${Fmt.focus(workout.focus)} · ${Fmt.goal(workout.goal)} · '
-                '~${workout.estimatedMinutes} min',
-                style: theme.textTheme.bodyMedium?.copyWith(
+    return TonalCard(
+      variant: TonalCardVariant.filled,
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            matchup.isBye
+                ? 'Bye week'
+                : 'You vs ${opponent?.displayName ?? '…'}',
+            style: theme.textTheme.titleLarge,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${Fmt.focus(workout.focus)} · ${Fmt.goal(workout.goal)} · '
+            '~${workout.estimatedMinutes} min',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (result != null && me != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              matchup.isBye
+                  ? 'Final: ${Fmt.points(result.homePoints)} points'
+                  : 'Final: ${Fmt.points(matchup.homePeachId == me ? result.homePoints : result.awayPoints)}'
+                        ' – ${Fmt.points(matchup.homePeachId == me ? result.awayPoints : result.homePoints)}'
+                        '${matchup.winnerId == null
+                            ? ' (tie)'
+                            : matchup.winnerId == me
+                            ? ' · You won'
+                            : ' · ${opponent?.displayName ?? 'They'} won'}',
+              style: theme.textTheme.titleMedium,
+            ),
+          ] else if (!submitted && window != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule,
                   color: theme.colorScheme.onSurfaceVariant,
+                  size: 20,
                 ),
-              ),
-              if (result != null && me != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(width: 8),
                 Text(
-                  matchup.isBye
-                      ? 'Final: ${Fmt.points(result.homePoints)} points'
-                      : 'Final: ${Fmt.points(matchup.homePeachId == me ? result.homePoints : result.awayPoints)}'
-                            ' – ${Fmt.points(matchup.homePeachId == me ? result.awayPoints : result.homePoints)}'
-                            '${matchup.winnerId == null
-                                ? ' (tie)'
-                                : matchup.winnerId == me
-                                ? ' · You won'
-                                : ' · ${opponent?.displayName ?? 'They'} won'}',
-                  style: theme.textTheme.titleMedium,
-                ),
-              ] else if (!submitted && window != null) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.schedule,
-                      color: theme.colorScheme.onSurfaceVariant,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Logging ${Fmt.closesIn(window.remainingAt(now))}'
-                      ' · ${Fmt.day(LocalDate.of(window.closesAt.toLocal()))}'
-                      ' ${Fmt.time(window.closesAt.toLocal())}',
-                    ),
-                  ],
-                ),
-              ] else if (submitted) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      color: theme.colorScheme.primary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text('Submitted. Waiting for the round to close.'),
-                  ],
+                  'Logging ${Fmt.closesIn(window.remainingAt(now))}'
+                  ' · ${Fmt.day(LocalDate.of(window.closesAt.toLocal()))}'
+                  ' ${Fmt.time(window.closesAt.toLocal())}',
                 ),
               ],
-            ],
+            ),
+          ] else if (submitted) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: theme.colorScheme.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                const Text('Submitted. Waiting for the round to close.'),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One workout block as an elevated card: title row, then the exercise
+/// rows separated by hairlines.
+class _BlockCard extends StatelessWidget {
+  const _BlockCard({
+    required this.title,
+    required this.scored,
+    required this.children,
+  });
+
+  final String title;
+  final bool scored;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return TonalCard(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(title, style: theme.textTheme.titleMedium),
+                ),
+                Text(
+                  scored ? 'Scored' : 'Not scored',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const Divider(indent: 16, endIndent: 16),
+            children[i],
+          ],
+        ],
       ),
     );
   }
@@ -300,9 +351,25 @@ class _ScoreBadge extends ConsumerWidget {
     final score = log == null
         ? WorkoutScore.zero
         : app.scoring.score(workout: workout, log: log);
-    return Chip(
-      avatar: const Icon(Icons.star_outline, size: 18),
-      label: Text('${Fmt.points(score.total)} pts'),
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.star_rounded, size: 18, color: scheme.onPrimaryContainer),
+          const SizedBox(width: 6),
+          Text(
+            '${Fmt.points(score.total)} pts',
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(color: scheme.onPrimaryContainer),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -348,10 +415,7 @@ class _ItemTile extends StatelessWidget {
             ),
           if (item.isScored) ...[
             const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(value: ratio, minHeight: 6),
-            ),
+            LinearProgressIndicator(value: ratio),
           ],
         ],
       ),
