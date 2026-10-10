@@ -9,6 +9,7 @@ import '../domain/models/score.dart';
 import '../domain/models/season.dart';
 import '../domain/models/workout.dart';
 import '../domain/models/workout_log.dart';
+import '../domain/services/round_window.dart';
 import 'app_container.dart';
 
 /// The wired backend. Overridden in `main` and in tests.
@@ -133,6 +134,27 @@ final roundProvider = FutureProvider.family<Round?, String>((ref, id) {
 final seasonProvider = FutureProvider.family<Season?, String>((ref, id) {
   ref.watch(dataRevisionProvider);
   return ref.watch(appContainerProvider).seasons.getById(id);
+});
+
+final roundWindowProvider = FutureProvider.family<RoundWindow?, String>((
+  ref,
+  roundId,
+) {
+  ref.watch(dataRevisionProvider);
+  return ref.watch(appContainerProvider).seasonService.windowFor(roundId);
+});
+
+/// Opens and closes rounds that are due for the current Peach, then bumps
+/// the revision so every screen refetches.
+final syncSeasonsProvider = FutureProvider<void>((ref) async {
+  final id = ref.watch(currentPeachIdProvider);
+  if (id == null) return;
+  final app = ref.watch(appContainerProvider);
+  await app.seasonService.syncPeach(
+    peachId: id,
+    now: ref.watch(clockProvider)().toUtc(),
+  );
+  ref.read(dataRevisionProvider.notifier).bump();
 });
 
 final workoutProvider = FutureProvider.family<Workout?, String>((ref, id) {

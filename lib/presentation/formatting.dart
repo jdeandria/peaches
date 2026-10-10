@@ -17,6 +17,18 @@ abstract final class Fmt {
   static String longDay(LocalDate date) =>
       _longDayFormat.format(date.toDateTime());
 
+  static final _timeFormat = DateFormat.jm();
+
+  /// "closes in 5 h", "closes in 20 min" or "closed".
+  static String closesIn(Duration remaining) {
+    if (remaining <= Duration.zero) return 'closed';
+    if (remaining.inHours >= 48) return 'closes in ${remaining.inDays} d';
+    if (remaining.inHours >= 1) return 'closes in ${remaining.inHours} h';
+    return 'closes in ${remaining.inMinutes} min';
+  }
+
+  static String time(DateTime local) => _timeFormat.format(local);
+
   static String points(double value) => value == value.roundToDouble()
       ? value.toInt().toString()
       : value.toStringAsFixed(1);

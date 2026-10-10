@@ -29,9 +29,13 @@ class MatchupTile extends ConsumerWidget {
         ? 'Bye week workout'
         : 'vs ${opponent.value?.displayName ?? '…'}';
     final r = round.value;
+    final window = ref.watch(roundWindowProvider(matchup.roundId)).value;
+    final now = ref.watch(clockProvider)();
     final subtitle = [
       crate.value?.name,
       if (r != null) '${Fmt.day(r.date)} · ${Fmt.focus(r.focus)}',
+      if (window != null && matchup.status == MatchupStatus.inProgress)
+        Fmt.closesIn(window.remainingAt(now)),
     ].nonNulls.join(' · ');
 
     Widget trailing;

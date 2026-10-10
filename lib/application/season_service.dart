@@ -11,6 +11,7 @@ import '../domain/models/workout_log.dart';
 import '../domain/repositories/repositories.dart';
 import '../domain/services/exercise_pool.dart';
 import '../domain/services/round_robin_scheduler.dart';
+import '../domain/services/round_window.dart';
 import '../domain/services/scoring_service.dart';
 import '../domain/services/standings_calculator.dart';
 import '../domain/services/workout_generator.dart';
@@ -29,6 +30,7 @@ final class SeasonService {
     required this._pool,
     required this._generator,
     required this._ids,
+    required this._windows,
     this._scoring = const ScoringService(),
     this._standings = const StandingsCalculator(),
   });
@@ -45,6 +47,7 @@ final class SeasonService {
   final ExercisePoolService _pool;
   final WorkoutGenerator _generator;
   final IdGenerator _ids;
+  final RoundWindowService _windows;
   final ScoringService _scoring;
   final StandingsCalculator _standings;
 
@@ -164,16 +167,51 @@ final class SeasonService {
     return closed;
   }
 
-  /// Opens every round dated on or before [today] that is still scheduled.
-  /// Used on app start so a Crate never has to "press go" on exercise day.
-  Future<void> openDueRounds({
+  /// The logging window of a round, in the owning Crate's time zone.
+  Future<RoundWindow?> windowFor(String roundId) async {
+    final round = await _seasons.getRound(roundId);
+    final season = round == null
+        ? null
+        : await _seasons.getById(round.seasonId);
+    final crate = season == null ? null : await _crates.getById(season.crateId);
+    if (round == null || crate == null) return null;
+    return _windows.windowFor(round, crate);
+  }
+
+  /// Opens rounds whose window has started and closes rounds whose window
+  /// has ended, so a Crate never has to press anything on exercise day.
+  /// Runs on app start and whenever the Today screen refreshes; a server
+  /// job will do the same once the backend exists.
+  Future<void> syncSeason({
     required String seasonId,
-    required LocalDate today,
     required DateTime now,
   }) async {
+    final season = await _seasons.getById(seasonId);
+    final crate = season == null ? null : await _crates.getById(season.crateId);
+    if (season == null || crate == null || !season.isOpen) return;
     for (final round in await _seasons.roundsOf(seasonId)) {
-      if (round.status == RoundStatus.scheduled && !round.date.isAfter(today)) {
-        await openRound(roundId: round.id, now: now);
+      final window = _windows.windowFor(round, crate);
+      switch (round.status) {
+        case RoundStatus.scheduled when !now.isBefore(window.opensAt):
+          final opened = await openRound(roundId: round.id, now: now);
+          if (window.hasClosedBy(now)) await closeRound(roundId: opened.id);
+        case RoundStatus.open when window.hasClosedBy(now):
+          await closeRound(roundId: round.id);
+        default:
+          break;
+      }
+    }
+  }
+
+  /// [syncSeason] for every open Season in every Crate [peachId] belongs to.
+  Future<void> syncPeach({
+    required String peachId,
+    required DateTime now,
+  }) async {
+    for (final membership in await _crates.membershipsFor(peachId)) {
+      if (!membership.isActive) continue;
+      for (final season in await _seasons.forCrate(membership.crateId)) {
+        if (season.isOpen) await syncSeason(seasonId: season.id, now: now);
       }
     }
   }

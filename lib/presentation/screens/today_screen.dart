@@ -20,6 +20,7 @@ class TodayScreen extends ConsumerWidget {
     final matchups = ref.watch(myMatchupsProvider);
     final logs = ref.watch(myLogsProvider);
     final today = ref.watch(todayProvider);
+    ref.watch(syncSeasonsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Today')),
@@ -32,53 +33,57 @@ class TodayScreen extends ConsumerWidget {
           final upcoming = all
               .where((m) => m.status == MatchupStatus.scheduled)
               .toList();
-          return ListView(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Text(
-                  Fmt.longDay(today),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              const SectionHeader('Open matchups'),
-              if (open.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('No workout due. Enjoy the rest day.'),
-                )
-              else
-                for (final m in open)
-                  MatchupTile(
-                    matchup: m,
-                    onTap: () => context.goNamed(
-                      Routes.matchup,
-                      pathParameters: {'matchupId': m.id},
+          return RefreshIndicator(
+            onRefresh: () => ref.refresh(syncSeasonsProvider.future),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Text(
+                    Fmt.longDay(today),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-              if (upcoming.isNotEmpty) ...[
-                const SectionHeader('Coming up'),
-                for (final m in upcoming.take(3)) MatchupTile(matchup: m),
-              ],
-              const SectionHeader('Recent workouts'),
-              AsyncView(
-                value: logs,
-                compact: true,
-                data: (list) => list.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Text('Nothing logged yet.'),
-                      )
-                    : Column(
-                        children: [
-                          for (final log in list.take(10)) _LogTile(log: log),
-                        ],
+                ),
+                const SectionHeader('Open matchups'),
+                if (open.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text('No workout due. Enjoy the rest day.'),
+                  )
+                else
+                  for (final m in open)
+                    MatchupTile(
+                      matchup: m,
+                      onTap: () => context.goNamed(
+                        Routes.matchup,
+                        pathParameters: {'matchupId': m.id},
                       ),
-              ),
-              const SizedBox(height: 24),
-            ],
+                    ),
+                if (upcoming.isNotEmpty) ...[
+                  const SectionHeader('Coming up'),
+                  for (final m in upcoming.take(3)) MatchupTile(matchup: m),
+                ],
+                const SectionHeader('Recent workouts'),
+                AsyncView(
+                  value: logs,
+                  compact: true,
+                  data: (list) => list.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Text('Nothing logged yet.'),
+                        )
+                      : Column(
+                          children: [
+                            for (final log in list.take(10)) _LogTile(log: log),
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
           );
         },
       ),

@@ -1,0 +1,18 @@
+# Product decisions
+
+Resolved design questions, so the reasoning survives the conversation
+that produced it. Change a decision here first, then the code.
+
+| # | Question | Decision | Why |
+| --- | --- | --- | --- |
+| 1 | One workout per matchup or per round? | **Per matchup.** Both Peaches in a matchup do the identical session, drawn from exercises they can both do. The round's focus keeps different matchups comparable. | A per-round session would shrink to the intersection of the whole Crate's capabilities, which gets thin fast. Fairness matters most between the two people being compared. |
+| 2 | Are capabilities per Crate or per Peach? | **Per Peach, global.** | "I can do pull-ups" is a property of the person. One list to maintain. |
+| 3 | Handicap between fitness levels? | **No handicap.** Same prescription (capped at the weaker Peach's level + 1), scored on execution relative to the prescription. | Simple, legible, and already favours completion over raw strength. Revisit if standings show level dominating. |
+| 4 | Capability vs. equipment on the day? | **Deferred.** Capabilities describe what a Peach can do with gear they normally have. | Per-day "where am I training" is real but adds a prompt before every session. Roadmap item. |
+| 5 | When does a round close? | **Automatically**: end of the exercise day in the Crate's time zone plus `loggingGraceHours` (default 6). Submissions after that are refused. Owners can still close early. The client runs the sync on launch and refresh; a server job will take over. | Deterministic and the same for everyone in a Crate wherever they live. |
+| 6 | Verifying logs? | **Honour system.** | It's a game among friends. Photo evidence or peer confirmation is a roadmap item if cheating becomes a problem. |
+| 7 | Two Crates with the same exercise day? | **Two workouts.** One log cannot count for two Crates. | Each Crate's workout is tailored to its matchup; merging would break fairness. The generator already keeps sessions short. |
+| 8 | Joining mid-season? | **Wait for the next Season.** Participants freeze when a Season is scheduled. | Round-robin schedules do not take late entrants without unfairness. |
+| 9 | Byes? | Points-for recorded, no win or loss. Standings rank by win percentage (ties count half), then point differential, then points for. | Standard fantasy convention. |
+| 10 | App identifiers | `com.peaches.peaches` on Android and iOS. | Change before store registration if a different reverse domain is preferred. |
+| 11 | Auth and backend | **Firebase Auth** (Google, Apple, email) and **Firestore**, behind the existing repository interfaces. | Matches the Firebase Hosting choice; one console for web, Android and iOS. |

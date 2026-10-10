@@ -4,6 +4,7 @@ import '../domain/models/scoring_rules.dart';
 import '../domain/models/season.dart';
 import '../domain/models/workout_log.dart';
 import '../domain/repositories/repositories.dart';
+import '../domain/services/round_window.dart';
 import '../domain/services/scoring_service.dart';
 import 'crate_service.dart';
 
@@ -13,12 +14,18 @@ final class LoggingService {
     required this._logs,
     required this._workouts,
     required this._ids,
+    required this._seasons,
+    required this._crates,
+    required this._windows,
     this._scoring = const ScoringService(),
   });
 
   final WorkoutLogRepository _logs;
   final WorkoutRepository _workouts;
   final IdGenerator _ids;
+  final SeasonRepository _seasons;
+  final CrateRepository _crates;
+  final RoundWindowService _windows;
   final ScoringService _scoring;
 
   /// Returns the Peach's log for the matchup, creating it on first use.
@@ -78,6 +85,11 @@ final class LoggingService {
     String? notes,
   }) async {
     final log = await _requireEditable(logId);
+    if (log.matchupId != null && !await _windowOpen(log.matchupId!, now)) {
+      throw const DomainException(
+        'The logging window for this round has closed.',
+      );
+    }
     final submitted = log.copyWith(
       status: WorkoutLogStatus.submitted,
       completedAt: now,
@@ -98,6 +110,19 @@ final class LoggingService {
         : await _workouts.getById(workoutId);
     if (workout == null) return WorkoutScore.zero;
     return _scoring.score(workout: workout, log: log, rules: rules);
+  }
+
+  Future<bool> _windowOpen(String matchupId, DateTime now) async {
+    final matchup = await _seasons.getMatchup(matchupId);
+    final round = matchup == null
+        ? null
+        : await _seasons.getRound(matchup.roundId);
+    final season = round == null
+        ? null
+        : await _seasons.getById(round.seasonId);
+    final crate = season == null ? null : await _crates.getById(season.crateId);
+    if (round == null || crate == null) return false;
+    return _windows.windowFor(round, crate).isOpenAt(now);
   }
 
   Future<WorkoutLog> _requireEditable(String logId) async {

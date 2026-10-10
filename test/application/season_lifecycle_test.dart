@@ -196,7 +196,9 @@ void main() {
         await app.logs.getById(log.id) as WorkoutLog,
       );
       expect(live.completionBonus, greaterThan(0));
-      await app.loggingService.submit(logId: log.id, now: now);
+      // Submit inside the round's window (its day is Oct 12).
+      final duringRound = DateTime.utc(2026, 10, 12, 12);
+      await app.loggingService.submit(logId: log.id, now: duringRound);
 
       // A log that was never submitted does not count.
       final awayLog = await app.loggingService.logForMatchup(
@@ -261,7 +263,7 @@ void main() {
       );
     });
 
-    test('openDueRounds opens past and today rounds only', () async {
+    test('syncSeason opens due rounds and closes expired ones', () async {
       final crate = await crateWithMembers(['a', 'b']);
       final season = await app.seasonService.createSeason(
         crate: crate,
@@ -273,19 +275,63 @@ void main() {
         ],
         now: now,
       );
-      await app.seasonService.openDueRounds(
-        seasonId: season.id,
-        today: const LocalDate(2026, 10, 10),
-        now: now,
-      );
-      final statuses = (await app.seasons.roundsOf(season.id))
+      // Oct 8 has closed (end of day + 6 h grace), Oct 10 is in progress,
+      // Oct 12 has not started.
+      await app.seasonService.syncSeason(seasonId: season.id, now: now);
+      final first = (await app.seasons.roundsOf(season.id))
           .map((r) => r.status)
           .toList();
-      expect(statuses, [
-        RoundStatus.open,
+      expect(first, [
+        RoundStatus.closed,
         RoundStatus.open,
         RoundStatus.scheduled,
       ]);
+      // Idempotent.
+      await app.seasonService.syncSeason(seasonId: season.id, now: now);
+      final second = (await app.seasons.roundsOf(season.id))
+          .map((r) => r.status)
+          .toList();
+      expect(second, first);
+      // A closed round has results even when nobody logged.
+      final closedRound = (await app.seasons.roundsOf(season.id)).first;
+      final m = (await app.seasons.matchupsInRound(closedRound.id)).single;
+      expect(m.status, MatchupStatus.complete);
+      expect(m.result, const MatchupResult(homePoints: 0, awayPoints: 0));
+      // syncPeach reaches the same season through the membership.
+      await app.seasonService.syncPeach(peachId: 'b', now: now);
+    });
+
+    test('submissions after the window closes are rejected', () async {
+      final crate = await crateWithMembers(['a', 'b']);
+      final season = await app.seasonService.createSeason(
+        crate: crate,
+        name: 'S',
+        exerciseDays: const [LocalDate(2026, 10, 10)],
+        now: now,
+      );
+      final round = (await app.seasons.roundsOf(season.id)).single;
+      await app.seasonService.openRound(roundId: round.id, now: now);
+      final matchup = (await app.seasons.matchupsInRound(round.id)).single;
+      final window = (await app.seasonService.windowFor(round.id))!;
+      expect(window.opensAt, DateTime.utc(2026, 10, 10));
+      expect(window.closesAt, DateTime.utc(2026, 10, 11, 6));
+      final log = await app.loggingService.logForMatchup(
+        matchup: matchup,
+        peachId: 'a',
+        now: now,
+      );
+      expect(
+        () => app.loggingService.submit(
+          logId: log.id,
+          now: DateTime.utc(2026, 10, 11, 7),
+        ),
+        throwsA(isA<DomainException>()),
+      );
+      await app.loggingService.submit(
+        logId: log.id,
+        now: DateTime.utc(2026, 10, 11, 5, 59),
+      );
+      expect((await app.logs.getById(log.id))!.isSubmitted, isTrue);
     });
 
     test('later rounds avoid exercises from recent rounds', () async {

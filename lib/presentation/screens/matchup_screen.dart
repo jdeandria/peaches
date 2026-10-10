@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
+import '../../domain/core/local_date.dart';
 import '../../domain/exercises/exercise.dart';
 import '../../domain/models/score.dart';
 import '../../domain/models/season.dart';
@@ -209,6 +210,8 @@ class _Header extends ConsumerWidget {
         : ref.watch(peachProvider(opponentId)).value;
     final theme = Theme.of(context);
     final result = matchup.result;
+    final window = ref.watch(roundWindowProvider(matchup.roundId)).value;
+    final now = ref.watch(clockProvider)();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -245,6 +248,23 @@ class _Header extends ConsumerWidget {
                                 ? ' · You won'
                                 : ' · ${opponent?.displayName ?? 'They'} won'}',
                   style: theme.textTheme.titleMedium,
+                ),
+              ] else if (!submitted && window != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.schedule,
+                      color: theme.colorScheme.onSurfaceVariant,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Logging ${Fmt.closesIn(window.remainingAt(now))}'
+                      ' · ${Fmt.day(LocalDate.of(window.closesAt.toLocal()))}'
+                      ' ${Fmt.time(window.closesAt.toLocal())}',
+                    ),
+                  ],
                 ),
               ] else if (submitted) ...[
                 const SizedBox(height: 12),
