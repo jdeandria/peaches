@@ -7,6 +7,9 @@ name: Deploy web
 #   FIREBASE_SERVICE_ACCOUNT  JSON key for a service account with the
 #                             "Firebase Hosting Admin" role
 #   FIREBASE_PROJECT_ID       the Firebase project id
+# Variables:
+#   PEACHES_BACKEND           `firebase` once `flutterfire configure` has
+#                             been run and committed; defaults to `demo`
 
 on:
   push:
@@ -34,7 +37,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build web --release
+      - run: flutter build web --release --dart-define=PEACHES_BACKEND=${{ vars.PEACHES_BACKEND || 'demo' }}
       - name: Deploy (live)
         if: github.event_name != 'pull_request'
         uses: FirebaseExtended/action-hosting-deploy@v0
@@ -43,6 +46,14 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
           channelId: live
+      - name: Deploy Firestore rules and indexes
+        if: github.event_name != 'pull_request'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx --yes firebase-tools@latest deploy --only firestore --project "${{ secrets.FIREBASE_PROJECT_ID }}" --non-interactive
       - name: Deploy (preview)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: FirebaseExtended/action-hosting-deploy@v0

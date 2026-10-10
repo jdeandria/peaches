@@ -75,10 +75,39 @@ marketing version from the tag and the build number from the GitHub run
 number, so every tag build is unique and monotonically increasing on both
 stores.
 
+## Firebase (Auth + Firestore) in the app
+
+One-time setup, in order:
+
+1. Create the Firebase project and enable **Authentication** providers:
+   Google, Apple, Email/Password. Enable **Firestore**.
+2. `dart pub global activate flutterfire_cli` then, in the repo,
+   `flutterfire configure` and choose web, android, ios. It overwrites
+   `lib/firebase_options.dart` (committed; the placeholder values there
+   make the app refuse to start the Firebase backend until replaced).
+3. Deploy rules and indexes: `firebase deploy --only firestore`.
+   `deploy-web.yml` also does this on every push to `main`; the service
+   account needs **Firebase Rules Admin** and **Cloud Datastore Index
+   Admin** for that step.
+4. Google sign-in: add the Android app's SHA-1 and SHA-256 (debug and
+   upload key) in Firebase console. On Android the app needs the *web*
+   OAuth client id to mint id tokens: pass
+   `--dart-define=GOOGLE_SERVER_CLIENT_ID=...` (set the `GOOGLE_SERVER_CLIENT_ID`
+   repository variable; the release workflows forward it). On iOS add the
+   reversed client id URL scheme to `ios/Runner/Info.plist` as the
+   `google_sign_in` README describes.
+5. Apple sign-in: enable the "Sign in with Apple" capability on the iOS
+   target in Xcode, and configure the Services ID + key in Firebase
+   console for web.
+6. Flip the `PEACHES_BACKEND` repository variable to `firebase` so
+   `deploy-web.yml` builds against Firebase instead of demo mode. Locally:
+   `flutter run --dart-define=PEACHES_BACKEND=firebase`.
+
+Local emulators: `firebase emulators:start` (Auth 9099, Firestore 8080,
+Hosting 5000; see `firebase.json`) then run with
+`--dart-define=PEACHES_BACKEND=firebase --dart-define=FIREBASE_EMULATOR_HOST=localhost`.
+
 ## Not yet wired
 
-* Firebase in the app itself (Auth, Firestore). Run
-  `flutterfire configure` once the project exists; the generated
-  `lib/firebase_options.dart` is git-ignored so each environment keeps its
-  own.
+* A scheduled Cloud Function to open and close rounds server-side.
 * Crash reporting and analytics.

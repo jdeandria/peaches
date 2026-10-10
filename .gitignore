@@ -52,5 +52,4 @@ android/key.properties
 *.jks
 *.keystore
 ios/ExportOptions.plist
-lib/firebase_options.dart
 .firebase/

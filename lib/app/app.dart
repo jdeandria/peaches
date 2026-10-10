@@ -1,19 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../application/providers.dart';
 import 'router.dart';
 import 'theme.dart';
 
-class PeachesApp extends StatefulWidget {
+class PeachesApp extends ConsumerStatefulWidget {
   const PeachesApp({super.key});
 
   @override
-  State<PeachesApp> createState() => _PeachesAppState();
+  ConsumerState<PeachesApp> createState() => _PeachesAppState();
 }
 
-class _PeachesAppState extends State<PeachesApp> {
-  late final GoRouter _router = createRouter();
+class _PeachesAppState extends ConsumerState<PeachesApp> {
+  final _authChanged = ValueNotifier<int>(0);
+  late final GoRouter _router = createRouter(
+    refresh: _authChanged,
+    isSignedIn: () {
+      final state = ref.read(authStateProvider);
+      return state.hasValue ? state.value != null : null;
+    },
+  );
 
   @override
   void initState() {
@@ -26,11 +35,24 @@ class _PeachesAppState extends State<PeachesApp> {
   @override
   void dispose() {
     _router.dispose();
+    _authChanged.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authStateProvider, (_, _) => _authChanged.value++);
+    final booting =
+        ref.watch(bootstrapProvider).isLoading &&
+        ref.watch(authStateProvider).value != null;
+    if (booting) {
+      return MaterialApp(
+        title: 'Peaches',
+        theme: PeachesTheme.light(),
+        darkTheme: PeachesTheme.dark(),
+        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
     return MaterialApp.router(
       title: 'Peaches',
       theme: PeachesTheme.light(),

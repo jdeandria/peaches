@@ -18,8 +18,14 @@ presentation  ──►  application  ──►  domain
   `LoggingService`, `CapabilityService`) that coordinate repositories with
   domain services, the Riverpod providers, and `AppContainer`, the single
   composition root.
-* **data** implements the repository interfaces. Today: in memory. Next:
-  Firestore. Swapping the backend changes only `AppContainer`.
+* **data** implements the repository interfaces twice: in memory (demo
+  mode, tests) and on Firestore. `AppContainer.inMemory` and
+  `AppContainer.firestore` are the only places that know which is which.
+  The Firestore repositories are tested with `fake_cloud_firestore`, and
+  the whole application-level lifecycle suite runs against both backends.
+* **auth** is an `AuthService` interface (Google, Apple, email) with a
+  Firebase implementation and a demo stub. `SessionService` guarantees one
+  Peach per signed-in user, keyed by the auth uid.
 * **presentation** is Flutter. Screens read providers and call services;
   they never touch repositories directly.
 
@@ -67,7 +73,7 @@ capabilities minus Crate exclusions), scores, standings.
 * **Hand-written JSON**, no code generation: the domain stays buildable
   with `dart` alone and CI stays simple.
 
-## Planned Firestore layout
+## Firestore layout
 
 Each repository method maps onto one indexed query.
 
@@ -83,8 +89,15 @@ workouts/{workoutId}
 workoutLogs/{logId}                           (peachId, matchupId; composite index)
 ```
 
-Security rules follow membership: a Peach reads a Crate and its Seasons
-only when their membership is active; logs are writable only by their
-owner and frozen once submitted. Round opening and closing should move to
-a scheduled Cloud Function so the generator runs once per matchup and the
-seed-based reproducibility is preserved.
+Matchup documents carry denormalised `peachIds` and `date` fields so
+"my matchups" and "matchups on a day" are single collection-group
+queries. `firestore.rules` follows membership: a Peach reads a Crate's
+Seasons only while their membership is active, logs are writable only by
+their owner and frozen once submitted, and only owners/admins write
+schedules. `firestore.indexes.json` declares the composite and
+collection-group indexes the queries need.
+
+Round opening and closing currently run on the client (`syncPeach` on
+launch and refresh, guarded by per-matchup seeds so two clients produce
+the same workout). Moving that to a scheduled Cloud Function is the next
+backend step.

@@ -18,8 +18,8 @@ domain core that is unit tested independently of the UI.
 | Workout generation engine | Done, tested, deterministic |
 | Round-robin seasons, scoring, standings | Done, tested |
 | Flutter UI (Material 3, light/dark) | Done, widget + integration tested |
-| Persistence | In-memory demo backend; Firebase repositories next |
-| Auth | Not yet; demo pins a seeded user |
+| Persistence | In-memory demo backend and Firestore repositories (contract-tested against a fake) |
+| Auth | Firebase Auth (Google, Apple, email) behind an `AuthService`; demo mode auto-signs in |
 | CI (format, analyze, test, builds) | Done |
 | CD (Firebase Hosting, Play, App Store) | Workflows done; need secrets |
 
@@ -31,7 +31,9 @@ flutter run -d chrome        # or any device
 ```
 
 The app starts in demo mode with a seeded Crate mid-season, so there is
-something to do on the Today tab straight away.
+something to do on the Today tab straight away. To run on Firebase, run
+`flutterfire configure` once and start with
+`--dart-define=PEACHES_BACKEND=firebase` (see docs/RELEASING.md).
 
 ## Test it
 
@@ -50,7 +52,7 @@ flutter drive --driver=test_driver/integration_test.dart \
 lib/
   domain/        pure Dart: models, exercise catalog, services (no Flutter)
   application/   use cases + Riverpod providers + composition root
-  data/          repository implementations (in-memory today)
+  data/          in-memory and Firestore repositories, Firebase auth, time zones
   app/           MaterialApp, theme, router
   presentation/  screens and widgets
 test/            mirrors lib/; test/support holds the shared UI journey

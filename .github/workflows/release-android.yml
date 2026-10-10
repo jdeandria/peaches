@@ -63,6 +63,8 @@ jobs:
       - name: Build App Bundle
         run: >
           flutter build appbundle --release
+          --dart-define=PEACHES_BACKEND=${{ vars.PEACHES_BACKEND || 'demo' }}
+          --dart-define=GOOGLE_SERVER_CLIENT_ID=${{ vars.GOOGLE_SERVER_CLIENT_ID }}
           --build-name=${{ steps.version.outputs.name }}
           --build-number=${{ github.run_number }}
       - uses: actions/upload-artifact@v4

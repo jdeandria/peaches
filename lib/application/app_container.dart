@@ -1,4 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../data/demo/demo_seeder.dart';
+import '../data/firestore/firestore_repositories.dart';
 import '../data/in_memory/in_memory_repositories.dart';
 import '../domain/core/ids.dart';
 import '../domain/core/zone_clock.dart';
@@ -16,8 +19,8 @@ import 'season_service.dart';
 /// The composition root: every repository and service, wired once.
 ///
 /// [AppContainer.inMemory] backs the app with volatile storage (demo mode
-/// and tests). A Firebase-backed factory will live beside it and swap only
-/// the repositories; services and the domain stay untouched.
+/// and tests); [AppContainer.firestore] backs it with Firestore. Only the
+/// repositories differ; services and the domain are shared.
 final class AppContainer {
   AppContainer({
     required this.catalog,
@@ -73,6 +76,25 @@ final class AppContainer {
     seasons: InMemorySeasonRepository(),
     workouts: InMemoryWorkoutRepository(),
     logs: InMemoryWorkoutLogRepository(),
+  );
+
+  /// Firestore-backed container. [db] may be a `FakeFirebaseFirestore` in
+  /// tests, which is how the repositories are contract-tested.
+  factory AppContainer.firestore(
+    FirebaseFirestore db, {
+    required ExerciseCatalog catalog,
+    required IdGenerator ids,
+    required ZoneClock zone,
+  }) => AppContainer(
+    catalog: catalog,
+    ids: ids,
+    zone: zone,
+    peaches: FirestorePeachRepository(db),
+    crates: FirestoreCrateRepository(db),
+    capabilities: FirestoreCapabilityRepository(db),
+    seasons: FirestoreSeasonRepository(db),
+    workouts: FirestoreWorkoutRepository(db),
+    logs: FirestoreWorkoutLogRepository(db),
   );
 
   final ExerciseCatalog catalog;

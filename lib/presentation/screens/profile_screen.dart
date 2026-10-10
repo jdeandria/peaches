@@ -112,11 +112,20 @@ class _ProfileBody extends ConsumerWidget {
           title: Text('$capabilityCount exercises you can do'),
           subtitle: const Text('Manage them in the Exercises tab'),
         ),
+        if (ref.watch(authServiceProvider).availableProviders.isNotEmpty) ...[
+          const SectionHeader('Account'),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Sign out'),
+            subtitle: Text(peach.email ?? ''),
+            onTap: () => ref.read(authServiceProvider).signOut(),
+          ),
+        ],
         const SectionHeader('About'),
         const ListTile(
           leading: Icon(Icons.info_outline),
           title: Text('Peaches'),
-          subtitle: Text('Demo mode: data lives in memory for this session.'),
+          subtitle: Text('Version 0.1.0'),
         ),
       ],
     );

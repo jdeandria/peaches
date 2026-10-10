@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:peaches/app/app.dart';
 import 'package:peaches/application/app_container.dart';
+import 'package:peaches/application/auth_service.dart';
 import 'package:peaches/application/providers.dart';
 import 'package:peaches/data/demo/demo_seeder.dart';
 import 'package:peaches/domain/core/ids.dart';
@@ -21,8 +22,13 @@ Future<AppContainer> pumpSeededApp(WidgetTester tester) async {
       overrides: [
         appContainerProvider.overrideWithValue(container),
         clockProvider.overrideWithValue(() => fixedNow),
-        currentPeachIdProvider.overrideWith(
-          () => CurrentPeachId(initial: DemoSeeder.currentPeachId),
+        authServiceProvider.overrideWithValue(
+          DemoAuthService(
+            user: const AuthUser(
+              id: DemoSeeder.currentPeachId,
+              displayName: 'You',
+            ),
+          ),
         ),
       ],
       child: const PeachesApp(),

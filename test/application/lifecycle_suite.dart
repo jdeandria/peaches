@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:peaches/application/app_container.dart';
 import 'package:peaches/application/crate_service.dart';
-import 'package:peaches/domain/core/ids.dart';
 import 'package:peaches/domain/core/local_date.dart';
 import 'package:peaches/domain/exercises/taxonomy.dart';
 import 'package:peaches/domain/models/crate.dart';
@@ -9,12 +8,14 @@ import 'package:peaches/domain/models/peach.dart';
 import 'package:peaches/domain/models/season.dart';
 import 'package:peaches/domain/models/workout_log.dart';
 
-void main() {
+/// The full application-level behaviour, run against every backend.
+/// [create] must return a fresh, empty container each time.
+void runLifecycleSuite(String backend, AppContainer Function() create) {
   final now = DateTime.utc(2026, 10, 10, 9);
   late AppContainer app;
 
   setUp(() async {
-    app = AppContainer.inMemory(ids: SequentialIdGenerator(prefix: 't'));
+    app = create();
     for (final (id, level) in [('a', 2), ('b', 3), ('c', 4)]) {
       await app.peaches.save(
         Peach(id: id, displayName: id, fitnessLevel: level, createdAt: now),
@@ -44,7 +45,7 @@ void main() {
     return crate;
   }
 
-  group('CrateService', () {
+  group('$backend CrateService', () {
     test(
       'creates a crate with the owner as a member and an invite code',
       () async {
@@ -114,7 +115,7 @@ void main() {
     });
   });
 
-  group('Season lifecycle', () {
+  group('$backend Season lifecycle', () {
     test('create -> open -> log -> close -> standings', () async {
       final crate = await crateWithMembers(['a', 'b', 'c']);
       final days = [
@@ -399,11 +400,9 @@ void main() {
     });
   });
 
-  group('DemoSeeder', () {
+  group('$backend DemoSeeder', () {
     test('seeds a playable mid-season state', () async {
-      final demo = AppContainer.inMemory(
-        ids: SequentialIdGenerator(prefix: 'd'),
-      );
+      final demo = create();
       await demo.demoSeeder.seed(now: now);
       final me = await demo.peaches.getById('me');
       expect(me, isNotNull);

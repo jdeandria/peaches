@@ -58,6 +58,7 @@ jobs:
       - name: Build IPA
         run: >
           flutter build ipa --release
+          --dart-define=PEACHES_BACKEND=${{ vars.PEACHES_BACKEND || 'demo' }}
           --build-name=${{ steps.version.outputs.name }}
           --build-number=${{ github.run_number }}
           --export-options-plist=ios/ExportOptions.plist

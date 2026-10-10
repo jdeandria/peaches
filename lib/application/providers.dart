@@ -11,6 +11,8 @@ import '../domain/models/workout.dart';
 import '../domain/models/workout_log.dart';
 import '../domain/services/round_window.dart';
 import 'app_container.dart';
+import 'auth_service.dart';
+import 'session_service.dart';
 
 /// The wired backend. Overridden in `main` and in tests.
 final appContainerProvider = Provider<AppContainer>(
@@ -28,22 +30,35 @@ final catalogProvider = Provider<ExerciseCatalog>(
   (ref) => ref.watch(appContainerProvider).catalog,
 );
 
-/// The signed-in Peach. Demo mode pins this to the seeded user; the auth
-/// layer will drive it once Firebase Auth is wired in.
-final class CurrentPeachId extends Notifier<String?> {
-  CurrentPeachId({this.initial});
-
-  final String? initial;
-
-  @override
-  String? build() => initial;
-
-  void set(String? id) => state = id;
-}
-
-final currentPeachIdProvider = NotifierProvider<CurrentPeachId, String?>(
-  CurrentPeachId.new,
+/// The sign-in boundary. Overridden in `main` and in tests.
+final authServiceProvider = Provider<AuthService>(
+  (_) => throw UnimplementedError('authServiceProvider must be overridden'),
 );
+
+final authStateProvider = StreamProvider<AuthUser?>(
+  (ref) => ref.watch(authServiceProvider).authState(),
+);
+
+/// The signed-in Peach's id, or null while signed out or still loading.
+final currentPeachIdProvider = Provider<String?>(
+  (ref) => ref.watch(authStateProvider).value?.id,
+);
+
+/// Runs once per sign-in: makes sure the Peach profile exists and brings
+/// Seasons up to date. The app shows a splash until this completes.
+final bootstrapProvider = FutureProvider<Peach?>((ref) async {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return null;
+  final app = ref.watch(appContainerProvider);
+  final session = SessionService(
+    auth: ref.watch(authServiceProvider),
+    peaches: app.peaches,
+  );
+  final now = ref.watch(clockProvider)().toUtc();
+  final peach = await session.ensurePeach(user, now: now);
+  await app.seasonService.syncPeach(peachId: peach.id, now: now);
+  return peach;
+});
 
 /// Bumped after any mutation so one-shot queries refetch.
 final class DataRevision extends Notifier<int> {
