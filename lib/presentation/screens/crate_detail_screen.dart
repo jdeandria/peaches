@@ -11,6 +11,7 @@ import '../../domain/models/season.dart';
 import '../../domain/services/round_robin_scheduler.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
+import '../widgets/motion.dart';
 import '../widgets/standings_table.dart';
 import '../widgets/tonal_card.dart';
 
@@ -186,34 +187,40 @@ class _SeasonSection extends ConsumerWidget {
         AsyncView(
           value: standings,
           compact: true,
-          data: (rows) => StandingsTable(
-            standings: rows,
-            names: {
-              for (final p in members.value ?? const <Peach>[])
-                p.id: p.displayName,
-            },
-            highlightPeachId: me,
+          data: (rows) => StaggeredEntrance(
+            index: 1,
+            child: StandingsTable(
+              standings: rows,
+              names: {
+                for (final p in members.value ?? const <Peach>[])
+                  p.id: p.displayName,
+              },
+              highlightPeachId: me,
+            ),
           ),
         ),
         const SectionHeader('Rounds'),
         AsyncView(
           value: rounds,
           compact: true,
-          data: (list) => TonalListCard(
-            children: [
-              for (final r in list)
-                _RoundTile(
-                  round: r,
-                  mine: matchups.value
-                      ?.where(
-                        (m) =>
-                            m.roundId == r.id && me != null && m.involves(me),
-                      )
-                      .firstOrNull,
-                  canManage: canManage,
-                  isDue: !r.date.isAfter(today),
-                ),
-            ],
+          data: (list) => StaggeredEntrance(
+            index: 2,
+            child: TonalListCard(
+              children: [
+                for (final r in list)
+                  _RoundTile(
+                    round: r,
+                    mine: matchups.value
+                        ?.where(
+                          (m) =>
+                              m.roundId == r.id && me != null && m.involves(me),
+                        )
+                        .firstOrNull,
+                    canManage: canManage,
+                    isDue: !r.date.isAfter(today),
+                  ),
+              ],
+            ),
           ),
         ),
       ],

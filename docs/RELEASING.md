@@ -109,5 +109,7 @@ Hosting 5000; see `firebase.json`) then run with
 
 ## Not yet wired
 
-* A scheduled Cloud Function to open and close rounds server-side.
 * Crash reporting and analytics.
+
+There is deliberately no server component (no Cloud Functions, no Cloud
+Run): the app runs entirely on the client against Firestore.

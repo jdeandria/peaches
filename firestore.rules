@@ -48,29 +48,42 @@ service cloud.firestore {
       }
     }
 
+    // There is no server: whichever member's device notices that a round
+    // is due opens it (generating the deterministic workout) or closes it
+    // (scoring submitted logs). So schedules are created by owners/admins,
+    // but any active member may advance round, matchup and season state.
     match /seasons/{seasonId} {
       allow read: if signedIn() && isMember(resource.data.crateId);
       allow create: if signedIn() && canManage(request.resource.data.crateId);
-      allow update: if canManage(resource.data.crateId);
+      allow update: if isMember(resource.data.crateId)
+                    && request.resource.data.crateId == resource.data.crateId
+                    && request.resource.data.participantIds == resource.data.participantIds;
       allow delete: if false;
 
       match /rounds/{roundId} {
         allow read: if signedIn() && isMember(seasonCrate(seasonId));
-        allow write: if canManage(seasonCrate(seasonId));
+        allow create: if canManage(seasonCrate(seasonId));
+        allow update: if isMember(seasonCrate(seasonId))
+                      && request.resource.data.date == resource.data.date
+                      && request.resource.data.index == resource.data.index;
+        allow delete: if false;
       }
       match /matchups/{matchupId} {
         allow read: if signedIn() && isMember(seasonCrate(seasonId));
-        allow write: if canManage(seasonCrate(seasonId));
+        allow create: if canManage(seasonCrate(seasonId));
+        allow update: if isMember(seasonCrate(seasonId))
+                      && request.resource.data.homePeachId == resource.data.homePeachId
+                      && request.resource.data.awayPeachId == resource.data.awayPeachId;
+        allow delete: if false;
       }
     }
 
-    // Workouts are referenced from matchups; readable by any signed-in
-    // user, written only when a round opens (owner/admin on the client
-    // today, a Cloud Function later).
+    // Workouts are generated client-side when a round opens. Their ids and
+    // contents derive from the matchup, so concurrent writers converge.
     match /workouts/{workoutId} {
       allow read: if signedIn();
-      allow create: if signedIn();
-      allow update, delete: if false;
+      allow create, update: if signedIn();
+      allow delete: if false;
     }
 
     match /workoutLogs/{logId} {

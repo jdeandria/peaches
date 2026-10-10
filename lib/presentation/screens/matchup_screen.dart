@@ -10,6 +10,7 @@ import '../../domain/models/workout.dart';
 import '../../domain/models/workout_log.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
+import '../widgets/motion.dart';
 import '../widgets/set_logger_sheet.dart';
 import '../widgets/tonal_card.dart';
 
@@ -168,26 +169,36 @@ class _MatchupBodyState extends ConsumerState<_MatchupBody> {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
-          _Header(matchup: matchup, workout: workout, submitted: submitted),
-          for (final block in workout.blocks)
-            _BlockCard(
-              title: Fmt.block(block.type),
-              scored: block.items.any((i) => i.isScored),
-              children: [
-                for (final item in block.items)
-                  _ItemTile(
-                    item: item,
-                    exercise: catalog.byId(item.exerciseId),
-                    entry: currentLog?.entryForItem(item.id),
-                    onTap: editable && catalog.byId(item.exerciseId) != null
-                        ? () => _logItem(
-                            item,
-                            catalog.byId(item.exerciseId)!,
-                            currentLog,
-                          )
-                        : null,
-                  ),
-              ],
+          StaggeredEntrance(
+            index: 0,
+            child: _Header(
+              matchup: matchup,
+              workout: workout,
+              submitted: submitted,
+            ),
+          ),
+          for (final (i, block) in workout.blocks.indexed)
+            StaggeredEntrance(
+              index: i + 1,
+              child: _BlockCard(
+                title: Fmt.block(block.type),
+                scored: block.items.any((i) => i.isScored),
+                children: [
+                  for (final item in block.items)
+                    _ItemTile(
+                      item: item,
+                      exercise: catalog.byId(item.exerciseId),
+                      entry: currentLog?.entryForItem(item.id),
+                      onTap: editable && catalog.byId(item.exerciseId) != null
+                          ? () => _logItem(
+                              item,
+                              catalog.byId(item.exerciseId)!,
+                              currentLog,
+                            )
+                          : null,
+                    ),
+                ],
+              ),
             ),
         ],
       ),
@@ -363,8 +374,9 @@ class _ScoreBadge extends ConsumerWidget {
         children: [
           Icon(Icons.star_rounded, size: 18, color: scheme.onPrimaryContainer),
           const SizedBox(width: 6),
-          Text(
-            '${Fmt.points(score.total)} pts',
+          AnimatedNumber(
+            value: score.total,
+            format: (v) => '${Fmt.points(v)} pts',
             style: Theme.of(context).textTheme.labelLarge
                 ?.copyWith(color: scheme.onPrimaryContainer),
           ),
@@ -415,16 +427,26 @@ class _ItemTile extends StatelessWidget {
             ),
           if (item.isScored) ...[
             const SizedBox(height: 6),
-            LinearProgressIndicator(value: ratio),
+            AnimatedProgress(value: ratio),
           ],
         ],
       ),
-      trailing: entry == null
-          ? (onTap == null ? null : const Icon(Icons.add_circle_outline))
-          : Icon(
-              ratio >= 1 ? Icons.check_circle : Icons.edit_outlined,
-              color: ratio >= 1 ? theme.colorScheme.primary : null,
-            ),
+      trailing: AnimatedSwitcher(
+        duration: Motion.short,
+        switchInCurve: Motion.enter,
+        switchOutCurve: Motion.exit,
+        transitionBuilder: (child, animation) =>
+            ScaleTransition(scale: animation, child: child),
+        child: entry == null
+            ? (onTap == null
+                  ? const SizedBox.shrink()
+                  : const Icon(Icons.add_circle_outline, key: ValueKey('add')))
+            : Icon(
+                ratio >= 1 ? Icons.check_circle : Icons.edit_outlined,
+                key: ValueKey(ratio >= 1 ? 'done' : 'edit'),
+                color: ratio >= 1 ? theme.colorScheme.primary : null,
+              ),
+      ),
       onTap: onTap,
       isThreeLine: true,
     );

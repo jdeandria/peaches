@@ -47,6 +47,15 @@ abstract final class PeachesTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          // iOS and macOS keep Flutter's Cupertino defaults.
+          TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: FadeForwardsPageTransitionsBuilder(),
+        },
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,

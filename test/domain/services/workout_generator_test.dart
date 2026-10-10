@@ -215,6 +215,27 @@ void main() {
       }
     });
 
+    test('a requested workoutId makes every id deterministic', () {
+      Workout build() => WorkoutGenerator(ids: RandomIdGenerator()).generate(
+        WorkoutRequest(
+          availableExercises: bodyweight,
+          focus: SessionFocus.fullBody,
+          goal: TrainingGoal.generalFitness,
+          durationMinutes: 40,
+          targetDifficulty: 2,
+          seed: 7,
+          workoutId: 'w-m1',
+        ),
+        now: now,
+      );
+      final a = build();
+      final b = build();
+      expect(a, b);
+      expect(a.id, 'w-m1');
+      expect(a.items.map((i) => i.id).toSet().length, a.items.length);
+      expect(a.items.first.id, startsWith('w-m1-i'));
+    });
+
     test('round-trips through JSON', () {
       final w = generator().generate(request(seed: 3), now: now);
       expect(Workout.fromJson(w.toJson()), w);

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/motion.dart';
+
 import 'crates_screen.dart';
 import 'exercise_library_screen.dart';
 import 'profile_screen.dart';
@@ -44,14 +46,13 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: const [
-          TodayScreen(),
-          CratesScreen(),
-          ExerciseLibraryScreen(),
-          ProfileScreen(),
-        ],
+      body: FadeThroughSwitcher(
+        child: switch (_index) {
+          0 => const TodayScreen(key: ValueKey('today')),
+          1 => const CratesScreen(key: ValueKey('crates')),
+          2 => const ExerciseLibraryScreen(key: ValueKey('exercises')),
+          _ => const ProfileScreen(key: ValueKey('profile')),
+        },
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

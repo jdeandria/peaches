@@ -97,7 +97,21 @@ their owner and frozen once submitted, and only owners/admins write
 schedules. `firestore.indexes.json` declares the composite and
 collection-group indexes the queries need.
 
-Round opening and closing currently run on the client (`syncPeach` on
-launch and refresh, guarded by per-matchup seeds so two clients produce
-the same workout). Moving that to a scheduled Cloud Function is the next
-backend step.
+### No server
+
+Everything runs on the client against Firestore; there are no Cloud
+Functions or Cloud Run services. Rounds open and close when any member's
+device notices they are due (`syncPeach` on launch and on refresh). That
+is safe because the work is idempotent and convergent:
+
+* the workout for a matchup is generated from a seed derived from the
+  matchup, with a deterministic document id (`w-<matchupId>`) and item
+  ids, so two devices opening the same round write identical documents;
+* closing scores only submitted logs with a pure function, so two devices
+  closing the same round write identical results;
+* security rules let any active member advance round, matchup and season
+  state but never change who plays whom or when.
+
+The trade-off is trust: a member could hand-edit results through the API.
+That matches the honour-system decision; if it ever matters, the
+scoring step is the one piece that would move server-side.

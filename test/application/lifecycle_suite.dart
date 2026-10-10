@@ -162,6 +162,11 @@ void runLifecycleSuite(String backend, AppContainer Function() create) {
         }
       }
 
+      // Workout ids derive from the matchup so any device converges.
+      for (final m in matchups) {
+        expect(m.workoutId, 'w-${m.id}');
+      }
+
       // Re-opening is idempotent.
       final before = matchups.map((m) => m.workoutId).toList();
       await app.seasonService.openRound(roundId: rounds.first.id, now: now);

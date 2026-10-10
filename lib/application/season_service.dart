@@ -259,13 +259,17 @@ final class SeasonService {
         seed: _seedFor(matchup, round),
         recentUse: recentUse,
         title: 'Round ${round.index + 1}',
+        workoutId: 'w-${matchup.id}',
       ),
       now: now,
     );
   }
 
-  /// A stable seed per matchup so re-opening a round (after a crash, say)
-  /// regenerates the identical workout.
+  /// A stable seed per matchup so any device that opens the round (or
+  /// re-opens it after a crash) generates the identical workout. Together
+  /// with the deterministic workout id this makes opening idempotent
+  /// across the whole Crate: there is no server, so every client is
+  /// allowed to do it and they all converge on the same document.
   static int _seedFor(Matchup matchup, Round round) =>
       Object.hash(matchup.id, round.id, round.index) & 0x7fffffff;
 

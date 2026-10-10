@@ -10,6 +10,7 @@ import '../../domain/models/workout_log.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
 import '../widgets/matchup_tile.dart';
+import '../widgets/motion.dart';
 import '../widgets/tonal_card.dart';
 
 /// What the Peach should do today: open matchups first, then history.
@@ -65,17 +66,24 @@ class TodayScreen extends ConsumerWidget {
                     child: Text('No workout due. Enjoy the rest day.'),
                   )
                 else
-                  for (final m in open)
-                    MatchupTile(
-                      matchup: m,
-                      onTap: () => context.goNamed(
-                        Routes.matchup,
-                        pathParameters: {'matchupId': m.id},
+                  for (final (i, m) in open.indexed)
+                    StaggeredEntrance(
+                      index: i,
+                      child: MatchupTile(
+                        matchup: m,
+                        onTap: () => context.goNamed(
+                          Routes.matchup,
+                          pathParameters: {'matchupId': m.id},
+                        ),
                       ),
                     ),
                 if (upcoming.isNotEmpty) ...[
                   const SectionHeader('Coming up'),
-                  for (final m in upcoming.take(3)) MatchupTile(matchup: m),
+                  for (final (i, m) in upcoming.take(3).indexed)
+                    StaggeredEntrance(
+                      index: open.length + i,
+                      child: MatchupTile(matchup: m),
+                    ),
                 ],
                 const SectionHeader('Recent workouts'),
                 AsyncView(
@@ -87,10 +95,14 @@ class TodayScreen extends ConsumerWidget {
                           margin: EdgeInsets.symmetric(horizontal: 16),
                           child: Text('Nothing logged yet.'),
                         )
-                      : TonalListCard(
-                          children: [
-                            for (final log in list.take(10)) _LogTile(log: log),
-                          ],
+                      : StaggeredEntrance(
+                          index: open.length + upcoming.length.clamp(0, 3),
+                          child: TonalListCard(
+                            children: [
+                              for (final log in list.take(10))
+                                _LogTile(log: log),
+                            ],
+                          ),
                         ),
                 ),
                 const SizedBox(height: 24),

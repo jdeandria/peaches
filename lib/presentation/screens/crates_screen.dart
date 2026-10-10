@@ -8,6 +8,7 @@ import '../../domain/models/crate.dart';
 import '../../domain/models/training.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
+import '../widgets/motion.dart';
 import '../widgets/tonal_card.dart';
 
 /// The Crates the current Peach belongs to, with create / join actions.
@@ -35,7 +36,10 @@ class CratesScreen extends ConsumerWidget {
             : ListView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
                 itemCount: list.length,
-                itemBuilder: (context, i) => _CrateTile(crate: list[i]),
+                itemBuilder: (context, i) => StaggeredEntrance(
+                  index: i,
+                  child: _CrateTile(crate: list[i]),
+                ),
               ),
       ),
     );

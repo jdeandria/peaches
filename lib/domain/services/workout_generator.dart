@@ -20,6 +20,7 @@ final class WorkoutRequest {
     this.maxDifficulty = 5,
     this.recentUse = const {},
     this.title,
+    this.workoutId,
   }) : assert(durationMinutes > 0, 'durationMinutes must be positive'),
        assert(
          targetDifficulty >= 1 && targetDifficulty <= 5,
@@ -40,6 +41,11 @@ final class WorkoutRequest {
   /// exerciseId -> rounds ago it was last used, for variety.
   final Map<String, int> recentUse;
   final String? title;
+
+  /// When set, the workout and its items get ids derived from this value
+  /// instead of fresh random ids, so two devices generating the same
+  /// matchup's workout produce byte-identical documents.
+  final String? workoutId;
 }
 
 /// Builds a complete, time-boxed workout from a shared exercise pool.
@@ -98,13 +104,18 @@ final class WorkoutGenerator {
 
     drafts = _fitToBudget(drafts, request.durationMinutes * 60);
 
+    final workoutId = request.workoutId ?? _ids.newId();
+    var itemIndex = 0;
+    String nextItemId() =>
+        request.workoutId == null ? _ids.newId() : '$workoutId-i${++itemIndex}';
+
     final blocks = <WorkoutBlock>[];
     for (final type in BlockType.values) {
       final items = [
         for (final d in drafts)
           if (d.selection.block == type)
             WorkoutItem(
-              id: _ids.newId(),
+              id: nextItemId(),
               exerciseId: d.selection.exercise.id,
               prescription: d.prescription,
               scoringWeight: d.selection.slot.scoringWeight,
@@ -114,7 +125,7 @@ final class WorkoutGenerator {
     }
 
     return Workout(
-      id: _ids.newId(),
+      id: workoutId,
       title: request.title,
       blocks: blocks,
       focus: request.focus,

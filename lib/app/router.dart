@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -5,6 +6,7 @@ import '../presentation/screens/crate_detail_screen.dart';
 import '../presentation/screens/home_shell.dart';
 import '../presentation/screens/matchup_screen.dart';
 import '../presentation/screens/sign_in_screen.dart';
+import '../presentation/widgets/motion.dart';
 
 /// Route names, so screens navigate by name rather than by string path.
 abstract final class Routes {
@@ -36,26 +38,35 @@ GoRouter createRouter({
     GoRoute(
       name: Routes.signIn,
       path: Routes.signInPath,
-      builder: (context, state) => const SignInScreen(),
+      pageBuilder: (context, state) =>
+          FadeThroughPage(key: state.pageKey, child: const SignInScreen()),
     ),
     GoRoute(
       name: Routes.home,
       path: '/',
-      builder: (context, state) => HomeShell(
-        initialTab: int.tryParse(state.uri.queryParameters['tab'] ?? ''),
+      pageBuilder: (context, state) => FadeThroughPage(
+        key: state.pageKey,
+        child: HomeShell(
+          initialTab: int.tryParse(state.uri.queryParameters['tab'] ?? ''),
+        ),
       ),
       routes: [
         GoRoute(
           name: Routes.crate,
           path: 'crates/:crateId',
-          builder: (context, state) =>
-              CrateDetailScreen(crateId: state.pathParameters['crateId']!),
+          pageBuilder: (context, state) => SharedAxisPage(
+            key: state.pageKey,
+            child: CrateDetailScreen(crateId: state.pathParameters['crateId']!),
+          ),
         ),
         GoRoute(
           name: Routes.matchup,
           path: 'matchups/:matchupId',
-          builder: (context, state) =>
-              MatchupScreen(matchupId: state.pathParameters['matchupId']!),
+          pageBuilder: (context, state) => SharedAxisPage(
+            key: state.pageKey,
+            type: SharedAxisTransitionType.scaled,
+            child: MatchupScreen(matchupId: state.pathParameters['matchupId']!),
+          ),
         ),
       ],
     ),
