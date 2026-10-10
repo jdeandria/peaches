@@ -17,6 +17,10 @@ const backend = String.fromEnvironment('PEACHES_BACKEND', defaultValue: 'demo');
 /// `--dart-define=FIREBASE_EMULATOR_HOST=localhost` targets the emulators.
 const emulatorHost = String.fromEnvironment('FIREBASE_EMULATOR_HOST');
 
+/// `--dart-define=PEACHES_DEMO_SIGNED_OUT=true` starts the demo on the
+/// sign-in screen; any provider button then signs in as the demo user.
+const demoSignedOut = bool.fromEnvironment('PEACHES_DEMO_SIGNED_OUT');
+
 /// Android needs the web OAuth client id to obtain Google id tokens.
 const googleServerClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
 
@@ -38,6 +42,9 @@ Future<void> main() async {
     await container.demoSeeder.seed(now: DateTime.now().toUtc());
     auth = DemoAuthService(
       user: const AuthUser(id: DemoSeeder.currentPeachId, displayName: 'You'),
+      // The define defaults to false, so this reads as the default value.
+      // ignore: avoid_redundant_argument_values
+      signedIn: !demoSignedOut,
     );
   }
   runApp(

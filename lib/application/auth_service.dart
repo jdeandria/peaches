@@ -1,3 +1,5 @@
+import 'dart:async';
+
 /// A signed-in identity, independent of the auth provider.
 final class AuthUser {
   const AuthUser({
@@ -43,40 +45,61 @@ abstract interface class AuthService {
   Future<void> signOut();
 }
 
-/// Always signed in as one fixed user; used by demo mode and tests.
+/// Signs in as one fixed user; used by demo mode and tests.
+///
+/// With [signedIn] false the demo starts on the sign-in screen and every
+/// provider button signs in as [user], which lets the sign-in flow be
+/// exercised without a backend.
 final class DemoAuthService implements AuthService {
-  DemoAuthService({required this.user});
+  DemoAuthService({required this.user, bool signedIn = true})
+    : _current = signedIn ? user : null;
 
   final AuthUser user;
+  AuthUser? _current;
+  final _changes = StreamController<AuthUser?>.broadcast();
 
   @override
-  Stream<AuthUser?> authState() => Stream.value(user);
+  Stream<AuthUser?> authState() async* {
+    yield _current;
+    yield* _changes.stream;
+  }
 
   @override
-  AuthUser? get currentUser => user;
+  AuthUser? get currentUser => _current;
 
   @override
-  Set<AuthProvider> get availableProviders => const {};
+  Set<AuthProvider> get availableProviders => _current == null
+      ? const {AuthProvider.google, AuthProvider.apple, AuthProvider.email}
+      : const {};
+
+  Future<AuthUser> _signIn() async {
+    _current = user;
+    _changes.add(user);
+    return user;
+  }
 
   @override
-  Future<AuthUser> signInWithGoogle() async => user;
+  Future<AuthUser> signInWithGoogle() => _signIn();
 
   @override
-  Future<AuthUser> signInWithApple() async => user;
+  Future<AuthUser> signInWithApple() => _signIn();
 
   @override
   Future<AuthUser> signInWithEmail({
     required String email,
     required String password,
-  }) async => user;
+  }) => _signIn();
 
   @override
   Future<AuthUser> registerWithEmail({
     required String email,
     required String password,
     required String displayName,
-  }) async => user;
+  }) => _signIn();
 
   @override
-  Future<void> signOut() async {}
+  Future<void> signOut() async {
+    _current = null;
+    _changes.add(null);
+  }
 }
