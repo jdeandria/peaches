@@ -1,0 +1,77 @@
+name: Release iOS
+
+# Tag a commit `vX.Y.Z` to build a signed IPA and upload it to TestFlight.
+# Submit for App Store review from App Store Connect.
+#
+# Secrets:
+#   IOS_CERTIFICATE_P12_BASE64   Apple Distribution certificate + key, p12, base64
+#   IOS_CERTIFICATE_PASSWORD     password for the p12
+#   APPLE_TEAM_ID                10-character team id
+#   APPSTORE_ISSUER_ID           App Store Connect API issuer id
+#   APPSTORE_API_KEY_ID          App Store Connect API key id
+#   APPSTORE_API_PRIVATE_KEY     contents of the .p8 key
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: 3.47.7
+  BUNDLE_ID: com.peaches.peaches
+
+jobs:
+  release:
+    name: Build and upload to TestFlight
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Import distribution certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      - name: Download provisioning profile
+        uses: apple-actions/download-provisioning-profiles@v3
+        with:
+          bundle-id: ${{ env.BUNDLE_ID }}
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+      - name: Write export options
+        run: sed "s/__APPLE_TEAM_ID__/${{ secrets.APPLE_TEAM_ID }}/" ios/ExportOptions.template.plist > ios/ExportOptions.plist
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "name=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=$(grep '^version:' pubspec.yaml | cut -d' ' -f2 | cut -d+ -f1)" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build IPA
+        run: >
+          flutter build ipa --release
+          --build-name=${{ steps.version.outputs.name }}
+          --build-number=${{ github.run_number }}
+          --export-options-plist=ios/ExportOptions.plist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: build/ios/ipa/*.ipa
+      - name: Locate IPA
+        id: ipa
+        run: echo "path=$(ls build/ios/ipa/*.ipa | head -n1)" >> "$GITHUB_OUTPUT"
+      - name: Upload to TestFlight
+        uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: ${{ steps.ipa.outputs.path }}
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}

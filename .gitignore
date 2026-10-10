@@ -46,3 +46,11 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Signing material and generated config (materialised by CI from secrets)
+android/key.properties
+*.jks
+*.keystore
+ios/ExportOptions.plist
+lib/firebase_options.dart
+.firebase/

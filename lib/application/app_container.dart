@@ -4,6 +4,7 @@ import '../domain/core/ids.dart';
 import '../domain/exercises/exercise_catalog.dart';
 import '../domain/repositories/repositories.dart';
 import '../domain/services/exercise_pool.dart';
+import '../domain/services/scoring_service.dart';
 import '../domain/services/workout_generator.dart';
 import 'capability_service.dart';
 import 'crate_service.dart';
@@ -69,6 +70,7 @@ final class AppContainer {
 
   final ExercisePoolService pool;
   final WorkoutGenerator generator;
+  final ScoringService scoring = const ScoringService();
   late final CrateService crateService;
   late final CapabilityService capabilityService;
   late final LoggingService loggingService;

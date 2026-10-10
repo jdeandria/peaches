@@ -118,13 +118,13 @@ final class DemoSeeder {
       now: created,
     );
 
-    // Season: Mon/Wed/Fri, starting ten days ago, for four weeks.
+    // Season: three days a week including today, started ten days ago,
+    // running four weeks, so the demo always opens on an exercise day.
     const planner = ExerciseDayPlanner();
     final start = today.addDays(-10);
     final days = planner.weekdaysBetween(start, start.addDays(27), {
-      DateTime.monday,
-      DateTime.wednesday,
-      DateTime.friday,
+      for (final offset in const [0, 2, 4])
+        (today.weekday - 1 + offset) % 7 + 1,
     });
     final season = await _seasonService.createSeason(
       crate: crate,
@@ -155,7 +155,7 @@ final class DemoSeeder {
         today.addDays(21),
         {DateTime.tuesday, DateTime.thursday},
       ),
-      now: now,
+      now: created,
     );
     assert(second2.status == SeasonStatus.scheduled);
   }

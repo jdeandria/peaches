@@ -1,11 +1,11 @@
 {
-    "name": "peaches",
-    "short_name": "peaches",
+    "name": "Peaches",
+    "short_name": "Peaches",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#FFE5B4",
+    "description": "Peaches: log workouts and compete with your Crate.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
