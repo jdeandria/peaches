@@ -8,6 +8,7 @@ import 'application/providers.dart';
 import 'data/demo/demo_seeder.dart';
 import 'data/firebase/firebase_bootstrap.dart';
 import 'data/tz/tz_zone_clock.dart';
+import 'domain/core/ids.dart';
 
 /// `--dart-define=PEACHES_BACKEND=firebase` runs on Firebase Auth and
 /// Firestore (after `flutterfire configure`); anything else runs the
@@ -38,7 +39,11 @@ Future<void> main() async {
     container = firebase.container;
     auth = firebase.auth;
   } else {
-    container = AppContainer.inMemory(zone: TzZoneClock());
+    // Sequential ids keep the demo's workouts the same on every load.
+    container = AppContainer.inMemory(
+      ids: SequentialIdGenerator(prefix: 'demo'),
+      zone: TzZoneClock(),
+    );
     await container.demoSeeder.seed(now: DateTime.now().toUtc());
     auth = DemoAuthService(
       user: const AuthUser(id: DemoSeeder.currentPeachId, displayName: 'You'),

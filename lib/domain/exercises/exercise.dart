@@ -93,6 +93,13 @@ final class Exercise extends Equatable {
 
   bool get isBodyweight => equipment.isEmpty;
 
+  /// Whether each set should record the weight used: true for loaded reps
+  /// and for any carry, hold or movement done with load-bearing equipment
+  /// (a farmer carry or suitcase hold, for example).
+  bool get takesLoad =>
+      measurement == MeasurementType.loadedReps ||
+      equipment.any((e) => e.isLoad);
+
   Set<MuscleGroup> get allMuscles => {...primaryMuscles, ...secondaryMuscles};
 
   Set<BodyRegion> get regions => primaryMuscles.map((m) => m.region).toSet();

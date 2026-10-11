@@ -5,6 +5,9 @@ import '../../application/crate_service.dart';
 import '../../application/logging_service.dart';
 import '../../application/season_service.dart';
 import '../../domain/core/local_date.dart';
+import '../../domain/core/stable_hash.dart';
+import '../../domain/exercises/exercise.dart';
+import '../../domain/exercises/exercise_catalog.dart';
 import '../../domain/exercises/taxonomy.dart';
 import '../../domain/models/crate.dart';
 import '../../domain/models/peach.dart';
@@ -26,6 +29,7 @@ final class DemoSeeder {
     required this._seasonService,
     required this._capabilityService,
     required this._loggingService,
+    required this._catalog,
   });
 
   static const currentPeachId = 'me';
@@ -38,6 +42,7 @@ final class DemoSeeder {
   final SeasonService _seasonService;
   final CapabilityService _capabilityService;
   final LoggingService _loggingService;
+  final ExerciseCatalog _catalog;
 
   Future<void> seed({required DateTime now}) async {
     final today = LocalDate.of(now);
@@ -59,7 +64,8 @@ final class DemoSeeder {
       await _peaches.save(p);
     }
 
-    // Everyone can do easy bodyweight work; some have dumbbells or a bar.
+    // Everyone can do easy bodyweight work; most have dumbbells, Ben
+    // doesn't, so his matchups show the shared-equipment rule.
     for (final p in roster) {
       await _capabilityService.enableForEquipment(
         peachId: p.id,
@@ -68,7 +74,7 @@ final class DemoSeeder {
         now: created,
       );
     }
-    for (final id in const [currentPeachId, 'ada', 'cho']) {
+    for (final id in const [currentPeachId, 'ada', 'cho', 'dev']) {
       await _capabilityService.enableForEquipment(
         peachId: id,
         equipment: const {
@@ -135,6 +141,7 @@ final class DemoSeeder {
 
     // Play out past rounds with plausible logs, open today's round if any.
     final random = Random(2026);
+    var roundIndex = 0;
     for (final round in await _seasons.roundsOf(season.id)) {
       if (round.date.isAfter(today)) break;
       await _seasonService.openRound(roundId: round.id, now: now);
@@ -143,10 +150,11 @@ final class DemoSeeder {
         // Log on the round's own evening so history reads naturally.
         final loggedAt = round.date.toDateTime().add(const Duration(hours: 18));
         for (final peachId in matchup.peachIds) {
-          await _logPlausibly(matchup, peachId, random, loggedAt);
+          await _logPlausibly(matchup, peachId, random, loggedAt, roundIndex);
         }
       }
       await _seasonService.closeRound(roundId: round.id);
+      roundIndex++;
     }
 
     final second2 = await _seasonService.createSeason(
@@ -167,6 +175,7 @@ final class DemoSeeder {
     String peachId,
     Random random,
     DateTime now,
+    int roundIndex,
   ) async {
     final workout = await _workouts.getById(matchup.workoutId!);
     if (workout == null) return;
@@ -181,13 +190,17 @@ final class DemoSeeder {
       final p = item.prescription;
       final effort = 0.6 + random.nextDouble() * 0.6;
       final sides = p.perSide ? 2 : 1;
+      final exercise = _catalog.byId(item.exerciseId);
+      final loadKg = exercise != null && exercise.takesLoad
+          ? _workingWeightKg(exercise, peachId, roundIndex)
+          : null;
       final sets = [
         for (var s = 0; s < p.sets * sides; s++)
           SetLog(
             reps: p.reps == null ? null : (p.reps! * effort).round(),
             seconds: p.seconds == null ? null : (p.seconds! * effort).round(),
             meters: p.meters == null ? null : (p.meters! * effort).round(),
-            loadKg: p.load == null ? null : 8.0 + random.nextInt(4) * 2,
+            loadKg: loadKg,
           ),
       ];
       await _loggingService.recordEntry(
@@ -202,5 +215,39 @@ final class DemoSeeder {
     }
     await _loggingService.submit(logId: log.id, now: now);
     assert((await _logs.getById(log.id))?.isSubmitted ?? false);
+  }
+
+  /// A believable working weight: a base for the implement and movement,
+  /// scaled per Peach, rising a little each round so history shows
+  /// progression. Rounded to 2.5 kg like real plates.
+  static double _workingWeightKg(
+    Exercise exercise,
+    String peachId,
+    int roundIndex,
+  ) {
+    final implement = exercise.equipment.contains(Equipment.barbell)
+        ? 40.0
+        : exercise.equipment.contains(Equipment.sled)
+        ? 50.0
+        : exercise.equipment.any(
+            (e) => e == Equipment.cableMachine || e == Equipment.weightMachine,
+          )
+        ? 30.0
+        : exercise.equipment.contains(Equipment.sandbag)
+        ? 20.0
+        : exercise.equipment.contains(Equipment.kettlebell)
+        ? 16.0
+        : exercise.equipment.contains(Equipment.dumbbell)
+        ? 12.0
+        : 8.0;
+    final pattern = switch (exercise.pattern) {
+      MovementPattern.squat || MovementPattern.hinge => 1.5,
+      MovementPattern.lunge || MovementPattern.horizontalPush => 1.1,
+      _ => 1.0,
+    };
+    final strength = 0.8 + (stableHash(peachId) % 50) / 100;
+    final progress = 1 + 0.03 * roundIndex;
+    final kg = implement * pattern * strength * progress;
+    return (kg / 2.5).round() * 2.5;
   }
 }

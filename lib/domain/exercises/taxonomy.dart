@@ -156,7 +156,24 @@ enum Equipment {
   sled,
   battleRope,
   sandbag,
-  plate,
+  plate;
+
+  /// Whether this equipment adds an external weight that is worth recording
+  /// per set. Bands, suspension trainers and cardio machines do not: their
+  /// resistance is not a comparable number.
+  bool get isLoad => switch (this) {
+    dumbbell ||
+    barbell ||
+    kettlebell ||
+    medicineBall ||
+    slamBall ||
+    cableMachine ||
+    weightMachine ||
+    sled ||
+    sandbag ||
+    plate => true,
+    _ => false,
+  };
 }
 
 /// The training quality an exercise primarily develops.

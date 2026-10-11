@@ -8,6 +8,7 @@ import '../../app/theme.dart';
 import '../../application/providers.dart';
 import '../../domain/core/local_date.dart';
 import '../../domain/models/season.dart';
+import '../../domain/models/training.dart';
 import '../../domain/models/workout_log.dart';
 import '../expressive/shapes.dart';
 import '../formatting.dart';
@@ -263,6 +264,12 @@ class _LogRow extends ConsumerWidget {
         .take(3)
         .join(', ');
     final sets = log.entries.fold<int>(0, (n, e) => n + e.sets.length);
+    final volumeKg = log.entries.fold<double>(0, (v, e) => v + e.volumeLoadKg);
+    final units =
+        ref.watch(currentPeachProvider).value?.units ?? UnitSystem.metric;
+    final muted = theme.textTheme.labelMedium?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
     return ListTile(
       minVerticalPadding: 12,
       leading: ShapedAvatar(
@@ -285,11 +292,19 @@ class _LogRow extends ConsumerWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: Text(
-        '$sets sets',
-        style: theme.textTheme.labelMedium?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text('$sets sets', style: muted),
+          if (volumeKg > 0)
+            Text(
+              Fmt.volume(volumeKg, units),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: scheme.primary,
+              ),
+            ),
+        ],
       ),
       onTap: log.matchupId == null
           ? null

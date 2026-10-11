@@ -7,8 +7,10 @@ import '../../domain/core/local_date.dart';
 import '../../domain/exercises/exercise.dart';
 import '../../domain/models/score.dart';
 import '../../domain/models/season.dart';
+import '../../domain/models/training.dart';
 import '../../domain/models/workout.dart';
 import '../../domain/models/workout_log.dart';
+import '../../domain/services/load_history.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
@@ -88,11 +90,22 @@ class _MatchupBodyState extends ConsumerState<_MatchupBody> {
     WorkoutLog? current,
   ) async {
     final existing = current?.entryForItem(item.id);
+    final units =
+        ref.read(currentPeachProvider).value?.units ?? UnitSystem.metric;
+    final previous = exercise.takesLoad
+        ? LoadHistory.lastLoadsKg(
+            ref.read(myLogsProvider).value ?? const [],
+            exercise.id,
+            excludingLogId: current?.id,
+          )
+        : null;
     final entry = await showSetLoggerSheet(
       context,
       exercise: exercise,
       item: item,
       existing: existing,
+      units: units,
+      previousLoadsKg: previous,
     );
     if (entry == null) return;
     try {
@@ -128,6 +141,8 @@ class _MatchupBodyState extends ConsumerState<_MatchupBody> {
   Widget build(BuildContext context) {
     final me = ref.watch(currentPeachIdProvider);
     final catalog = ref.watch(catalogProvider);
+    final units =
+        ref.watch(currentPeachProvider).value?.units ?? UnitSystem.metric;
     final matchup = widget.matchup;
     final workout = widget.workout;
     final isMine = me != null && matchup.involves(me);
@@ -206,6 +221,7 @@ class _MatchupBodyState extends ConsumerState<_MatchupBody> {
                     item: item,
                     exercise: catalog.byId(item.exerciseId),
                     entry: currentLog?.entryForItem(item.id),
+                    units: units,
                     onTap: editable && catalog.byId(item.exerciseId) != null
                         ? () => _logItem(
                             item,
@@ -368,12 +384,14 @@ class _ItemTile extends StatelessWidget {
     required this.exercise,
     required this.entry,
     required this.onTap,
+    this.units = UnitSystem.metric,
   });
 
   final WorkoutItem item;
   final Exercise? exercise;
   final ExerciseLogEntry? entry;
   final VoidCallback? onTap;
+  final UnitSystem units;
 
   @override
   Widget build(BuildContext context) {
@@ -389,6 +407,7 @@ class _ItemTile extends StatelessWidget {
           };
     final ratio = target == 0 ? 0.0 : (achieved / target).clamp(0.0, 1.0);
     final done = entry != null && ratio >= 1;
+    final loggedLoad = entry == null ? null : Fmt.loggedLoad(entry!, units);
 
     final Widget action;
     if (entry == null) {
@@ -438,6 +457,15 @@ class _ItemTile extends StatelessWidget {
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
+                  if (loggedLoad != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      loggedLoad,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: scheme.primary,
+                      ),
+                    ),
+                  ],
                   if (exercise?.cues != null) ...[
                     const SizedBox(height: 4),
                     Text(

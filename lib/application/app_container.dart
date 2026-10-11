@@ -125,5 +125,6 @@ final class AppContainer {
     seasonService: seasonService,
     capabilityService: capabilityService,
     loggingService: loggingService,
+    catalog: catalog,
   );
 }

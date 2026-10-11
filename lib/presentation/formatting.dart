@@ -1,10 +1,12 @@
 import 'package:intl/intl.dart';
 
 import '../domain/core/local_date.dart';
+import '../domain/core/units.dart';
 import '../domain/exercises/taxonomy.dart';
 import '../domain/models/season.dart';
 import '../domain/models/training.dart';
 import '../domain/models/workout.dart';
+import '../domain/models/workout_log.dart';
 
 /// Human-readable labels for domain values. Kept in one place so the UI
 /// never reaches into enum names.
@@ -43,6 +45,35 @@ abstract final class Fmt {
     final rest = p.restSeconds > 0 ? ' · rest ${p.restSeconds} s' : '';
     final load = p.load == null ? '' : ' · RPE ${p.load!.rpe}';
     return '${p.sets} × $unit$side$rest$load';
+  }
+
+  /// A weight in the Peach's units, e.g. "22.5 kg" or "50 lb".
+  static String weight(double kg, UnitSystem units) =>
+      '${WeightUnits.format(WeightUnits.toDisplay(kg, units))} '
+      '${WeightUnits.label(units)}';
+
+  /// Total volume load (sets × reps × weight), e.g. "2,450 kg".
+  static String volume(double kg, UnitSystem units) =>
+      '${NumberFormat.decimalPattern().format(WeightUnits.toDisplay(kg, units).round())} '
+      '${WeightUnits.label(units)}';
+
+  /// The weights lifted across an entry's sets: "Lifted 20 kg" when they
+  /// all match, otherwise the range "Lifted 20–25 kg". Null when none was
+  /// logged.
+  static String? loggedLoad(ExerciseLogEntry entry, UnitSystem units) {
+    final loads = [
+      for (final s in entry.sets)
+        if (s.loadKg != null && s.loadKg! > 0) s.loadKg!,
+    ];
+    if (loads.isEmpty) return null;
+    String shown(double kg) =>
+        WeightUnits.format(WeightUnits.toDisplay(kg, units));
+    final low = loads.reduce((a, b) => a < b ? a : b);
+    final high = loads.reduce((a, b) => a > b ? a : b);
+    final range = shown(low) == shown(high)
+        ? shown(low)
+        : '${shown(low)}–${shown(high)}';
+    return 'Lifted $range ${WeightUnits.label(units)}';
   }
 
   static String focus(SessionFocus focus) => switch (focus) {
