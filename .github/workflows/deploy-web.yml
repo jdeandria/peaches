@@ -29,7 +29,14 @@ jobs:
   deploy:
     name: Build and deploy to Firebase Hosting
     runs-on: ubuntu-latest
+    env:
+      # Deploy steps run only once the Firebase secret exists, so pull
+      # requests stay green before Firebase is set up.
+      HAS_FIREBASE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
     steps:
+      - name: Firebase not configured
+        if: env.HAS_FIREBASE != 'true'
+        run: echo "::notice::FIREBASE_SERVICE_ACCOUNT is not set; building only. See docs/RELEASING.md."
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
@@ -39,7 +46,7 @@ jobs:
       - run: flutter pub get
       - run: flutter build web --release --dart-define=PEACHES_BACKEND=${{ vars.PEACHES_BACKEND || 'demo' }}
       - name: Deploy (live)
-        if: github.event_name != 'pull_request'
+        if: env.HAS_FIREBASE == 'true' && github.event_name != 'pull_request'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -47,7 +54,7 @@ jobs:
           projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
           channelId: live
       - name: Deploy Firestore rules and indexes
-        if: github.event_name != 'pull_request'
+        if: env.HAS_FIREBASE == 'true' && github.event_name != 'pull_request'
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
@@ -55,7 +62,7 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
           npx --yes firebase-tools@latest deploy --only firestore --project "${{ secrets.FIREBASE_PROJECT_ID }}" --non-interactive
       - name: Deploy (preview)
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: env.HAS_FIREBASE == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
