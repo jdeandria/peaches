@@ -14,9 +14,17 @@ void main() {
     test('accent roles carry the warm peach hue', () {
       for (final brightness in Brightness.values) {
         final scheme = PeachesTheme.colorScheme(brightness);
-        final hue = HSLColor.fromColor(scheme.primary).hue;
-        // Peach sits in the orange band (~20-60 degrees).
-        expect(hue, inInclusiveRange(15, 70), reason: brightness.name);
+        // Primary is peach-fruit coral; tertiary keeps the seed's gold.
+        expect(
+          HSLColor.fromColor(scheme.primary).hue,
+          inInclusiveRange(5, 30),
+          reason: brightness.name,
+        );
+        expect(
+          HSLColor.fromColor(scheme.tertiary).hue,
+          inInclusiveRange(30, 60),
+          reason: brightness.name,
+        );
       }
     });
 

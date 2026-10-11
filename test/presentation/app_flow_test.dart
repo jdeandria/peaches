@@ -25,7 +25,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.textContaining('exercises you can do'), findsOneWidget);
-    await tester.drag(find.byType(ListView).first, const Offset(0, 2000));
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Imperial'));
     await tester.pumpAndSettle();

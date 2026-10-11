@@ -13,6 +13,7 @@ import '../formatting.dart';
 import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
+import '../widgets/page_scaffold.dart';
 import '../widgets/standings_table.dart';
 import '../widgets/tonal_card.dart';
 
@@ -52,26 +53,86 @@ class _CrateBody extends ConsumerWidget {
     final me = ref.watch(currentPeachIdProvider);
     final canManage = me == crate.ownerPeachId;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(crate.name),
-        actions: [
-          IconButton(
-            tooltip: 'Copy invite code',
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: crate.inviteCode));
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Invite code ${crate.inviteCode} copied'),
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    Future<void> copyCode() async {
+      await Clipboard.setData(ClipboardData(text: crate.inviteCode));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invite code ${crate.inviteCode} copied')),
+        );
+      }
+    }
+
+    final season = AsyncView(
+      value: seasons,
+      compact: true,
+      data: (list) {
+        final current =
+            list.where((s) => s.isOpen).firstOrNull ?? list.firstOrNull;
+        if (current == null) {
+          return const Padding(
+            padding: EdgeInsets.only(top: 24),
+            child: TonalCard(
+              variant: TonalCardVariant.outlined,
+              child: Text('No Season yet. The owner can start one.'),
+            ),
+          );
+        }
+        return _SeasonSection(season: current, canManage: canManage);
+      },
+    );
+
+    final peaches = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const PageSection('Peaches'),
+        AsyncView(
+          value: members,
+          compact: true,
+          data: (list) => TonalListCard(
+            children: [
+              for (final p in list)
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: p.id == crate.ownerPeachId
+                        ? scheme.tertiaryContainer
+                        : scheme.secondaryContainer,
+                    foregroundColor: p.id == crate.ownerPeachId
+                        ? scheme.onTertiaryContainer
+                        : scheme.onSecondaryContainer,
+                    child: Text(p.displayName.characters.first),
                   ),
-                );
-              }
-            },
+                  title: Text(p.displayName),
+                  subtitle: Text(
+                    p.id == crate.ownerPeachId ? 'Owner' : 'Member',
+                  ),
+                  trailing: Text(
+                    'Level ${p.fitnessLevel}',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+
+    return PageScaffold(
+      title: crate.name,
+      subtitle: crate.description.isEmpty ? null : crate.description,
+      showBack: true,
+      maxWidth: 1080,
+      actions: [
+        IconButton(
+          tooltip: 'Copy invite code',
+          icon: const Icon(Icons.share_outlined),
+          onPressed: copyCode,
+        ),
+      ],
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
               onPressed: () => showDialog<void>(
@@ -82,91 +143,28 @@ class _CrateBody extends ConsumerWidget {
               label: const Text('Season'),
             )
           : null,
-      body: PageBody(
-        maxWidth: 1200,
-        child: TwoPane(
-          primary: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TonalCard(
-                variant: TonalCardVariant.filled,
-                margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (crate.description.isNotEmpty) ...[
-                      Text(crate.description),
-                      const SizedBox(height: 12),
-                    ],
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        Chip(
-                          avatar: const Icon(Icons.flag_outlined, size: 18),
-                          label: Text(Fmt.goal(crate.settings.goal)),
-                        ),
-                        Chip(
-                          avatar: const Icon(Icons.timer_outlined, size: 18),
-                          label: Text(
-                            '${crate.settings.workoutDurationMinutes} min',
-                          ),
-                        ),
-                        Chip(
-                          avatar: const Icon(Icons.key_outlined, size: 18),
-                          label: Text('Code ${crate.inviteCode}'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              AsyncView(
-                value: seasons,
-                compact: true,
-                data: (list) {
-                  final current =
-                      list.where((s) => s.isOpen).firstOrNull ??
-                      list.firstOrNull;
-                  if (current == null) {
-                    return const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-                      child: TonalCard(
-                        variant: TonalCardVariant.outlined,
-                        child: Text('No Season yet. The owner can start one.'),
-                      ),
-                    );
-                  }
-                  return _SeasonSection(season: current, canManage: canManage);
-                },
-              ),
-            ],
-          ),
-          secondary: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SectionHeader('Peaches'),
-              AsyncView(
-                value: members,
-                compact: true,
-                data: (list) => TonalListCard(
-                  children: [
-                    for (final p in list)
-                      ListTile(
-                        leading: CircleAvatar(child: Text(p.displayName[0])),
-                        title: Text(p.displayName),
-                        subtitle: Text(
-                          p.id == crate.ownerPeachId ? 'Owner' : 'Member',
-                        ),
-                        trailing: Text('Level ${p.fitnessLevel}'),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            Chip(
+              avatar: const Icon(Icons.flag_outlined, size: 18),
+              label: Text(Fmt.goal(crate.settings.goal)),
+            ),
+            Chip(
+              avatar: const Icon(Icons.timer_outlined, size: 18),
+              label: Text('${crate.settings.workoutDurationMinutes} min'),
+            ),
+            ActionChip(
+              avatar: const Icon(Icons.key_outlined, size: 18),
+              label: Text('Code ${crate.inviteCode}'),
+              onPressed: copyCode,
+            ),
+          ],
         ),
-      ),
+        TwoPane(primary: season, secondary: peaches),
+      ],
     );
   }
 }
@@ -189,11 +187,13 @@ class _SeasonSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
+        PageSection(
           season.name,
-          trailing: Chip(
-            label: Text(Fmt.seasonStatus(season.status)),
-            visualDensity: VisualDensity.compact,
+          trailing: StatusLabel(
+            Fmt.seasonStatus(season.status),
+            color: season.status == SeasonStatus.active
+                ? Theme.of(context).colorScheme.primary
+                : null,
           ),
         ),
         AsyncView(
@@ -211,7 +211,7 @@ class _SeasonSection extends ConsumerWidget {
             ),
           ),
         ),
-        const SectionHeader('Rounds'),
+        const PageSection('Rounds'),
         AsyncView(
           value: rounds,
           compact: true,
@@ -265,6 +265,7 @@ class _RoundTile extends ConsumerWidget {
     }
 
     final app = ref.read(appContainerProvider);
+    final scheme = Theme.of(context).colorScheme;
     Widget? trailing;
     if (canManage && round.status == RoundStatus.scheduled && isDue) {
       trailing = FilledButton.tonal(
@@ -283,11 +284,29 @@ class _RoundTile extends ConsumerWidget {
         child: const Text('Close'),
       );
     } else {
-      trailing = Text(Fmt.roundStatus(round.status));
+      trailing = StatusLabel(
+        Fmt.roundStatus(round.status),
+        color: round.status == RoundStatus.open ? scheme.primary : null,
+      );
     }
 
+    final (bg, fg) = switch (round.status) {
+      RoundStatus.open => (scheme.primary, scheme.onPrimary),
+      RoundStatus.closed => (
+        scheme.surfaceContainerHigh,
+        scheme.onSurfaceVariant,
+      ),
+      RoundStatus.scheduled => (
+        scheme.secondaryContainer,
+        scheme.onSecondaryContainer,
+      ),
+    };
     return ListTile(
-      leading: CircleAvatar(child: Text('${round.index + 1}')),
+      leading: CircleAvatar(
+        backgroundColor: bg,
+        foregroundColor: fg,
+        child: Text('${round.index + 1}'),
+      ),
       title: Text('${Fmt.day(round.date)} · ${Fmt.focus(round.focus)}'),
       subtitle: mine == null
           ? null

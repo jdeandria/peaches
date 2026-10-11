@@ -5,13 +5,14 @@ import '../../application/providers.dart';
 import '../../domain/exercises/exercise.dart';
 import '../../domain/exercises/taxonomy.dart';
 import '../formatting.dart';
-import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
+import '../widgets/page_scaffold.dart';
 import '../widgets/tonal_card.dart';
 
-/// Browse the catalog, grouped by movement pattern, and declare which
-/// exercises you can do.
+/// Browse the catalog as an overview of movement patterns and declare
+/// which exercises you can do. Groups start collapsed; searching or
+/// filtering expands every matching group.
 class ExerciseLibraryScreen extends ConsumerStatefulWidget {
   const ExerciseLibraryScreen({super.key});
 
@@ -24,17 +25,14 @@ class _ExerciseLibraryScreenState extends ConsumerState<ExerciseLibraryScreen> {
   String _query = '';
   MovementPattern? _pattern;
   bool _onlyMine = false;
-
-  /// Groups the user has collapsed. Everything starts expanded, and an
-  /// active search always expands its matches.
-  final _collapsed = <MovementPattern>{};
+  final _toggled = <MovementPattern>{};
 
   @override
   Widget build(BuildContext context) {
     final catalog = ref.watch(catalogProvider);
     final mine = ref.watch(myCapabilitiesProvider);
     final able = mine.value ?? const <String>{};
-    final searching = _query.trim().isNotEmpty;
+    final filtering = _query.trim().isNotEmpty || _pattern != null || _onlyMine;
 
     var exercises = catalog.search(_query);
     if (_pattern != null) {
@@ -46,17 +44,51 @@ class _ExerciseLibraryScreenState extends ConsumerState<ExerciseLibraryScreen> {
     for (final e in exercises) {
       groups.putIfAbsent(e.pattern, () => []).add(e);
     }
-    final orderedPatterns = MovementPattern.values
-        .where(groups.containsKey)
-        .toList();
     for (final list in groups.values) {
       list.sort((a, b) => a.name.compareTo(b.name));
     }
-    final ableCount = exercises.where((e) => able.contains(e.id)).length;
+    final patterns = MovementPattern.values.where(groups.containsKey).toList();
+    final totalAble = catalog.all.where((e) => able.contains(e.id)).length;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Exercises'),
+    final header = <Widget>[
+      SearchBar(
+        hintText: 'Search ${catalog.length} exercises',
+        leading: const Icon(Icons.search),
+        onChanged: (q) => setState(() => _query = q),
+      ),
+      const SizedBox(height: 12),
+      SizedBox(
+        height: 40,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            FilterChip(
+              label: const Text('I can do'),
+              selected: _onlyMine,
+              onSelected: (v) => setState(() => _onlyMine = v),
+            ),
+            const SizedBox(width: 8),
+            for (final p in MovementPattern.values) ...[
+              FilterChip(
+                label: Text(Fmt.pattern(p)),
+                selected: _pattern == p,
+                onSelected: (v) => setState(() => _pattern = v ? p : null),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ),
+      const SizedBox(height: 16),
+      if (patterns.isEmpty)
+        const EmptyState(icon: Icons.search_off, title: 'No exercises match'),
+    ];
+
+    return AsyncView(
+      value: mine,
+      data: (_) => PageScaffold(
+        title: 'Exercises',
+        subtitle: '$totalAble of ${catalog.length} enabled for you',
         actions: [
           IconButton(
             tooltip: 'Quick setup',
@@ -67,109 +99,40 @@ class _ExerciseLibraryScreenState extends ConsumerState<ExerciseLibraryScreen> {
             ),
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(112),
-          child: PageBody(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: SearchBar(
-                    hintText: 'Search ${catalog.length} exercises',
-                    leading: const Icon(Icons.search),
-                    elevation: const WidgetStatePropertyAll(0),
-                    onChanged: (q) => setState(() => _query = q),
-                  ),
-                ),
-                SizedBox(
-                  height: 48,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: [
-                      FilterChip(
-                        label: const Text('I can do'),
-                        selected: _onlyMine,
-                        onSelected: (v) => setState(() => _onlyMine = v),
-                      ),
-                      const SizedBox(width: 8),
-                      for (final p in MovementPattern.values) ...[
-                        FilterChip(
-                          label: Text(Fmt.pattern(p)),
-                          selected: _pattern == p,
-                          onSelected: (v) =>
-                              setState(() => _pattern = v ? p : null),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      body: AsyncView(
-        value: mine,
-        data: (_) => orderedPatterns.isEmpty
-            ? const EmptyState(
-                icon: Icons.search_off,
-                title: 'No exercises match',
-              )
-            : PageBody(
-                child: ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  itemCount: orderedPatterns.length + 1,
-                  itemBuilder: (context, i) {
-                    if (i == 0) {
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: Text(
-                          '$ableCount of ${exercises.length} enabled',
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                        ),
-                      );
-                    }
-                    final pattern = orderedPatterns[i - 1];
-                    final items = groups[pattern]!;
-                    final expanded = searching || !_collapsed.contains(pattern);
-                    return StaggeredEntrance(
-                      index: i - 1,
-                      child: _PatternGroup(
-                        pattern: pattern,
-                        exercises: items,
-                        ableCount: items
-                            .where((e) => able.contains(e.id))
-                            .length,
-                        able: able,
-                        expanded: expanded,
-                        onToggle: () => setState(() {
-                          if (!_collapsed.remove(pattern)) {
-                            _collapsed.add(pattern);
-                          }
-                        }),
-                      ),
-                    );
-                  },
-                ),
+        itemCount: header.length + patterns.length,
+        itemBuilder: (context, i) {
+          if (i < header.length) return header[i];
+          final pattern = patterns[i - header.length];
+          final items = groups[pattern]!;
+          // Collapsed by default; filtering flips the default to expanded.
+          final expanded = filtering != _toggled.contains(pattern);
+          return StaggeredEntrance(
+            index: i - header.length,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _PatternGroup(
+                pattern: pattern,
+                exercises: items,
+                able: able,
+                expanded: expanded,
+                onToggle: () => setState(() {
+                  if (!_toggled.remove(pattern)) _toggled.add(pattern);
+                }),
               ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-/// A collapsible card for one movement pattern.
+/// A collapsible card for one movement pattern, with a ring showing how
+/// much of the pattern is enabled.
 class _PatternGroup extends StatelessWidget {
   const _PatternGroup({
     required this.pattern,
     required this.exercises,
-    required this.ableCount,
     required this.able,
     required this.expanded,
     required this.onToggle,
@@ -177,7 +140,6 @@ class _PatternGroup extends StatelessWidget {
 
   final MovementPattern pattern;
   final List<Exercise> exercises;
-  final int ableCount;
   final Set<String> able;
   final bool expanded;
   final VoidCallback onToggle;
@@ -186,28 +148,53 @@ class _PatternGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final enabled = exercises.where((e) => able.contains(e.id)).length;
     return TonalCard(
-      variant: TonalCardVariant.filled,
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: EdgeInsets.zero,
       child: Column(
         children: [
           InkWell(
             onTap: onToggle,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Text(
-                      Fmt.pattern(pattern),
-                      style: theme.textTheme.titleMedium,
+                  SizedBox.square(
+                    dimension: 36,
+                    child: ExcludeSemantics(
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(
+                          end: exercises.isEmpty
+                              ? 0
+                              : enabled / exercises.length,
+                        ),
+                        duration: Motion.long,
+                        curve: Motion.standard,
+                        builder: (context, v, _) => CircularProgressIndicator(
+                          value: v,
+                          strokeWidth: 5,
+                          strokeCap: StrokeCap.round,
+                          backgroundColor: scheme.secondaryContainer,
+                        ),
+                      ),
                     ),
                   ),
-                  Text(
-                    '$ableCount / ${exercises.length}',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          Fmt.pattern(pattern),
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        Text(
+                          '$enabled of ${exercises.length} enabled',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   AnimatedRotation(
@@ -230,7 +217,7 @@ class _PatternGroup extends StatelessWidget {
             child: expanded
                 ? Column(
                     children: [
-                      const Divider(indent: 16, endIndent: 16),
+                      const Divider(height: 1),
                       for (final e in exercises)
                         _ExerciseTile(exercise: e, able: able.contains(e.id)),
                       const SizedBox(height: 4),

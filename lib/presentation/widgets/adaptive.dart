@@ -47,45 +47,44 @@ class PageBody extends StatelessWidget {
   }
 }
 
-/// Lays [primary] and [secondary] out as two panes on expanded windows
-/// and one column otherwise.
+/// Lays [primary] and [secondary] side by side (3:2) on wide layouts and
+/// stacked otherwise. Non-scrolling: place it inside a scroll view.
 class TwoPane extends StatelessWidget {
   const TwoPane({
     required this.primary,
     required this.secondary,
     super.key,
-    this.breakpoint = 1000,
+    this.breakpoint = 880,
+    this.stackedGap = 0,
   });
 
   final Widget primary;
   final Widget secondary;
   final double breakpoint;
 
+  /// Space between the panes when stacked (side by side they align tops).
+  final double stackedGap;
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < breakpoint) {
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 88),
-            children: [primary, secondary],
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              primary,
+              SizedBox(height: stackedGap),
+              secondary,
+            ],
           );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: 88),
-                children: [primary],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: 88),
-                children: [secondary],
-              ),
-            ),
+            Expanded(flex: 3, child: primary),
+            const SizedBox(width: 24),
+            Expanded(flex: 2, child: secondary),
           ],
         );
       },

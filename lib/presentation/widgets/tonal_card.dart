@@ -27,7 +27,7 @@ class TonalCard extends StatefulWidget {
     this.padding = const EdgeInsets.all(16),
     this.margin = EdgeInsets.zero,
     this.clipBehavior = Clip.antiAlias,
-    this.borderRadius = const BorderRadius.all(Radius.circular(12)),
+    this.borderRadius = const BorderRadius.all(Radius.circular(16)),
   });
 
   final Widget child;
@@ -59,17 +59,21 @@ class _TonalCardState extends State<TonalCard> {
     return rest;
   }
 
-  Color _container(ColorScheme scheme, int level) {
+  /// Container tone per level. Light mode lifts toward white
+  /// (surface-container-lowest) for a crisp, lightweight look; dark mode
+  /// lifts toward lighter containers, as M3 tonal elevation prescribes.
+  Color _container(ColorScheme scheme, Brightness brightness, int level) {
+    final light = brightness == Brightness.light;
     return switch (widget.variant) {
       TonalCardVariant.elevated => switch (level) {
-        0 => scheme.surfaceContainerLow,
-        1 => scheme.surfaceContainerLow,
-        2 => scheme.surfaceContainer,
-        _ => scheme.surfaceContainerHigh,
+        <= 1 =>
+          light ? scheme.surfaceContainerLowest : scheme.surfaceContainerLow,
+        2 => light ? scheme.surfaceContainerLowest : scheme.surfaceContainer,
+        _ => light ? scheme.surfaceContainerLow : scheme.surfaceContainerHigh,
       },
       TonalCardVariant.filled => switch (level) {
-        0 => scheme.surfaceContainerHighest,
-        _ => scheme.surfaceContainerHighest,
+        0 => scheme.surfaceContainer,
+        _ => scheme.surfaceContainerHigh,
       },
       TonalCardVariant.outlined => switch (level) {
         0 => scheme.surface,
@@ -82,7 +86,8 @@ class _TonalCardState extends State<TonalCard> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final level = _level;
     final shape = RoundedRectangleBorder(
       borderRadius: widget.borderRadius,
@@ -102,14 +107,17 @@ class _TonalCardState extends State<TonalCard> {
         customBorder: shape,
         child: content,
       );
+      // Announce the whole card as one button; without this, a child with
+      // a stronger role (such as a progress bar) would define the card.
+      content = Semantics(button: true, container: true, child: content);
     }
 
     return Padding(
       padding: widget.margin,
       child: Material(
         type: MaterialType.card,
-        color: _container(scheme, level),
-        shadowColor: scheme.shadow,
+        color: _container(scheme, theme.brightness, level),
+        shadowColor: scheme.shadow.withValues(alpha: 0.45),
         surfaceTintColor: Colors.transparent,
         elevation: _shadowDp[level],
         shape: shape,
@@ -127,8 +135,8 @@ class TonalListCard extends StatelessWidget {
   const TonalListCard({
     required this.children,
     super.key,
-    this.variant = TonalCardVariant.filled,
-    this.margin = const EdgeInsets.symmetric(horizontal: 16),
+    this.variant = TonalCardVariant.elevated,
+    this.margin = EdgeInsets.zero,
   });
 
   final List<Widget> children;

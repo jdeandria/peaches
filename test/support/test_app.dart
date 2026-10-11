@@ -42,7 +42,7 @@ Future<AppContainer> pumpSeededApp(WidgetTester tester) async {
 /// Today -> open matchup -> log one exercise -> submit -> Crates -> Crate
 /// detail -> Exercises -> toggle capability.
 Future<void> runCoreJourney(WidgetTester tester) async {
-  expect(find.text('Open matchups'), findsOneWidget);
+  expect(find.text('Up next'), findsOneWidget);
   final openTile = find.textContaining('vs ').first;
   expect(openTile, findsOneWidget);
   await tester.tap(openTile);
@@ -56,12 +56,12 @@ Future<void> runCoreJourney(WidgetTester tester) async {
   final scoredTile = find
       .ancestor(
         of: find.byType(LinearProgressIndicator).first,
-        matching: find.byType(ListTile),
+        matching: find.byType(InkWell),
       )
       .first;
   final firstAddIcon = find.descendant(
     of: scoredTile,
-    matching: find.byIcon(Icons.add_circle_outline),
+    matching: find.byTooltip('Log sets'),
   );
   await tester.ensureVisible(firstAddIcon);
   await tester.tap(firstAddIcon);
@@ -77,10 +77,10 @@ Future<void> runCoreJourney(WidgetTester tester) async {
   expect(find.text('Workout submitted. Nice work.'), findsOneWidget);
   expect(find.text('Submit workout'), findsNothing);
   // The header lives at the top of a lazy list; scroll back to see it.
-  await tester.drag(find.byType(ListView).first, const Offset(0, 2000));
+  await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
   await tester.pumpAndSettle();
   expect(
-    find.text('Submitted. Waiting for the round to close.'),
+    find.text('Submitted. Results arrive when the round closes.'),
     findsOneWidget,
   );
 

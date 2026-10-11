@@ -90,20 +90,29 @@ class _StaggeredEntranceState extends State<StaggeredEntrance>
 }
 
 /// A linear progress bar that animates to its new value.
+///
+/// Decorative by default: callers show the same information as text
+/// ("3 of 6 logged"), so the bar is excluded from semantics unless
+/// [semanticsLabel] is given.
 class AnimatedProgress extends StatelessWidget {
-  const AnimatedProgress({required this.value, super.key});
+  const AnimatedProgress({required this.value, super.key, this.semanticsLabel});
 
   final double value;
+  final String? semanticsLabel;
 
   @override
   Widget build(BuildContext context) {
-    if (Motion.reduced(context)) return LinearProgressIndicator(value: value);
-    return TweenAnimationBuilder<double>(
-      tween: Tween(end: value.clamp(0, 1)),
-      duration: Motion.long,
-      curve: Motion.standard,
-      builder: (context, v, _) => LinearProgressIndicator(value: v),
-    );
+    Widget bar(double v) =>
+        LinearProgressIndicator(value: v, semanticsLabel: semanticsLabel);
+    final child = Motion.reduced(context)
+        ? bar(value)
+        : TweenAnimationBuilder<double>(
+            tween: Tween(end: value.clamp(0, 1)),
+            duration: Motion.long,
+            curve: Motion.standard,
+            builder: (context, v, _) => bar(v),
+          );
+    return semanticsLabel == null ? ExcludeSemantics(child: child) : child;
   }
 }
 

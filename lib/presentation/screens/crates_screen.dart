@@ -3,13 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/router.dart';
+import '../../app/theme.dart';
 import '../../application/providers.dart';
 import '../../domain/models/crate.dart';
+import '../../domain/models/season.dart';
 import '../../domain/models/training.dart';
 import '../formatting.dart';
-import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
+import '../widgets/page_scaffold.dart';
 import '../widgets/tonal_card.dart';
 
 /// The Crates the current Peach belongs to, with create / join actions.
@@ -19,31 +21,54 @@ class CratesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crates = ref.watch(myCratesProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Crates')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCrateActions(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Crate'),
-      ),
-      body: AsyncView(
-        value: crates,
-        data: (list) => list.isEmpty
-            ? const EmptyState(
-                icon: Icons.inventory_2_outlined,
-                title: 'No Crates yet',
-                message: 'Create a Crate or join one with an invite code.',
-              )
-            : PageBody(
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
-                  itemCount: list.length,
-                  itemBuilder: (context, i) => StaggeredEntrance(
-                    index: i,
-                    child: _CrateTile(crate: list[i]),
-                  ),
-                ),
-              ),
+    final fab = FloatingActionButton.extended(
+      onPressed: () => _showCrateActions(context),
+      icon: const Icon(Icons.add),
+      label: const Text('New Crate'),
+    );
+    return AsyncView(
+      value: crates,
+      data: (list) => PageScaffold(
+        title: 'Crates',
+        subtitle: list.isEmpty
+            ? 'Train together, compete together.'
+            : '${list.length} ${list.length == 1 ? 'Crate' : 'Crates'}',
+        maxWidth: 1040,
+        floatingActionButton: fab,
+        children: [
+          if (list.isEmpty)
+            const EmptyState(
+              icon: Icons.inventory_2_outlined,
+              title: 'No Crates yet',
+              message: 'Create a Crate or join one with an invite code.',
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cols = constraints.maxWidth >= 1000
+                    ? 3
+                    : constraints.maxWidth >= 600
+                    ? 2
+                    : 1;
+                const gap = 16.0;
+                final w = (constraints.maxWidth - gap * (cols - 1)) / cols;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final (i, c) in list.indexed)
+                      SizedBox(
+                        width: w,
+                        child: StaggeredEntrance(
+                          index: i,
+                          child: _CrateCard(crate: c),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+        ],
       ),
     );
   }
@@ -51,42 +76,65 @@ class CratesScreen extends ConsumerWidget {
   void _showCrateActions(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (sheet) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.add_box_outlined),
-              title: const Text('Create a Crate'),
-              onTap: () {
-                Navigator.pop(sheet);
-                showDialog<void>(
-                  context: context,
-                  builder: (_) => const CreateCrateDialog(),
-                );
-              },
+      builder: (sheet) {
+        final theme = Theme.of(sheet);
+        final scheme = theme.colorScheme;
+        Widget option({
+          required IconData icon,
+          required String title,
+          required String subtitle,
+          required Widget dialog,
+        }) => ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 4,
+          ),
+          leading: CircleAvatar(
+            backgroundColor: scheme.secondaryContainer,
+            foregroundColor: scheme.onSecondaryContainer,
+            child: Icon(icon),
+          ),
+          title: Text(title),
+          subtitle: Text(subtitle),
+          onTap: () {
+            Navigator.pop(sheet);
+            showDialog<void>(context: context, builder: (_) => dialog);
+          },
+        );
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                  child: Text('Add a Crate', style: theme.textTheme.titleLarge),
+                ),
+                option(
+                  icon: Icons.add_rounded,
+                  title: 'Create a Crate',
+                  subtitle: 'Start a group and invite your Peaches',
+                  dialog: const CreateCrateDialog(),
+                ),
+                option(
+                  icon: Icons.key_outlined,
+                  title: 'Join with invite code',
+                  subtitle: 'Got a six-letter code from a friend?',
+                  dialog: const JoinCrateDialog(),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.key_outlined),
-              title: const Text('Join with invite code'),
-              onTap: () {
-                Navigator.pop(sheet);
-                showDialog<void>(
-                  context: context,
-                  builder: (_) => const JoinCrateDialog(),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
 
-class _CrateTile extends ConsumerWidget {
-  const _CrateTile({required this.crate});
+class _CrateCard extends ConsumerWidget {
+  const _CrateCard({required this.crate});
 
   final Crate crate;
 
@@ -94,10 +142,18 @@ class _CrateTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final members = ref.watch(crateMembersProvider(crate.id));
-    final count = members.value?.length;
+    final count = ref.watch(crateMembersProvider(crate.id)).value?.length;
+    final seasons = ref.watch(crateSeasonsProvider(crate.id)).value ?? const [];
+    final season =
+        seasons.where((s) => s.isOpen).firstOrNull ?? seasons.firstOrNull;
+    final rounds = season == null
+        ? null
+        : ref.watch(seasonRoundsProvider(season.id)).value;
+    final played =
+        rounds?.where((r) => r.status == RoundStatus.closed).length ?? 0;
+
     return TonalCard(
-      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(20),
       onTap: () =>
           context.goNamed(Routes.crate, pathParameters: {'crateId': crate.id}),
       child: Column(
@@ -105,87 +161,87 @@ class _CrateTile extends ConsumerWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                backgroundColor: scheme.secondaryContainer,
-                foregroundColor: scheme.onSecondaryContainer,
-                child: const Icon(Icons.inventory_2_outlined),
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scheme.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(
+                    PeachesTheme.radiusMedium,
+                  ),
+                ),
+                child: Text(
+                  crate.name.characters.first.toUpperCase(),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: scheme.onTertiaryContainer,
+                  ),
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(crate.name, style: theme.textTheme.titleMedium),
-                    if (crate.description.isNotEmpty)
-                      Text(
-                        crate.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                    Text(crate.name, style: theme.textTheme.titleLarge),
+                    Text(
+                      [
+                        if (count != null)
+                          '$count ${count == 1 ? 'Peach' : 'Peaches'}',
+                        Fmt.goal(crate.settings.goal),
+                        '${crate.settings.workoutDurationMinutes} min',
+                      ].join(' · '),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
             ],
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              if (count != null)
-                _Tag(
-                  icon: Icons.people_outline,
-                  label: '$count ${count == 1 ? 'Peach' : 'Peaches'}',
-                ),
-              _Tag(
-                icon: Icons.flag_outlined,
-                label: Fmt.goal(crate.settings.goal),
-              ),
-              _Tag(
-                icon: Icons.timer_outlined,
-                label: '${crate.settings.workoutDurationMinutes} min',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A small label on a surface-container-highest pill (one tone above the
-/// card it sits on).
-class _Tag extends StatelessWidget {
-  const _Tag({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
+          if (crate.description.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              crate.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
             ),
-          ),
+          ],
+          const SizedBox(height: 16),
+          if (season == null || rounds == null)
+            Text(
+              'No Season yet',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    season.name,
+                    style: theme.textTheme.labelLarge,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  season.status == SeasonStatus.scheduled
+                      ? 'Starts ${Fmt.day(season.startDate!)}'
+                      : 'Round ${(played + 1).clamp(1, rounds.length)} of ${rounds.length}',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            AnimatedProgress(
+              value: rounds.isEmpty ? 0 : played / rounds.length,
+            ),
+          ],
         ],
       ),
     );

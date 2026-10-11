@@ -26,12 +26,10 @@ class StandingsTable extends StatelessWidget {
     if (standings.isEmpty) {
       return const TonalCard(
         variant: TonalCardVariant.outlined,
-        margin: EdgeInsets.symmetric(horizontal: 16),
         child: Text('No standings yet.'),
       );
     }
     return TonalCard(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: EdgeInsets.zero,
       child: LayoutBuilder(
         builder: (context, constraints) => SingleChildScrollView(

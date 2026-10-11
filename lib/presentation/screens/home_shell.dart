@@ -59,15 +59,12 @@ class _HomeShellState extends State<HomeShell> {
       );
     }
 
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: Row(
         children: [
           NavigationRail(
             extended: size == WindowSize.expanded,
             minExtendedWidth: 200,
-            backgroundColor: scheme.surfaceContainer,
-            indicatorColor: scheme.secondaryContainer,
             selectedIndex: _index,
             onDestinationSelected: (i) => setState(() => _index = i),
             labelType: size == WindowSize.expanded

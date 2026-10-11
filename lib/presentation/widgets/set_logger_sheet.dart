@@ -111,98 +111,162 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
     );
   }
 
+  /// Increment per tap: a rep, five seconds, or ten metres.
+  int get _step => switch (_p.unit) {
+    MeasurementType.duration => 5,
+    MeasurementType.distance => 10,
+    _ => 1,
+  };
+
+  void _nudge(int set, int delta) {
+    final current = int.tryParse(_values[set].text.trim()) ?? 0;
+    final next = (current + delta).clamp(0, 9999);
+    setState(() => _values[set].text = '$next');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final unit = switch (_p.unit) {
-      MeasurementType.duration => 'seconds',
-      MeasurementType.distance => 'metres',
+      MeasurementType.duration => 'sec',
+      MeasurementType.distance => 'm',
       _ => 'reps',
     };
     return Padding(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+        left: 24,
+        right: 24,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
       ),
       child: SingleChildScrollView(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(widget.exercise.name, style: theme.textTheme.titleLarge),
+            Text(widget.exercise.name, style: theme.textTheme.headlineSmall),
+            const SizedBox(height: 4),
             Text(
               Fmt.prescription(_p),
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+                color: scheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
             for (var i = 0; i < _setCount; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: 72,
+                    Expanded(
                       child: Text(
                         _p.perSide
-                            ? 'Set ${i ~/ 2 + 1} ${i.isEven ? 'L' : 'R'}'
+                            ? 'Set ${i ~/ 2 + 1} · ${i.isEven ? 'Left' : 'Right'}'
                             : 'Set ${i + 1}',
-                      ),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: _values[i],
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: unit,
-                          isDense: true,
-                        ),
+                        style: theme.textTheme.titleSmall,
                       ),
                     ),
                     if (_loaded) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
+                      SizedBox(
+                        width: 72,
                         child: TextField(
                           controller: _loads[i],
+                          textAlign: TextAlign.center,
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
-                          decoration: const InputDecoration(
-                            labelText: 'kg',
+                          decoration: InputDecoration(
+                            hintText: 'kg',
+                            suffixText: 'kg',
                             isDense: true,
+                            filled: true,
+                            fillColor: scheme.surfaceContainerHigh,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
                           ),
                         ),
                       ),
+                      const SizedBox(width: 12),
                     ],
+                    IconButton.outlined(
+                      tooltip: 'Fewer',
+                      onPressed: () => _nudge(i, -_step),
+                      icon: const Icon(Icons.remove),
+                    ),
+                    SizedBox(
+                      width: 72,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            controller: _values[i],
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              isDense: true,
+                              hintText: '0',
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                          Text(
+                            unit,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton.filledTonal(
+                      tooltip: 'More',
+                      onPressed: () => _nudge(i, _step),
+                      icon: const Icon(Icons.add),
+                    ),
                   ],
                 ),
               ),
-            const SizedBox(height: 8),
-            Text('Effort (RPE)', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 6,
-              children: [
-                for (var r = 5; r <= 10; r++)
-                  ChoiceChip(
-                    label: Text('$r'),
-                    selected: _rpe == r,
-                    onSelected: (_) => setState(() => _rpe = r),
-                  ),
-              ],
-            ),
             const SizedBox(height: 16),
+            Text('How hard was it? (RPE)', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            SegmentedButton<int>(
+              showSelectedIcon: false,
+              emptySelectionAllowed: true,
+              segments: [
+                for (var r = 5; r <= 10; r++)
+                  ButtonSegment(value: r, label: Text('$r')),
+              ],
+              selected: {?_rpe},
+              onSelectionChanged: (v) =>
+                  setState(() => _rpe = v.isEmpty ? null : v.first),
+            ),
+            const SizedBox(height: 24),
             Row(
               children: [
-                TextButton.icon(
+                OutlinedButton.icon(
                   onPressed: _fillPrescribed,
                   icon: const Icon(Icons.restart_alt, size: 18),
                   label: const Text('As prescribed'),
                 ),
-                const Spacer(),
-                FilledButton(onPressed: _save, child: const Text('Save')),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _save,
+                    child: const Text('Save'),
+                  ),
+                ),
               ],
             ),
           ],

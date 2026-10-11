@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme.dart';
 import '../../application/providers.dart';
 import '../../domain/core/local_date.dart';
 import '../../domain/exercises/exercise.dart';
@@ -9,9 +10,9 @@ import '../../domain/models/season.dart';
 import '../../domain/models/workout.dart';
 import '../../domain/models/workout_log.dart';
 import '../formatting.dart';
-import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
+import '../widgets/page_scaffold.dart';
 import '../widgets/set_logger_sheet.dart';
 import '../widgets/tonal_card.dart';
 
@@ -147,208 +148,178 @@ class _MatchupBodyState extends ConsumerState<_MatchupBody> {
     final closed = matchup.status == MatchupStatus.complete;
     final editable = isMine && !submitted && !closed;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(workout.title ?? 'Workout'),
-        actions: [
-          _ScoreBadge(log: currentLog, workout: workout),
-          const SizedBox(width: 8),
-        ],
-      ),
-      bottomNavigationBar: editable
-          ? SafeArea(
-              child: PageBody(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: FilledButton.icon(
-                    onPressed: _submit,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Submit workout'),
-                  ),
-                ),
+    final opponentId = me == null ? null : matchup.opponentOf(me);
+    final opponent = opponentId == null
+        ? null
+        : ref.watch(peachProvider(opponentId)).value;
+    final headline = matchup.isBye
+        ? 'Bye round'
+        : 'You vs ${opponent?.displayName ?? '…'}';
+    var i = 0;
+
+    return PageScaffold(
+      title: headline,
+      toolbarTitle: workout.title ?? 'Workout',
+      subtitle: [
+        if (workout.title != null) workout.title!,
+        Fmt.focus(workout.focus),
+        '~${workout.estimatedMinutes} min',
+      ].join(' · '),
+      showBack: true,
+      actions: [_ScoreBadge(log: currentLog, workout: workout)],
+      bottomBar: editable
+          ? SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: _submit,
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Submit workout'),
               ),
             )
           : null,
-      body: PageBody(
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            StaggeredEntrance(
-              index: 0,
-              child: _Header(
-                matchup: matchup,
-                workout: workout,
-                submitted: submitted,
-              ),
-            ),
-            for (final (i, block) in workout.blocks.indexed)
-              StaggeredEntrance(
-                index: i + 1,
-                child: _BlockCard(
-                  title: Fmt.block(block.type),
-                  scored: block.items.any((i) => i.isScored),
-                  children: [
-                    for (final item in block.items)
-                      _ItemTile(
-                        item: item,
-                        exercise: catalog.byId(item.exerciseId),
-                        entry: currentLog?.entryForItem(item.id),
-                        onTap: editable && catalog.byId(item.exerciseId) != null
-                            ? () => _logItem(
-                                item,
-                                catalog.byId(item.exerciseId)!,
-                                currentLog,
-                              )
-                            : null,
-                      ),
-                  ],
-                ),
-              ),
-          ],
+      children: [
+        StaggeredEntrance(
+          index: i++,
+          child: _StatusBanner(
+            matchup: matchup,
+            opponentName: opponent?.displayName,
+            submitted: submitted,
+          ),
         ),
-      ),
+        for (final block in workout.blocks) ...[
+          PageSection(
+            Fmt.block(block.type),
+            trailing: block.items.any((it) => it.isScored)
+                ? StatusLabel(
+                    'Scored',
+                    color: Theme.of(context).colorScheme.primary,
+                  )
+                : const StatusLabel('Not scored'),
+          ),
+          StaggeredEntrance(
+            index: i++,
+            child: TonalListCard(
+              children: [
+                for (final item in block.items)
+                  _ItemTile(
+                    item: item,
+                    exercise: catalog.byId(item.exerciseId),
+                    entry: currentLog?.entryForItem(item.id),
+                    onTap: editable && catalog.byId(item.exerciseId) != null
+                        ? () => _logItem(
+                            item,
+                            catalog.byId(item.exerciseId)!,
+                            currentLog,
+                          )
+                        : null,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
 
-class _Header extends ConsumerWidget {
-  const _Header({
+/// Deadline while open, confirmation once submitted, or the final score
+/// as a hero once the round has closed.
+class _StatusBanner extends ConsumerWidget {
+  const _StatusBanner({
     required this.matchup,
-    required this.workout,
+    required this.opponentName,
     required this.submitted,
   });
 
   final Matchup matchup;
-  final Workout workout;
+  final String? opponentName;
   final bool submitted;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(currentPeachIdProvider);
-    final opponentId = me == null ? null : matchup.opponentOf(me);
-    final opponent = opponentId == null
-        ? null
-        : ref.watch(peachProvider(opponentId)).value;
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final result = matchup.result;
     final window = ref.watch(roundWindowProvider(matchup.roundId)).value;
     final now = ref.watch(clockProvider)();
 
+    if (result != null && me != null) {
+      final home = matchup.homePeachId == me;
+      final mine = home ? result.homePoints : result.awayPoints;
+      final theirs = home ? result.awayPoints : result.homePoints;
+      final verdict = matchup.isBye
+          ? 'Bye round'
+          : matchup.winnerId == null
+          ? 'Tie'
+          : matchup.winnerId == me
+          ? 'You won'
+          : '${opponentName ?? 'They'} won';
+      final on = scheme.onPrimaryContainer;
+      return Material(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(PeachesTheme.radiusExtraLarge),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Final',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: on.withValues(alpha: 0.8),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      matchup.isBye
+                          ? Fmt.points(mine)
+                          : '${Fmt.points(mine)} – ${Fmt.points(theirs)}',
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        color: on,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                verdict,
+                style: theme.textTheme.titleMedium?.copyWith(color: on),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final (icon, text, color) = submitted
+        ? (
+            Icons.check_circle_rounded,
+            'Submitted. Results arrive when the round closes.',
+            scheme.primary,
+          )
+        : (
+            Icons.schedule_rounded,
+            window == null
+                ? 'Log each exercise as you go.'
+                : 'Logging ${Fmt.closesIn(window.remainingAt(now))} · '
+                      '${Fmt.day(LocalDate.of(window.closesAt.toLocal()))} '
+                      '${Fmt.time(window.closesAt.toLocal())}',
+            scheme.onSurfaceVariant,
+          );
     return TonalCard(
       variant: TonalCardVariant.filled,
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
         children: [
-          Text(
-            matchup.isBye
-                ? 'Bye week'
-                : 'You vs ${opponent?.displayName ?? '…'}',
-            style: theme.textTheme.titleLarge,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${Fmt.focus(workout.focus)} · ${Fmt.goal(workout.goal)} · '
-            '~${workout.estimatedMinutes} min',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (result != null && me != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              matchup.isBye
-                  ? 'Final: ${Fmt.points(result.homePoints)} points'
-                  : 'Final: ${Fmt.points(matchup.homePeachId == me ? result.homePoints : result.awayPoints)}'
-                        ' – ${Fmt.points(matchup.homePeachId == me ? result.awayPoints : result.homePoints)}'
-                        '${matchup.winnerId == null
-                            ? ' (tie)'
-                            : matchup.winnerId == me
-                            ? ' · You won'
-                            : ' · ${opponent?.displayName ?? 'They'} won'}',
-              style: theme.textTheme.titleMedium,
-            ),
-          ] else if (!submitted && window != null) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  Icons.schedule,
-                  color: theme.colorScheme.onSurfaceVariant,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Logging ${Fmt.closesIn(window.remainingAt(now))}'
-                  ' · ${Fmt.day(LocalDate.of(window.closesAt.toLocal()))}'
-                  ' ${Fmt.time(window.closesAt.toLocal())}',
-                ),
-              ],
-            ),
-          ] else if (submitted) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  Icons.check_circle,
-                  color: theme.colorScheme.primary,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                const Text('Submitted. Waiting for the round to close.'),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// One workout block as an elevated card: title row, then the exercise
-/// rows separated by hairlines.
-class _BlockCard extends StatelessWidget {
-  const _BlockCard({
-    required this.title,
-    required this.scored,
-    required this.children,
-  });
-
-  final String title;
-  final bool scored;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return TonalCard(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(title, style: theme.textTheme.titleMedium),
-                ),
-                Text(
-                  scored ? 'Scored' : 'Not scored',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          for (var i = 0; i < children.length; i++) ...[
-            if (i > 0) const Divider(indent: 16, endIndent: 16),
-            children[i],
-          ],
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: theme.textTheme.bodyMedium)),
         ],
       ),
     );
@@ -407,6 +378,7 @@ class _ItemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final target = item.prescription.totalTarget;
     final achieved = entry == null
         ? 0
@@ -416,44 +388,85 @@ class _ItemTile extends StatelessWidget {
             _ => entry!.totalMeters,
           };
     final ratio = target == 0 ? 0.0 : (achieved / target).clamp(0.0, 1.0);
+    final done = entry != null && ratio >= 1;
 
-    return ListTile(
-      title: Text(exercise?.name ?? item.exerciseId),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(Fmt.prescription(item.prescription)),
-          if (exercise?.cues != null)
-            Text(
-              exercise!.cues!,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+    final Widget action;
+    if (entry == null) {
+      action = onTap == null
+          ? const SizedBox(key: ValueKey('none'), width: 40)
+          : IconButton.filledTonal(
+              key: const ValueKey('add'),
+              tooltip: 'Log sets',
+              onPressed: onTap,
+              icon: const Icon(Icons.add),
+            );
+    } else if (done) {
+      action = IconButton.filled(
+        key: const ValueKey('done'),
+        tooltip: 'Edit sets',
+        onPressed: onTap,
+        icon: const Icon(Icons.check_rounded),
+      );
+    } else {
+      action = IconButton.outlined(
+        key: const ValueKey('edit'),
+        tooltip: 'Edit sets',
+        onPressed: onTap,
+        icon: const Icon(Icons.edit_outlined, size: 20),
+      );
+    }
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    exercise?.name ?? item.exerciseId,
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    Fmt.prescription(item.prescription),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (exercise?.cues != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      exercise!.cues!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                  if (item.isScored) ...[
+                    const SizedBox(height: 10),
+                    AnimatedProgress(value: ratio),
+                  ],
+                ],
               ),
             ),
-          if (item.isScored) ...[
-            const SizedBox(height: 6),
-            AnimatedProgress(value: ratio),
+            const SizedBox(width: 12),
+            AnimatedSwitcher(
+              duration: Motion.short,
+              switchInCurve: Motion.enter,
+              switchOutCurve: Motion.exit,
+              transitionBuilder: (child, animation) =>
+                  ScaleTransition(scale: animation, child: child),
+              child: action,
+            ),
           ],
-        ],
+        ),
       ),
-      trailing: AnimatedSwitcher(
-        duration: Motion.short,
-        switchInCurve: Motion.enter,
-        switchOutCurve: Motion.exit,
-        transitionBuilder: (child, animation) =>
-            ScaleTransition(scale: animation, child: child),
-        child: entry == null
-            ? (onTap == null
-                  ? const SizedBox.shrink()
-                  : const Icon(Icons.add_circle_outline, key: ValueKey('add')))
-            : Icon(
-                ratio >= 1 ? Icons.check_circle : Icons.edit_outlined,
-                key: ValueKey(ratio >= 1 ? 'done' : 'edit'),
-                color: ratio >= 1 ? theme.colorScheme.primary : null,
-              ),
-      ),
-      onTap: onTap,
-      isThreeLine: true,
     );
   }
 }
