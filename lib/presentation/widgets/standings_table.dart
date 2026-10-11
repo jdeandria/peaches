@@ -44,14 +44,14 @@ class StandingsTable extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               dividerThickness: 0.5,
-              columns: const [
-                DataColumn(label: Text('#')),
-                DataColumn(label: Text('Peach')),
-                DataColumn(label: Text('W-L-T')),
+              columns: [
+                const DataColumn(label: Text('#')),
+                const DataColumn(label: Text('Peach')),
+                const DataColumn(label: Text('W-L-T')),
                 const DataColumn(label: Text('Streak')),
                 if (showForm) const DataColumn(label: Text('Form')),
-                DataColumn(label: Text('PF'), numeric: true),
-                DataColumn(label: Text('PA'), numeric: true),
+                const DataColumn(label: Text('PF'), numeric: true),
+                const DataColumn(label: Text('PA'), numeric: true),
               ],
               rows: [
                 for (final (i, s) in standings.indexed)
