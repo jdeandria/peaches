@@ -23,6 +23,14 @@ domain core that is unit tested independently of the UI.
 | CI (format, analyze, test, builds) | Done |
 | CD (Firebase Hosting, Play, App Store) | Workflows done; need secrets |
 
+## Live demo
+
+Every push to `main` or a `feat/**` branch publishes the demo build to the
+`gh-pages` branch (see `.github/workflows/pages.yml`). Once Pages is enabled
+(Settings → Pages → Deploy from a branch → `gh-pages`, root) it is served at
+**https://jdeandria.github.io/peaches/**. The demo runs entirely in the
+browser with seeded data; nothing is saved between visits.
+
 ## Run it
 
 ```bash
