@@ -57,8 +57,10 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
       final set = existing != null && i < existing.sets.length
           ? existing.sets[i]
           : null;
-      final value = set?.reps ?? set?.seconds ?? set?.meters;
-      return TextEditingController(text: value?.toString() ?? '');
+      // Pre-fill with the prescription so a set done as written is one
+      // tap; only an existing entry overrides it.
+      final value = set?.reps ?? set?.seconds ?? set?.meters ?? _p.targetPerSet;
+      return TextEditingController(text: value.toString());
     });
     _loads = List.generate(_setCount, (i) {
       final set = existing != null && i < existing.sets.length
@@ -194,9 +196,10 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
             const SizedBox(height: 16),
             Row(
               children: [
-                TextButton(
+                TextButton.icon(
                   onPressed: _fillPrescribed,
-                  child: const Text('As prescribed'),
+                  icon: const Icon(Icons.restart_alt, size: 18),
+                  label: const Text('As prescribed'),
                 ),
                 const Spacer(),
                 FilledButton(onPressed: _save, child: const Text('Save')),

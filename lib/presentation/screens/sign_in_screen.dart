@@ -54,10 +54,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.fitness_center,
-                    size: 56,
-                    color: theme.colorScheme.primary,
+                  const Text(
+                    '🍑',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 64),
                   ),
                   const SizedBox(height: 16),
                   Text(

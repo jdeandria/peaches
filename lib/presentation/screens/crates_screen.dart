@@ -7,6 +7,7 @@ import '../../application/providers.dart';
 import '../../domain/models/crate.dart';
 import '../../domain/models/training.dart';
 import '../formatting.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
 import '../widgets/tonal_card.dart';
@@ -33,12 +34,14 @@ class CratesScreen extends ConsumerWidget {
                 title: 'No Crates yet',
                 message: 'Create a Crate or join one with an invite code.',
               )
-            : ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
-                itemCount: list.length,
-                itemBuilder: (context, i) => StaggeredEntrance(
-                  index: i,
-                  child: _CrateTile(crate: list[i]),
+            : PageBody(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+                  itemCount: list.length,
+                  itemBuilder: (context, i) => StaggeredEntrance(
+                    index: i,
+                    child: _CrateTile(crate: list[i]),
+                  ),
                 ),
               ),
       ),

@@ -10,6 +10,7 @@ import '../../domain/models/peach.dart';
 import '../../domain/models/season.dart';
 import '../../domain/services/round_robin_scheduler.dart';
 import '../formatting.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
 import '../widgets/standings_table.dart';
@@ -81,79 +82,90 @@ class _CrateBody extends ConsumerWidget {
               label: const Text('Season'),
             )
           : null,
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 88),
-        children: [
-          TonalCard(
-            variant: TonalCardVariant.filled,
-            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (crate.description.isNotEmpty) ...[
-                  Text(crate.description),
-                  const SizedBox(height: 12),
-                ],
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+      body: PageBody(
+        maxWidth: 1200,
+        child: TwoPane(
+          primary: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TonalCard(
+                variant: TonalCardVariant.filled,
+                margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Chip(
-                      avatar: const Icon(Icons.flag_outlined, size: 18),
-                      label: Text(Fmt.goal(crate.settings.goal)),
-                    ),
-                    Chip(
-                      avatar: const Icon(Icons.timer_outlined, size: 18),
-                      label: Text(
-                        '${crate.settings.workoutDurationMinutes} min',
-                      ),
-                    ),
-                    Chip(
-                      avatar: const Icon(Icons.key_outlined, size: 18),
-                      label: Text('Code ${crate.inviteCode}'),
+                    if (crate.description.isNotEmpty) ...[
+                      Text(crate.description),
+                      const SizedBox(height: 12),
+                    ],
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        Chip(
+                          avatar: const Icon(Icons.flag_outlined, size: 18),
+                          label: Text(Fmt.goal(crate.settings.goal)),
+                        ),
+                        Chip(
+                          avatar: const Icon(Icons.timer_outlined, size: 18),
+                          label: Text(
+                            '${crate.settings.workoutDurationMinutes} min',
+                          ),
+                        ),
+                        Chip(
+                          avatar: const Icon(Icons.key_outlined, size: 18),
+                          label: Text('Code ${crate.inviteCode}'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              AsyncView(
+                value: seasons,
+                compact: true,
+                data: (list) {
+                  final current =
+                      list.where((s) => s.isOpen).firstOrNull ??
+                      list.firstOrNull;
+                  if (current == null) {
+                    return const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: TonalCard(
+                        variant: TonalCardVariant.outlined,
+                        child: Text('No Season yet. The owner can start one.'),
+                      ),
+                    );
+                  }
+                  return _SeasonSection(season: current, canManage: canManage);
+                },
+              ),
+            ],
           ),
-          AsyncView(
-            value: seasons,
-            compact: true,
-            data: (list) {
-              final current =
-                  list.where((s) => s.isOpen).firstOrNull ?? list.firstOrNull;
-              if (current == null) {
-                return const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: TonalCard(
-                    variant: TonalCardVariant.outlined,
-                    child: Text('No Season yet. The owner can start one.'),
-                  ),
-                );
-              }
-              return _SeasonSection(season: current, canManage: canManage);
-            },
+          secondary: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SectionHeader('Peaches'),
+              AsyncView(
+                value: members,
+                compact: true,
+                data: (list) => TonalListCard(
+                  children: [
+                    for (final p in list)
+                      ListTile(
+                        leading: CircleAvatar(child: Text(p.displayName[0])),
+                        title: Text(p.displayName),
+                        subtitle: Text(
+                          p.id == crate.ownerPeachId ? 'Owner' : 'Member',
+                        ),
+                        trailing: Text('Level ${p.fitnessLevel}'),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SectionHeader('Peaches'),
-          AsyncView(
-            value: members,
-            compact: true,
-            data: (list) => TonalListCard(
-              children: [
-                for (final p in list)
-                  ListTile(
-                    leading: CircleAvatar(child: Text(p.displayName[0])),
-                    title: Text(p.displayName),
-                    subtitle: Text(
-                      p.id == crate.ownerPeachId ? 'Owner' : 'Member',
-                    ),
-                    trailing: Text('Level ${p.fitnessLevel}'),
-                  ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

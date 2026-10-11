@@ -219,9 +219,11 @@ final class SeasonService {
   Future<List<Standing>> standings(String seasonId) async {
     final season = await _seasons.getById(seasonId);
     if (season == null) return const [];
+    final rounds = await _seasons.roundsOf(seasonId);
     return _standings.calculate(
       participantIds: season.participantIds,
       matchups: await _seasons.matchupsOf(seasonId),
+      roundIndexOf: {for (final r in rounds) r.id: r.index},
     );
   }
 

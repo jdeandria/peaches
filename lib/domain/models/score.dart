@@ -34,6 +34,9 @@ final class WorkoutScore extends Equatable {
   List<Object?> get props => [items, completionBonus];
 }
 
+/// The outcome of one played matchup from one Peach's point of view.
+enum MatchOutcome { win, loss, tie }
+
 /// A row in a Season's standings table.
 final class Standing extends Equatable {
   const Standing({
@@ -44,9 +47,34 @@ final class Standing extends Equatable {
     this.pointsFor = 0,
     this.pointsAgainst = 0,
     this.byes = 0,
+    this.form = const [],
   });
 
   final String peachId;
+
+  /// Played outcomes in chronological order (byes excluded).
+  final List<MatchOutcome> form;
+
+  /// The current run of identical outcomes, e.g. "W3" or "L1"; empty
+  /// before the first played matchup.
+  String get streak {
+    if (form.isEmpty) return '';
+    final last = form.last;
+    var n = 0;
+    for (final o in form.reversed) {
+      if (o != last) break;
+      n++;
+    }
+    final letter = switch (last) {
+      MatchOutcome.win => 'W',
+      MatchOutcome.loss => 'L',
+      MatchOutcome.tie => 'T',
+    };
+    return '$letter$n';
+  }
+
+  /// Whether the streak is a winning one (for emphasis in the table).
+  bool get onWinningStreak => form.isNotEmpty && form.last == MatchOutcome.win;
   final int wins;
   final int losses;
   final int ties;
@@ -68,6 +96,7 @@ final class Standing extends Equatable {
     double? pointsFor,
     double? pointsAgainst,
     int? byes,
+    List<MatchOutcome>? form,
   }) => Standing(
     peachId: peachId,
     wins: wins ?? this.wins,
@@ -76,6 +105,7 @@ final class Standing extends Equatable {
     pointsFor: pointsFor ?? this.pointsFor,
     pointsAgainst: pointsAgainst ?? this.pointsAgainst,
     byes: byes ?? this.byes,
+    form: form ?? this.form,
   );
 
   @override
@@ -87,5 +117,6 @@ final class Standing extends Equatable {
     pointsFor,
     pointsAgainst,
     byes,
+    form,
   ];
 }

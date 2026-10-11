@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:peaches/domain/models/score.dart';
 import 'package:peaches/domain/models/season.dart';
 import 'package:peaches/domain/services/standings_calculator.dart';
 
@@ -78,6 +79,37 @@ void main() {
       expect(rows.length, 3);
       expect(rows.every((r) => r.played == 0), isTrue);
       expect(rows.map((r) => r.peachId), ['a', 'b', 'c']);
+    });
+
+    test('tracks chronological form and streaks', () {
+      final rows = calc.calculate(
+        participantIds: ['a', 'b'],
+        matchups:
+            [
+              done('3', 'a', 'b', 10, 0),
+              done('1', 'a', 'b', 0, 5),
+              done('2', 'b', 'a', 1, 9),
+              done('bye', 'a', null, 3, 0),
+            ].map(
+              (m) => Matchup(
+                id: m.id,
+                seasonId: m.seasonId,
+                roundId: 'r${m.id}',
+                homePeachId: m.homePeachId,
+                awayPeachId: m.awayPeachId,
+                status: m.status,
+                result: m.result,
+              ),
+            ),
+        roundIndexOf: {'r1': 0, 'r2': 1, 'r3': 2, 'rbye': 3},
+      );
+      final a = rows.firstWhere((r) => r.peachId == 'a');
+      final b = rows.firstWhere((r) => r.peachId == 'b');
+      expect(a.form, [MatchOutcome.loss, MatchOutcome.win, MatchOutcome.win]);
+      expect(a.streak, 'W2');
+      expect(a.onWinningStreak, isTrue);
+      expect(b.streak, 'L2');
+      expect(const Standing(peachId: 'x').streak, '');
     });
 
     test('includes peaches found only in matchups', () {

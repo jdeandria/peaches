@@ -8,6 +8,7 @@ import '../../domain/core/local_date.dart';
 import '../../domain/models/season.dart';
 import '../../domain/models/workout_log.dart';
 import '../formatting.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
 import '../widgets/matchup_tile.dart';
 import '../widgets/motion.dart';
@@ -30,14 +31,16 @@ class TodayScreen extends ConsumerWidget {
         title: const Text('Today'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(24),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                Fmt.longDay(today),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+          child: PageBody(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  Fmt.longDay(today),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
@@ -55,58 +58,60 @@ class TodayScreen extends ConsumerWidget {
               .toList();
           return RefreshIndicator(
             onRefresh: () => ref.refresh(syncSeasonsProvider.future),
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                const SectionHeader('Open matchups'),
-                if (open.isEmpty)
-                  const TonalCard(
-                    variant: TonalCardVariant.outlined,
-                    margin: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('No workout due. Enjoy the rest day.'),
-                  )
-                else
-                  for (final (i, m) in open.indexed)
-                    StaggeredEntrance(
-                      index: i,
-                      child: MatchupTile(
-                        matchup: m,
-                        onTap: () => context.goNamed(
-                          Routes.matchup,
-                          pathParameters: {'matchupId': m.id},
-                        ),
-                      ),
-                    ),
-                if (upcoming.isNotEmpty) ...[
-                  const SectionHeader('Coming up'),
-                  for (final (i, m) in upcoming.take(3).indexed)
-                    StaggeredEntrance(
-                      index: open.length + i,
-                      child: MatchupTile(matchup: m),
-                    ),
-                ],
-                const SectionHeader('Recent workouts'),
-                AsyncView(
-                  value: logs,
-                  compact: true,
-                  data: (list) => list.isEmpty
-                      ? const TonalCard(
-                          variant: TonalCardVariant.outlined,
-                          margin: EdgeInsets.symmetric(horizontal: 16),
-                          child: Text('Nothing logged yet.'),
-                        )
-                      : StaggeredEntrance(
-                          index: open.length + upcoming.length.clamp(0, 3),
-                          child: TonalListCard(
-                            children: [
-                              for (final log in list.take(10))
-                                _LogTile(log: log),
-                            ],
+            child: PageBody(
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  const SectionHeader('Open matchups'),
+                  if (open.isEmpty)
+                    const TonalCard(
+                      variant: TonalCardVariant.outlined,
+                      margin: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('No workout due. Enjoy the rest day.'),
+                    )
+                  else
+                    for (final (i, m) in open.indexed)
+                      StaggeredEntrance(
+                        index: i,
+                        child: MatchupTile(
+                          matchup: m,
+                          onTap: () => context.goNamed(
+                            Routes.matchup,
+                            pathParameters: {'matchupId': m.id},
                           ),
                         ),
-                ),
-                const SizedBox(height: 24),
-              ],
+                      ),
+                  if (upcoming.isNotEmpty) ...[
+                    const SectionHeader('Coming up'),
+                    for (final (i, m) in upcoming.take(3).indexed)
+                      StaggeredEntrance(
+                        index: open.length + i,
+                        child: MatchupTile(matchup: m),
+                      ),
+                  ],
+                  const SectionHeader('Recent workouts'),
+                  AsyncView(
+                    value: logs,
+                    compact: true,
+                    data: (list) => list.isEmpty
+                        ? const TonalCard(
+                            variant: TonalCardVariant.outlined,
+                            margin: EdgeInsets.symmetric(horizontal: 16),
+                            child: Text('Nothing logged yet.'),
+                          )
+                        : StaggeredEntrance(
+                            index: open.length + upcoming.length.clamp(0, 3),
+                            child: TonalListCard(
+                              children: [
+                                for (final log in list.take(10))
+                                  _LogTile(log: log),
+                              ],
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           );
         },

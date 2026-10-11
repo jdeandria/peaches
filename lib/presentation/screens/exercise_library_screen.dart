@@ -5,9 +5,13 @@ import '../../application/providers.dart';
 import '../../domain/exercises/exercise.dart';
 import '../../domain/exercises/taxonomy.dart';
 import '../formatting.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
+import '../widgets/motion.dart';
+import '../widgets/tonal_card.dart';
 
-/// Browse the catalog and declare which exercises you can do.
+/// Browse the catalog, grouped by movement pattern, and declare which
+/// exercises you can do.
 class ExerciseLibraryScreen extends ConsumerStatefulWidget {
   const ExerciseLibraryScreen({super.key});
 
@@ -21,18 +25,34 @@ class _ExerciseLibraryScreenState extends ConsumerState<ExerciseLibraryScreen> {
   MovementPattern? _pattern;
   bool _onlyMine = false;
 
+  /// Groups the user has collapsed. Everything starts expanded, and an
+  /// active search always expands its matches.
+  final _collapsed = <MovementPattern>{};
+
   @override
   Widget build(BuildContext context) {
     final catalog = ref.watch(catalogProvider);
     final mine = ref.watch(myCapabilitiesProvider);
     final able = mine.value ?? const <String>{};
+    final searching = _query.trim().isNotEmpty;
 
     var exercises = catalog.search(_query);
     if (_pattern != null) {
       exercises = exercises.where((e) => e.pattern == _pattern);
     }
     if (_onlyMine) exercises = exercises.where((e) => able.contains(e.id));
-    final list = exercises.toList()..sort((a, b) => a.name.compareTo(b.name));
+
+    final groups = <MovementPattern, List<Exercise>>{};
+    for (final e in exercises) {
+      groups.putIfAbsent(e.pattern, () => []).add(e);
+    }
+    final orderedPatterns = MovementPattern.values
+        .where(groups.containsKey)
+        .toList();
+    for (final list in groups.values) {
+      list.sort((a, b) => a.name.compareTo(b.name));
+    }
+    final ableCount = exercises.where((e) => able.contains(e.id)).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -49,58 +69,176 @@ class _ExerciseLibraryScreenState extends ConsumerState<ExerciseLibraryScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(112),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: SearchBar(
-                  hintText: 'Search ${catalog.length} exercises',
-                  leading: const Icon(Icons.search),
-                  onChanged: (q) => setState(() => _query = q),
+          child: PageBody(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: SearchBar(
+                    hintText: 'Search ${catalog.length} exercises',
+                    leading: const Icon(Icons.search),
+                    elevation: const WidgetStatePropertyAll(0),
+                    onChanged: (q) => setState(() => _query = q),
+                  ),
                 ),
-              ),
-              SizedBox(
-                height: 48,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    FilterChip(
-                      label: const Text('I can do'),
-                      selected: _onlyMine,
-                      onSelected: (v) => setState(() => _onlyMine = v),
-                    ),
-                    const SizedBox(width: 8),
-                    for (final p in MovementPattern.values) ...[
+                SizedBox(
+                  height: 48,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: [
                       FilterChip(
-                        label: Text(Fmt.pattern(p)),
-                        selected: _pattern == p,
-                        onSelected: (v) =>
-                            setState(() => _pattern = v ? p : null),
+                        label: const Text('I can do'),
+                        selected: _onlyMine,
+                        onSelected: (v) => setState(() => _onlyMine = v),
                       ),
                       const SizedBox(width: 8),
+                      for (final p in MovementPattern.values) ...[
+                        FilterChip(
+                          label: Text(Fmt.pattern(p)),
+                          selected: _pattern == p,
+                          onSelected: (v) =>
+                              setState(() => _pattern = v ? p : null),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
       body: AsyncView(
         value: mine,
-        data: (_) => list.isEmpty
+        data: (_) => orderedPatterns.isEmpty
             ? const EmptyState(
                 icon: Icons.search_off,
                 title: 'No exercises match',
               )
-            : ListView.builder(
-                itemCount: list.length,
-                itemBuilder: (context, i) => _ExerciseTile(
-                  exercise: list[i],
-                  able: able.contains(list[i].id),
+            : PageBody(
+                child: ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  itemCount: orderedPatterns.length + 1,
+                  itemBuilder: (context, i) {
+                    if (i == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: Text(
+                          '$ableCount of ${exercises.length} enabled',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                        ),
+                      );
+                    }
+                    final pattern = orderedPatterns[i - 1];
+                    final items = groups[pattern]!;
+                    final expanded = searching || !_collapsed.contains(pattern);
+                    return StaggeredEntrance(
+                      index: i - 1,
+                      child: _PatternGroup(
+                        pattern: pattern,
+                        exercises: items,
+                        ableCount: items
+                            .where((e) => able.contains(e.id))
+                            .length,
+                        able: able,
+                        expanded: expanded,
+                        onToggle: () => setState(() {
+                          if (!_collapsed.remove(pattern)) {
+                            _collapsed.add(pattern);
+                          }
+                        }),
+                      ),
+                    );
+                  },
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// A collapsible card for one movement pattern.
+class _PatternGroup extends StatelessWidget {
+  const _PatternGroup({
+    required this.pattern,
+    required this.exercises,
+    required this.ableCount,
+    required this.able,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  final MovementPattern pattern;
+  final List<Exercise> exercises;
+  final int ableCount;
+  final Set<String> able;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return TonalCard(
+      variant: TonalCardVariant.filled,
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      Fmt.pattern(pattern),
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                  Text(
+                    '$ableCount / ${exercises.length}',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: Motion.short,
+                    curve: Motion.standard,
+                    child: Icon(
+                      Icons.expand_more,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: Motion.medium,
+            curve: Motion.standard,
+            alignment: Alignment.topCenter,
+            child: expanded
+                ? Column(
+                    children: [
+                      const Divider(indent: 16, endIndent: 16),
+                      for (final e in exercises)
+                        _ExerciseTile(exercise: e, able: able.contains(e.id)),
+                      const SizedBox(height: 4),
+                    ],
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
       ),
     );
   }
@@ -119,7 +257,6 @@ class _ExerciseTile extends ConsumerWidget {
       title: Text(exercise.name),
       subtitle: Text(
         [
-          Fmt.pattern(exercise.pattern),
           'Level ${exercise.difficulty}',
           if (equipment.isNotEmpty) equipment else 'Bodyweight',
         ].join(' · '),

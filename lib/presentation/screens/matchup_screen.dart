@@ -9,6 +9,7 @@ import '../../domain/models/season.dart';
 import '../../domain/models/workout.dart';
 import '../../domain/models/workout_log.dart';
 import '../formatting.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
 import '../widgets/set_logger_sheet.dart';
@@ -156,51 +157,55 @@ class _MatchupBodyState extends ConsumerState<_MatchupBody> {
       ),
       bottomNavigationBar: editable
           ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: FilledButton.icon(
-                  onPressed: _submit,
-                  icon: const Icon(Icons.check),
-                  label: const Text('Submit workout'),
+              child: PageBody(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: FilledButton.icon(
+                    onPressed: _submit,
+                    icon: const Icon(Icons.check),
+                    label: const Text('Submit workout'),
+                  ),
                 ),
               ),
             )
           : null,
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          StaggeredEntrance(
-            index: 0,
-            child: _Header(
-              matchup: matchup,
-              workout: workout,
-              submitted: submitted,
-            ),
-          ),
-          for (final (i, block) in workout.blocks.indexed)
+      body: PageBody(
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: 24),
+          children: [
             StaggeredEntrance(
-              index: i + 1,
-              child: _BlockCard(
-                title: Fmt.block(block.type),
-                scored: block.items.any((i) => i.isScored),
-                children: [
-                  for (final item in block.items)
-                    _ItemTile(
-                      item: item,
-                      exercise: catalog.byId(item.exerciseId),
-                      entry: currentLog?.entryForItem(item.id),
-                      onTap: editable && catalog.byId(item.exerciseId) != null
-                          ? () => _logItem(
-                              item,
-                              catalog.byId(item.exerciseId)!,
-                              currentLog,
-                            )
-                          : null,
-                    ),
-                ],
+              index: 0,
+              child: _Header(
+                matchup: matchup,
+                workout: workout,
+                submitted: submitted,
               ),
             ),
-        ],
+            for (final (i, block) in workout.blocks.indexed)
+              StaggeredEntrance(
+                index: i + 1,
+                child: _BlockCard(
+                  title: Fmt.block(block.type),
+                  scored: block.items.any((i) => i.isScored),
+                  children: [
+                    for (final item in block.items)
+                      _ItemTile(
+                        item: item,
+                        exercise: catalog.byId(item.exerciseId),
+                        entry: currentLog?.entryForItem(item.id),
+                        onTap: editable && catalog.byId(item.exerciseId) != null
+                            ? () => _logItem(
+                                item,
+                                catalog.byId(item.exerciseId)!,
+                                currentLog,
+                              )
+                            : null,
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
