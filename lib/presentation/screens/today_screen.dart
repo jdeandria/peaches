@@ -9,6 +9,7 @@ import '../../application/providers.dart';
 import '../../domain/core/local_date.dart';
 import '../../domain/models/season.dart';
 import '../../domain/models/workout_log.dart';
+import '../expressive/shapes.dart';
 import '../formatting.dart';
 import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
@@ -264,8 +265,11 @@ class _LogRow extends ConsumerWidget {
     final sets = log.entries.fold<int>(0, (n, e) => n + e.sets.length);
     return ListTile(
       minVerticalPadding: 12,
-      leading: CircleAvatar(
-        backgroundColor: log.isSubmitted
+      leading: ShapedAvatar(
+        shape: log.isSubmitted
+            ? ExpressiveShape.softBurst
+            : ExpressiveShape.circle,
+        color: log.isSubmitted
             ? scheme.primaryContainer
             : scheme.surfaceContainerHigh,
         foregroundColor: log.isSubmitted
@@ -273,7 +277,6 @@ class _LogRow extends ConsumerWidget {
             : scheme.onSurfaceVariant,
         child: Icon(
           log.isSubmitted ? Icons.check_rounded : Icons.edit_outlined,
-          size: 20,
         ),
       ),
       title: Text(Fmt.day(LocalDate.of(log.startedAt.toLocal()))),

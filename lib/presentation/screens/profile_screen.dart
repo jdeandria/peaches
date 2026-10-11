@@ -5,6 +5,8 @@ import '../../application/providers.dart';
 import '../../application/season_service.dart';
 import '../../domain/models/peach.dart';
 import '../../domain/models/training.dart';
+import '../expressive/button_group.dart';
+import '../expressive/shapes.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
 import '../widgets/page_scaffold.dart';
@@ -62,16 +64,12 @@ class _ProfileBody extends ConsumerWidget {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 32,
-                  backgroundColor: scheme.primaryContainer,
+                ShapedAvatar.person(
+                  id: peach.id,
+                  name: peach.displayName,
+                  size: 68,
+                  color: scheme.primaryContainer,
                   foregroundColor: scheme.onPrimaryContainer,
-                  child: Text(
-                    peach.displayName.characters.first,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      color: scheme.onPrimaryContainer,
-                    ),
-                  ),
                 ),
                 const SizedBox(width: 20),
                 Expanded(
@@ -144,18 +142,15 @@ class _ProfileBody extends ConsumerWidget {
         const PageSection('Units'),
         StaggeredEntrance(
           index: i++,
-          child: SegmentedButton<UnitSystem>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: UnitSystem.metric, label: Text('Metric')),
-              ButtonSegment(
-                value: UnitSystem.imperial,
-                label: Text('Imperial'),
-              ),
+          child: ConnectedButtonGroup<UnitSystem>(
+            options: const [
+              (UnitSystem.metric, 'Metric'),
+              (UnitSystem.imperial, 'Imperial'),
             ],
-            selected: {peach.units},
-            onSelectionChanged: (s) =>
-                _save(ref, peach.copyWith(units: s.first)),
+            selected: peach.units,
+            onChanged: (u) {
+              if (u != null) _save(ref, peach.copyWith(units: u));
+            },
           ),
         ),
         const PageSection('More'),

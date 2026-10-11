@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme.dart';
 import '../../application/providers.dart';
 import '../../domain/models/season.dart';
+import '../expressive/shapes.dart';
 import '../formatting.dart';
 import 'motion.dart';
 import 'page_scaffold.dart';
@@ -12,10 +13,11 @@ import 'page_scaffold.dart';
 class _MatchupView {
   _MatchupView(WidgetRef ref, this.matchup) {
     me = ref.watch(currentPeachIdProvider);
-    final opponentId = me == null ? null : matchup.opponentOf(me!);
-    opponentName = opponentId == null
+    opponentId = me == null ? null : matchup.opponentOf(me!);
+    final id = opponentId;
+    opponentName = id == null
         ? null
-        : ref.watch(peachProvider(opponentId)).value?.displayName;
+        : ref.watch(peachProvider(id)).value?.displayName;
     round = ref.watch(roundProvider(matchup.roundId)).value;
     final season = ref.watch(seasonProvider(matchup.seasonId)).value;
     crateName = season == null
@@ -27,6 +29,7 @@ class _MatchupView {
 
   final Matchup matchup;
   late final String? me;
+  late final String? opponentId;
   late final String? opponentName;
   late final Round? round;
   late final String? crateName;
@@ -126,11 +129,12 @@ class MatchupHeroCard extends ConsumerWidget {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: scheme.surfaceContainerLowest,
+                  ShapedAvatar.person(
+                    id: v.opponentId ?? matchup.id,
+                    name: matchup.isBye ? '–' : (v.opponentName ?? '?'),
+                    size: 52,
+                    color: scheme.surfaceContainerLowest,
                     foregroundColor: scheme.primary,
-                    child: Text(v.initial, style: theme.textTheme.titleLarge),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -184,6 +188,11 @@ class MatchupHeroCard extends ConsumerWidget {
                   ),
                   child: AnimatedProgress(
                     value: submitted ? 1 : (total == 0 ? 0 : done / total),
+                    flowing: !submitted && done > 0,
+                    color: scheme.primary,
+                    trackColor: scheme.surfaceContainerLowest.withValues(
+                      alpha: 0.7,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -273,10 +282,9 @@ class MatchupListRow extends ConsumerWidget {
     return ListTile(
       onTap: onTap,
       minVerticalPadding: 12,
-      leading: CircleAvatar(
-        backgroundColor: scheme.secondaryContainer,
-        foregroundColor: scheme.onSecondaryContainer,
-        child: Text(v.initial),
+      leading: ShapedAvatar.person(
+        id: v.opponentId ?? matchup.id,
+        name: matchup.isBye ? '–' : (v.opponentName ?? '?'),
       ),
       title: Text(v.title),
       subtitle: Text(

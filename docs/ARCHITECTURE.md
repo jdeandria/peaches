@@ -105,7 +105,8 @@ device notices they are due (`syncPeach` on launch and on refresh). That
 is safe because the work is idempotent and convergent:
 
 * the workout for a matchup is generated from a seed derived from the
-  matchup, with a deterministic document id (`w-<matchupId>`) and item
+  matchup with a stable FNV-1a hash (`stableHash`; never `Object.hash`,
+  which Dart randomises per process), with a deterministic document id (`w-<matchupId>`) and item
   ids, so two devices opening the same round write identical documents;
 * closing scores only submitted logs with a pure function, so two devices
   closing the same round write identical results;

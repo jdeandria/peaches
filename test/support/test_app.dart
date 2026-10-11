@@ -7,6 +7,7 @@ import 'package:peaches/application/auth_service.dart';
 import 'package:peaches/application/providers.dart';
 import 'package:peaches/data/demo/demo_seeder.dart';
 import 'package:peaches/domain/core/ids.dart';
+import 'package:peaches/presentation/expressive/wavy_progress.dart';
 
 /// A fixed Monday morning so seeded data is stable across runs.
 final fixedNow = DateTime.utc(2026, 10, 12, 9);
@@ -55,7 +56,7 @@ Future<void> runCoreJourney(WidgetTester tester) async {
   // Log the first *scored* exercise (it shows a progress bar) as prescribed.
   final scoredTile = find
       .ancestor(
-        of: find.byType(LinearProgressIndicator).first,
+        of: find.byType(WavyProgress).first,
         matching: find.byType(InkWell),
       )
       .first;

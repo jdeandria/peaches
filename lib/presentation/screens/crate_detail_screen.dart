@@ -9,6 +9,7 @@ import '../../domain/models/crate.dart';
 import '../../domain/models/peach.dart';
 import '../../domain/models/season.dart';
 import '../../domain/services/round_robin_scheduler.dart';
+import '../expressive/shapes.dart';
 import '../formatting.dart';
 import '../widgets/adaptive.dart';
 import '../widgets/async_view.dart';
@@ -95,14 +96,15 @@ class _CrateBody extends ConsumerWidget {
             children: [
               for (final p in list)
                 ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: p.id == crate.ownerPeachId
+                  leading: ShapedAvatar.person(
+                    id: p.id,
+                    name: p.displayName,
+                    color: p.id == crate.ownerPeachId
                         ? scheme.tertiaryContainer
                         : scheme.secondaryContainer,
                     foregroundColor: p.id == crate.ownerPeachId
                         ? scheme.onTertiaryContainer
                         : scheme.onSecondaryContainer,
-                    child: Text(p.displayName.characters.first),
                   ),
                   title: Text(p.displayName),
                   subtitle: Text(

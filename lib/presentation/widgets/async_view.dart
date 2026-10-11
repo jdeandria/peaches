@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../expressive/loading_indicator.dart';
+
 /// Renders an [AsyncValue] with consistent loading and error states so
 /// screens only describe the data case.
 class AsyncView<T> extends StatelessWidget {
@@ -26,14 +28,9 @@ class AsyncView<T> extends StatelessWidget {
       loading: () => compact
           ? const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(
-                child: SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
+              child: Center(child: ExpressiveLoadingIndicator(size: 28)),
             )
-          : const Center(child: CircularProgressIndicator()),
+          : const Center(child: ExpressiveLoadingIndicator()),
       error: (error, _) => Padding(
         padding: const EdgeInsets.all(24),
         child: Center(

@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/router.dart';
-import '../../app/theme.dart';
 import '../../application/providers.dart';
 import '../../domain/models/crate.dart';
 import '../../domain/models/season.dart';
 import '../../domain/models/training.dart';
+import '../expressive/shapes.dart';
 import '../formatting.dart';
 import '../widgets/async_view.dart';
 import '../widgets/motion.dart';
@@ -78,7 +78,6 @@ class CratesScreen extends ConsumerWidget {
       context: context,
       builder: (sheet) {
         final theme = Theme.of(sheet);
-        final scheme = theme.colorScheme;
         Widget option({
           required IconData icon,
           required String title,
@@ -89,11 +88,7 @@ class CratesScreen extends ConsumerWidget {
             horizontal: 24,
             vertical: 4,
           ),
-          leading: CircleAvatar(
-            backgroundColor: scheme.secondaryContainer,
-            foregroundColor: scheme.onSecondaryContainer,
-            child: Icon(icon),
-          ),
+          leading: ShapedAvatar(child: Icon(icon)),
           title: Text(title),
           subtitle: Text(subtitle),
           onTap: () {
@@ -161,22 +156,12 @@ class _CrateCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: scheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(
-                    PeachesTheme.radiusMedium,
-                  ),
-                ),
-                child: Text(
-                  crate.name.characters.first.toUpperCase(),
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: scheme.onTertiaryContainer,
-                  ),
-                ),
+              ShapedAvatar(
+                shape: ExpressiveShape.forId(crate.id),
+                size: 52,
+                color: scheme.tertiaryContainer,
+                foregroundColor: scheme.onTertiaryContainer,
+                child: Text(crate.name.characters.first.toUpperCase()),
               ),
               const SizedBox(width: 16),
               Expanded(

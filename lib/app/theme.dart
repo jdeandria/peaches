@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../presentation/expressive/springs.dart';
+
 /// Material 3 theming for Peaches.
 ///
 /// **Colour.** The brand seed is peach (#FFE5B4). That seed's own hue is a
@@ -66,16 +68,24 @@ abstract final class PeachesTheme {
 
     return base.copyWith(
       scaffoldBackgroundColor: scheme.surface,
+      // M3 Expressive emphasized type: heavier display and headline weights
+      // with tighter tracking, so headings and key numbers carry the page.
       textTheme: text.copyWith(
+        displaySmall: text.displaySmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.5,
+        ),
         headlineMedium: text.headlineMedium?.copyWith(
-          fontWeight: FontWeight.w500,
-          letterSpacing: -0.25,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.5,
         ),
         headlineSmall: text.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.25,
         ),
-        titleLarge: text.titleLarge?.copyWith(fontWeight: FontWeight.w500),
+        titleLarge: text.titleLarge?.copyWith(fontWeight: FontWeight.w600),
         titleMedium: text.titleMedium?.copyWith(fontWeight: FontWeight.w500),
+        labelLarge: text.labelLarge?.copyWith(fontWeight: FontWeight.w600),
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
@@ -122,11 +132,13 @@ abstract final class PeachesTheme {
         space: 1,
         thickness: 1,
       ),
+      // Linear progress uses the Expressive WavyProgress widget; this keeps
+      // any stock indicator (and the circular rings) on the current spec.
       progressIndicatorTheme: ProgressIndicatorThemeData(
-        linearTrackColor: scheme.surfaceContainerHighest,
+        linearTrackColor: scheme.secondaryContainer,
+        circularTrackColor: scheme.secondaryContainer,
         linearMinHeight: 4,
         borderRadius: BorderRadius.circular(2),
-        // Opts into the 2024 M3 progress indicator (gap and stop dot).
         // ignore: deprecated_member_use
         year2023: false,
       ),
@@ -135,7 +147,8 @@ abstract final class PeachesTheme {
         indicatorColor: scheme.secondaryContainer,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        height: 72,
+        // M3 Expressive's shorter navigation bar.
+        height: 68,
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: scheme.surfaceContainerLow,
@@ -158,14 +171,33 @@ abstract final class PeachesTheme {
           color: scheme.onSurfaceVariant,
         ),
       ),
+      // M3 Expressive buttons morph from a pill to a rounded square while
+      // pressed, animated with the fast spatial spring.
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(64, 48),
-          textStyle: text.labelLarge?.copyWith(fontSize: 15),
-        ),
+          textStyle: text.labelLarge?.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+          animationDuration: M3Spring.spatialFast.duration,
+        ).copyWith(shape: _morphingShape(12)),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(minimumSize: const Size(64, 48)),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(64, 48),
+          animationDuration: M3Spring.spatialFast.duration,
+        ).copyWith(shape: _morphingShape(12)),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          animationDuration: M3Spring.spatialFast.duration,
+        ).copyWith(shape: _morphingShape(12)),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          animationDuration: M3Spring.spatialFast.duration,
+        ).copyWith(shape: _morphingShape(12)),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: scheme.primaryContainer,
@@ -199,7 +231,8 @@ abstract final class PeachesTheme {
           minimumSize: const Size(0, 44),
         ),
       ),
-      // Opts into the 2024 M3 slider (handle bar, gapped track).
+      // The handle-bar slider with a gapped track: the design M3 Expressive
+      // kept. Flutter still gates it behind this (deprecated) opt-in.
       // ignore: deprecated_member_use
       sliderTheme: const SliderThemeData(year2023: false),
       dialogTheme: DialogThemeData(
@@ -242,4 +275,15 @@ abstract final class PeachesTheme {
       ),
     );
   }
+
+  /// Pill at rest, rounded square of [pressedRadius] while pressed.
+  static WidgetStateProperty<OutlinedBorder> _morphingShape(
+    double pressedRadius,
+  ) => WidgetStateProperty.resolveWith(
+    (states) => states.contains(WidgetState.pressed)
+        ? RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(pressedRadius),
+          )
+        : const StadiumBorder(),
+  );
 }

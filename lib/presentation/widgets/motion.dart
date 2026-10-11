@@ -2,6 +2,9 @@ import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../expressive/springs.dart';
+import '../expressive/wavy_progress.dart';
+
 /// Material 3 motion, applied consistently.
 ///
 /// Durations and easings are Flutter's M3 tokens ([Durations], [Easing]).
@@ -52,18 +55,23 @@ class StaggeredEntrance extends StatefulWidget {
 
 class _StaggeredEntranceState extends State<StaggeredEntrance>
     with SingleTickerProviderStateMixin {
+  // Position rides the expressive spatial spring (a hint of overshoot);
+  // opacity fades in over the first part of it.
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: Motion.medium,
+    duration: M3Spring.spatialDefault.duration,
   );
   late final Animation<double> _fade = CurvedAnimation(
     parent: _controller,
-    curve: Motion.enter,
+    curve: const Interval(0, 0.45, curve: Curves.easeOut),
   );
-  late final Animation<Offset> _slide = Tween(
-    begin: widget.offset,
-    end: Offset.zero,
-  ).animate(_fade);
+  late final Animation<Offset> _slide =
+      Tween(begin: widget.offset, end: Offset.zero).animate(
+        CurvedAnimation(
+          parent: _controller,
+          curve: M3Spring.spatialDefault.curve,
+        ),
+      );
 
   @override
   void initState() {
@@ -89,31 +97,34 @@ class _StaggeredEntranceState extends State<StaggeredEntrance>
   }
 }
 
-/// A linear progress bar that animates to its new value.
-///
-/// Decorative by default: callers show the same information as text
-/// ("3 of 6 logged"), so the bar is excluded from semantics unless
-/// [semanticsLabel] is given.
+/// A progress bar that springs to its new value: the M3 Expressive wavy
+/// indicator. Decorative unless [semanticsLabel] is given.
 class AnimatedProgress extends StatelessWidget {
-  const AnimatedProgress({required this.value, super.key, this.semanticsLabel});
+  const AnimatedProgress({
+    required this.value,
+    super.key,
+    this.semanticsLabel,
+    this.flowing = false,
+    this.color,
+    this.trackColor,
+  });
 
   final double value;
   final String? semanticsLabel;
 
+  /// Let the wave travel; reserve for the one bar that matters on screen.
+  final bool flowing;
+  final Color? color;
+  final Color? trackColor;
+
   @override
-  Widget build(BuildContext context) {
-    Widget bar(double v) =>
-        LinearProgressIndicator(value: v, semanticsLabel: semanticsLabel);
-    final child = Motion.reduced(context)
-        ? bar(value)
-        : TweenAnimationBuilder<double>(
-            tween: Tween(end: value.clamp(0, 1)),
-            duration: Motion.long,
-            curve: Motion.standard,
-            builder: (context, v, _) => bar(v),
-          );
-    return semanticsLabel == null ? ExcludeSemantics(child: child) : child;
-  }
+  Widget build(BuildContext context) => WavyProgress(
+    value: value,
+    flowing: flowing,
+    color: color,
+    trackColor: trackColor,
+    semanticsLabel: semanticsLabel,
+  );
 }
 
 /// A number that counts up or down to its new value.
@@ -134,8 +145,8 @@ class AnimatedNumber extends StatelessWidget {
     if (Motion.reduced(context)) return Text(format(value), style: style);
     return TweenAnimationBuilder<double>(
       tween: Tween(end: value),
-      duration: Motion.long,
-      curve: Motion.standard,
+      duration: M3Spring.effectsSlow.duration,
+      curve: M3Spring.effectsSlow.curve,
       builder: (context, v, _) => Text(format(v), style: style),
     );
   }

@@ -4,6 +4,7 @@ import '../../domain/exercises/exercise.dart';
 import '../../domain/exercises/taxonomy.dart';
 import '../../domain/models/workout.dart';
 import '../../domain/models/workout_log.dart';
+import '../expressive/button_group.dart';
 import '../formatting.dart';
 
 /// Opens a bottom sheet to record every set of one workout item and
@@ -241,16 +242,11 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
             const SizedBox(height: 16),
             Text('How hard was it? (RPE)', style: theme.textTheme.titleSmall),
             const SizedBox(height: 8),
-            SegmentedButton<int>(
-              showSelectedIcon: false,
-              emptySelectionAllowed: true,
-              segments: [
-                for (var r = 5; r <= 10; r++)
-                  ButtonSegment(value: r, label: Text('$r')),
-              ],
-              selected: {?_rpe},
-              onSelectionChanged: (v) =>
-                  setState(() => _rpe = v.isEmpty ? null : v.first),
+            ConnectedButtonGroup<int>(
+              options: [for (var r = 5; r <= 10; r++) (r, '$r')],
+              selected: _rpe,
+              allowDeselect: true,
+              onChanged: (v) => setState(() => _rpe = v),
             ),
             const SizedBox(height: 24),
             Row(

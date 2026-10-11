@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../application/providers.dart';
+import '../presentation/expressive/loading_indicator.dart';
 import 'router.dart';
 import 'theme.dart';
 
@@ -50,7 +51,9 @@ class _PeachesAppState extends ConsumerState<PeachesApp> {
         title: 'Peaches',
         theme: PeachesTheme.light(),
         darkTheme: PeachesTheme.dark(),
-        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+        home: const Scaffold(
+          body: Center(child: ExpressiveLoadingIndicator(contained: true)),
+        ),
       );
     }
     return MaterialApp.router(

@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../domain/core/ids.dart';
 import '../domain/core/local_date.dart';
+import '../domain/core/stable_hash.dart';
 import '../domain/models/crate.dart';
 import '../domain/models/peach.dart';
 import '../domain/models/score.dart';
@@ -258,7 +259,7 @@ final class SeasonService {
         durationMinutes: crate.settings.workoutDurationMinutes,
         targetDifficulty: meanLevel.clamp(1, 5),
         maxDifficulty: maxDifficulty,
-        seed: _seedFor(matchup, round),
+        seed: seedFor(matchup, round),
         recentUse: recentUse,
         title: 'Round ${round.index + 1}',
         workoutId: 'w-${matchup.id}',
@@ -272,8 +273,8 @@ final class SeasonService {
   /// with the deterministic workout id this makes opening idempotent
   /// across the whole Crate: there is no server, so every client is
   /// allowed to do it and they all converge on the same document.
-  static int _seedFor(Matchup matchup, Round round) =>
-      Object.hash(matchup.id, round.id, round.index) & 0x7fffffff;
+  static int seedFor(Matchup matchup, Round round) =>
+      stableHash('${matchup.id}|${round.id}|${round.index}');
 
   /// exerciseId -> rounds ago, looking back [recentRoundWindow] rounds
   /// across every workout in the Season (the whole Crate shares variety).
