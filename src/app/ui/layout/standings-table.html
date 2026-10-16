@@ -1,0 +1,51 @@
+@if (rows().length === 0) {
+  <pch-card variant="outlined">No standings yet.</pch-card>
+} @else {
+  <pch-card class="card">
+    <div class="scroll" role="region" [attr.aria-label]="label()" tabindex="0">
+      <table>
+        <thead class="pch-label-large">
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">Peach</th>
+            <th scope="col">W-L-T</th>
+            <th scope="col">Streak</th>
+            <th scope="col" class="form">Form</th>
+            <th scope="col" class="num"><abbr title="Points for">PF</abbr></th>
+            <th scope="col" class="num"><abbr title="Points against">PA</abbr></th>
+          </tr>
+        </thead>
+        <tbody class="pch-body-medium">
+          @for (s of rows(); track s.peachId; let i = $index) {
+            @let me = s.peachId === highlightPeachId();
+            <tr [class.highlight]="me" [attr.aria-current]="me ? 'true' : null">
+              <td>{{ i + 1 }}</td>
+              <th scope="row" class="name">
+                {{ s.name }}
+                @if (me) {
+                  <span class="pch-visually-hidden">(you)</span>
+                }
+              </th>
+              <td>{{ s.wins }}-{{ s.losses }}-{{ s.ties }}</td>
+              <td [class.hot]="s.onWinningStreak">{{ s.streak || '–' }}</td>
+              <td class="form">
+                @let last5 = recent(s.form);
+                @if (last5.length) {
+                  <span class="dots" role="img" [attr.aria-label]="formLabel(s.form)">
+                    @for (o of last5; track $index) {
+                      <span class="dot" [class]="o"></span>
+                    }
+                  </span>
+                } @else {
+                  –
+                }
+              </td>
+              <td class="num">{{ points(s.pointsFor) }}</td>
+              <td class="num">{{ points(s.pointsAgainst) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </pch-card>
+}

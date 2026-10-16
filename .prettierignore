@@ -1,0 +1,9 @@
+dist
+coverage
+playwright-report
+test-results
+.angular
+package-lock.json
+src/app/ui/theme/_palette.scss
+src/app/ui/theme/_springs.scss
+*.md

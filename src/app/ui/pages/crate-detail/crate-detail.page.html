@@ -1,0 +1,155 @@
+@let c = crate.value();
+@if (c === undefined) {
+  <pch-loading-indicator class="page-loading" />
+} @else if (c === null) {
+  <pch-page title="Crate" showBack backLink="/crates">
+    <pch-empty-state icon="search_off" title="Crate not found" />
+  </pch-page>
+} @else {
+  <pch-page
+    [title]="c.name"
+    [subtitle]="c.description || undefined"
+    showBack
+    backLink="/crates"
+    [maxWidth]="1080"
+  >
+    <button
+      pageActions
+      matIconButton
+      type="button"
+      [attr.aria-label]="canShare ? 'Share invite code' : 'Copy invite code'"
+      [matTooltip]="canShare ? 'Share invite code' : 'Copy invite code'"
+      (click)="share(c)"
+    >
+      <span class="material-symbols-rounded" aria-hidden="true">share</span>
+    </button>
+
+    <div class="chips">
+      <span class="chip">
+        <span class="material-symbols-rounded" aria-hidden="true">flag</span>
+        <span>{{ fmt.goal(c.settings.goal) }}</span>
+      </span>
+      <span class="chip">
+        <span class="material-symbols-rounded" aria-hidden="true">timer</span>
+        <span>{{ c.settings.workoutDurationMinutes }} min</span>
+      </span>
+      <button
+        class="chip action"
+        type="button"
+        aria-description="Copies the invite code"
+        (click)="copyCode(c)"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">key</span>
+        <span>Code {{ c.inviteCode }}</span>
+      </button>
+    </div>
+
+    <pch-two-pane>
+      <div primaryPane>
+        @let s = season();
+        @if (s === undefined) {
+          <pch-loading-indicator class="loading" [size]="40" />
+        } @else if (s === null) {
+          <pch-card variant="outlined" class="no-season">
+            No Season yet. The owner can start one.
+          </pch-card>
+        } @else {
+          <pch-section [title]="s.name">
+            <pch-status-label
+              sectionTrailing
+              [color]="s.status === 'active' ? 'primary' : undefined"
+              >{{ fmt.seasonStatus(s.status) }}</pch-status-label
+            >
+          </pch-section>
+          @let rows = standingRows();
+          @if (rows) {
+            <pch-standings-table [pchStagger]="1" [rows]="rows" [highlightPeachId]="me()" />
+          } @else {
+            <pch-loading-indicator class="loading" [size]="40" />
+          }
+
+          <pch-section title="Rounds" />
+          @let roundList = rounds();
+          @if (roundList) {
+            <pch-list-card [pchStagger]="2">
+              @for (r of roundList; track r.round.id) {
+                <pch-list-row [interactive]="!!r.matchupLink">
+                  <span
+                    rowLeading
+                    class="round-number pch-title-medium"
+                    [attr.data-status]="r.round.status"
+                    aria-hidden="true"
+                    >{{ r.round.index + 1 }}</span
+                  >
+                  @if (r.matchupLink) {
+                    <a class="stretched" [routerLink]="r.matchupLink">{{ r.title }}</a>
+                  } @else {
+                    {{ r.title }}
+                  }
+                  @if (r.subtitle) {
+                    <span rowSubtitle>{{ r.subtitle }}</span>
+                  }
+                  <span rowTrailing class="trailing">
+                    @if (r.action) {
+                      <button
+                        matButton="tonal"
+                        type="button"
+                        [disabled]="busyRound() !== null"
+                        [attr.aria-label]="
+                          (r.action === 'open' ? 'Open round ' : 'Close round ') +
+                          (r.round.index + 1)
+                        "
+                        (click)="runRound(r)"
+                      >
+                        {{ r.action === 'open' ? 'Open' : 'Close' }}
+                      </button>
+                    } @else {
+                      <pch-status-label [color]="roundStatusColor(r.round.status)">{{
+                        fmt.roundStatus(r.round.status)
+                      }}</pch-status-label>
+                    }
+                  </span>
+                </pch-list-row>
+              }
+            </pch-list-card>
+          } @else {
+            <pch-loading-indicator class="loading" [size]="40" />
+          }
+        }
+      </div>
+
+      <div secondaryPane>
+        <pch-section title="Peaches" />
+        @let people = members.value();
+        @if (people) {
+          <pch-list-card [pchStagger]="3">
+            @for (p of people; track p.id) {
+              @let owner = p.id === c.ownerPeachId;
+              <pch-list-row>
+                <pch-shaped-avatar
+                  rowLeading
+                  [shapeId]="p.id"
+                  [name]="p.displayName"
+                  [color]="owner ? 'tertiary-container' : 'secondary-container'"
+                  [foreground]="owner ? 'on-tertiary-container' : 'on-secondary-container'"
+                />
+                {{ p.displayName }}
+                <span rowSubtitle>{{ owner ? 'Owner' : 'Member' }}</span>
+                <span rowTrailing class="pch-label-medium muted">Level {{ p.fitnessLevel }}</span>
+              </pch-list-row>
+            }
+          </pch-list-card>
+        } @else {
+          <pch-loading-indicator class="loading" [size]="40" />
+        }
+      </div>
+    </pch-two-pane>
+
+    @if (isOwner()) {
+      <button pageFab matFab extended type="button" (click)="newSeason(c)">
+        <span class="material-symbols-rounded" aria-hidden="true">emoji_events</span>
+        Season
+      </button>
+    }
+  </pch-page>
+}

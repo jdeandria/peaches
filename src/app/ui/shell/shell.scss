@@ -1,0 +1,189 @@
+// Compact (< 600px): bottom navigation bar.
+:host {
+  // Pages keep FABs / bottom bars above the bar; the bar owns the safe area.
+  --pch-bottom-inset: calc(68px + env(safe-area-inset-bottom, 0px));
+  --pch-safe-bottom: 0px;
+  display: block;
+  min-height: 100dvh;
+}
+.main {
+  display: block;
+  min-height: 100dvh;
+  padding-bottom: var(--pch-bottom-inset);
+  box-sizing: border-box;
+  outline: none;
+}
+.skip-link {
+  position: absolute;
+  z-index: 10;
+  top: 8px;
+  left: 8px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: var(--pch-radius-small);
+  font: var(--mat-sys-label-large);
+  cursor: pointer;
+  background: var(--mat-sys-inverse-surface);
+  color: var(--mat-sys-inverse-on-surface);
+  transform: translateY(-200%);
+  &:focus {
+    transform: none;
+  }
+}
+
+.nav {
+  position: fixed;
+  z-index: 5;
+  inset: auto 0 0;
+  display: flex;
+  height: 68px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--mat-sys-surface-container);
+}
+.logo {
+  display: none;
+  font-size: 28px;
+  line-height: 1;
+  padding: 12px 0 20px;
+}
+.item {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding-top: 6px;
+  color: var(--mat-sys-on-surface-variant);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  &:focus-visible {
+    outline: none;
+    .indicator::before {
+      outline: var(--pch-focus-ring);
+      outline-offset: var(--pch-focus-offset);
+    }
+  }
+}
+.indicator {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  // Active indicator pill + state layer.
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 56px;
+    height: 32px;
+    margin-left: -28px;
+    border-radius: 16px;
+    background: var(--mat-sys-secondary-container);
+    transform: scaleX(0.4);
+    opacity: 0;
+    transition:
+      transform var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast),
+      opacity var(--pch-spring-effects-fast-duration) linear;
+  }
+}
+.icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 32px;
+  font-size: 24px;
+}
+.label {
+  position: relative;
+  font: var(--mat-sys-label-medium);
+  letter-spacing: var(--mat-sys-label-medium-tracking);
+}
+@media (hover: hover) {
+  .item:hover .indicator::before {
+    opacity: 1;
+    transform: none;
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  }
+}
+.item.active {
+  color: var(--mat-sys-on-surface);
+  .icon {
+    color: var(--mat-sys-on-secondary-container);
+  }
+  .label {
+    font-weight: 600;
+  }
+  .indicator::before {
+    opacity: 1;
+    transform: none;
+    background: var(--mat-sys-secondary-container);
+  }
+}
+
+// Medium (600–839px): navigation rail, labels under icons.
+@media (min-width: 600px) {
+  :host {
+    --pch-bottom-inset: 0px;
+    --pch-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --pch-rail-width: 80px;
+    display: grid;
+    grid-template-columns: var(--pch-rail-width) minmax(0, 1fr);
+  }
+  .main {
+    padding-bottom: 0;
+  }
+  .nav {
+    position: sticky;
+    top: 0;
+    inset: 0 auto auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    height: 100dvh;
+    padding: 0 0 env(safe-area-inset-bottom, 0px);
+    background: var(--mat-sys-surface-container-low);
+  }
+  .logo {
+    display: block;
+    text-align: center;
+  }
+  .item {
+    flex: none;
+    padding: 0;
+  }
+  .label {
+    font: var(--mat-sys-label-large);
+  }
+}
+
+// Expanded (≥ 840px): extended rail, labels beside icons in the pill.
+@media (min-width: 840px) {
+  :host {
+    --pch-rail-width: 200px;
+  }
+  .nav {
+    padding-inline: 12px;
+    gap: 4px;
+  }
+  .logo {
+    text-align: start;
+    padding-inline: 16px;
+  }
+  .item {
+    justify-content: flex-start;
+  }
+  .indicator {
+    flex: 1;
+    flex-direction: row;
+    gap: 12px;
+    height: 56px;
+    padding-inline: 16px;
+    &::before {
+      inset: 0;
+      width: auto;
+      height: auto;
+      margin: 0;
+      border-radius: 28px;
+    }
+  }
+}

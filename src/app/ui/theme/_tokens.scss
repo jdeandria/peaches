@@ -1,0 +1,334 @@
+// Peaches design tokens beyond the generated palette: type, shape, motion,
+// Angular Material component overrides and a few global utilities.
+// The Peaches M3 theme (DECISIONS #13 colour, #14 M3 Expressive).
+@use 'sass:list';
+@use '@angular/material' as mat;
+
+$font: ('Roboto Flex Variable', Roboto, system-ui, sans-serif);
+
+// M3 Expressive emphasized type: heavier display/headline weights with
+// tighter tracking.
+$emphasized: (
+  display-small: (
+    600,
+    -0.5px,
+  ),
+  headline-medium: (
+    600,
+    -0.5px,
+  ),
+  headline-small: (
+    600,
+    -0.25px,
+  ),
+  title-large: (
+    600,
+    null,
+  ),
+  label-large: (
+    600,
+    null,
+  ),
+);
+
+$type-roles:
+  display-large, display-medium, display-small, headline-large, headline-medium, headline-small,
+  title-large, title-medium, title-small, body-large, body-medium, body-small, label-large,
+  label-medium, label-small;
+
+@mixin theme {
+  color-scheme: light dark;
+
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$orange-palette,
+        tertiary: mat.$yellow-palette,
+        theme-type: color-scheme,
+      ),
+      typography: (
+        plain-family: $font,
+        brand-family: $font,
+      ),
+      density: 0,
+    )
+  );
+
+  @each $role, $spec in $emphasized {
+    $weight: list.nth($spec, 1);
+    $tracking: list.nth($spec, 2);
+    --mat-sys-#{$role}-weight: #{$weight};
+    --mat-sys-#{$role}: #{$weight}
+      var(--mat-sys-#{$role}-size) /
+      var(--mat-sys-#{$role}-line-height)
+      var(--mat-sys-#{$role}-font);
+    @if $tracking {
+      --mat-sys-#{$role}-tracking: #{$tracking};
+    }
+  }
+
+  // Shape: M3 corner scale.
+  --pch-radius-small: 8px;
+  --pch-radius-medium: 12px;
+  --pch-radius-large: 16px;
+  --pch-radius-extra-large: 28px;
+
+  // Motion: M3 easing and duration tokens.
+  --pch-ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --pch-ease-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --pch-ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --pch-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --pch-ease-standard-decelerate: cubic-bezier(0, 0, 0, 1);
+  --pch-ease-standard-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --pch-duration-short: 200ms;
+  --pch-duration-medium: 300ms;
+  --pch-duration-long: 500ms;
+  --pch-stagger: 40ms;
+
+  // Accessibility: a visible M3 focus ring.
+  --pch-focus-ring: 3px solid var(--mat-sys-secondary);
+  --pch-focus-offset: 2px;
+
+  // Tonal elevation for cards (TonalCard): light lifts towards white,
+  // dark towards lighter containers.
+  --pch-card-elevated: var(--mat-sys-surface-container-lowest);
+  --pch-card-elevated-hover: var(--mat-sys-surface-container-lowest);
+  --pch-shadow-1: 0 1px 2px rgb(0 0 0 / 0.18), 0 1px 3px 1px rgb(0 0 0 / 0.1);
+  --pch-shadow-2: 0 1px 2px rgb(0 0 0 / 0.2), 0 2px 6px 2px rgb(0 0 0 / 0.12);
+  --pch-shadow-3: 0 1px 3px rgb(0 0 0 / 0.2), 0 4px 8px 3px rgb(0 0 0 / 0.12);
+
+  @media (prefers-color-scheme: dark) {
+    --pch-card-elevated: var(--mat-sys-surface-container-low);
+    --pch-card-elevated-hover: var(--mat-sys-surface-container);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    --pch-duration-short: 0ms;
+    --pch-duration-medium: 0ms;
+    --pch-duration-long: 0ms;
+    --pch-stagger: 0ms;
+    --pch-spring-spatial-fast-duration: 0ms;
+    --pch-spring-spatial-default-duration: 0ms;
+    --pch-spring-spatial-slow-duration: 0ms;
+    --pch-spring-effects-fast-duration: 0ms;
+    --pch-spring-effects-default-duration: 0ms;
+    --pch-spring-effects-slow-duration: 0ms;
+  }
+
+  // --- Angular Material components -------------------------------------
+  // Buttons: 48px tall pills that morph to a 12px rounded square while
+  // pressed (see `.mat-mdc-button-base:active` below).
+  $pill: 24px;
+  @include mat.button-overrides(
+    (
+      filled-container-shape: $pill,
+      outlined-container-shape: $pill,
+      text-container-shape: $pill,
+      protected-container-shape: $pill,
+      tonal-container-shape: $pill,
+      filled-container-height: 48px,
+      outlined-container-height: 48px,
+      text-container-height: 48px,
+      protected-container-height: 48px,
+      tonal-container-height: 48px,
+      filled-label-text-size: 15px,
+      filled-label-text-weight: 600,
+      tonal-label-text-weight: 600,
+      protected-label-text-weight: 600,
+      outlined-label-text-weight: 600,
+      text-label-text-weight: 600,
+    )
+  );
+  @include mat.icon-button-overrides(
+    (
+      container-shape: $pill,
+    )
+  );
+  @include mat.fab-overrides(
+    (
+      container-color: var(--mat-sys-primary-container),
+      foreground-color: var(--mat-sys-on-primary-container),
+      container-shape: var(--pch-radius-large),
+      extended-container-shape: var(--pch-radius-large),
+      extended-label-text-weight: 600,
+    )
+  );
+  @include mat.card-overrides(
+    (
+      elevated-container-shape: var(--pch-radius-large),
+      filled-container-shape: var(--pch-radius-large),
+      outlined-container-shape: var(--pch-radius-large),
+      elevated-container-color: var(--pch-card-elevated),
+      elevated-container-elevation: var(--pch-shadow-1),
+      filled-container-color: var(--mat-sys-surface-container),
+    )
+  );
+  @include mat.dialog-overrides(
+    (
+      container-shape: var(--pch-radius-extra-large),
+      container-color: var(--mat-sys-surface-container-high),
+    )
+  );
+  @include mat.bottom-sheet-overrides(
+    (
+      container-shape: var(--pch-radius-extra-large),
+      container-background-color: var(--mat-sys-surface-container-low),
+    )
+  );
+  @include mat.form-field-overrides(
+    (
+      outlined-container-shape: var(--pch-radius-medium),
+    )
+  );
+  @include mat.snack-bar-overrides(
+    (
+      container-shape: var(--pch-radius-small),
+    )
+  );
+  @include mat.chips-overrides(
+    (
+      container-shape-radius: var(--pch-radius-small),
+    )
+  );
+  @include mat.divider-overrides(
+    (
+      color: color-mix(in srgb, var(--mat-sys-outline-variant) 60%, transparent),
+    )
+  );
+  @include mat.button-toggle-overrides(
+    (
+      selected-state-background-color: var(--mat-sys-secondary-container),
+      selected-state-text-color: var(--mat-sys-on-secondary-container),
+    )
+  );
+}
+
+@mixin globals {
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--mat-sys-surface);
+    color: var(--mat-sys-on-surface);
+    font: var(--mat-sys-body-medium);
+    letter-spacing: var(--mat-sys-body-medium-tracking);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  // Typography roles as classes: `.pch-headline-medium`, `.pch-label-large`…
+  @each $role in $type-roles {
+    .pch-#{$role} {
+      font: var(--mat-sys-#{$role});
+      letter-spacing: var(--mat-sys-#{$role}-tracking);
+    }
+  }
+
+  // Icons: Material Symbols Rounded (self-hosted). Use
+  // `<span class="material-symbols-rounded" aria-hidden="true">today</span>`
+  // or `<mat-icon>today</mat-icon>` (mapped below), `.pch-icon-filled` to fill.
+  .material-symbols-rounded,
+  .mat-icon.material-icons {
+    font-family: 'Material Symbols Rounded';
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    direction: ltr;
+    font-feature-settings: 'liga';
+    font-size: 24px;
+    display: inline-block;
+    -webkit-font-smoothing: antialiased;
+    font-variation-settings: 'FILL' 0;
+    user-select: none;
+  }
+  .pch-icon-filled {
+    font-variation-settings:
+      'FILL' 1,
+      'wght' 400,
+      'GRAD' 0,
+      'opsz' 24;
+  }
+
+  .pch-visually-hidden {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  // Expressive press morph: pill at rest → 12px rounded square while held,
+  // on the fast spatial spring.
+  .mat-mdc-button-base:not(.mat-mdc-fab-base) {
+    transition: border-radius var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast);
+    &:active:not(:disabled, [aria-disabled='true']) {
+      --mat-button-filled-container-shape: var(--pch-radius-medium);
+      --mat-button-outlined-container-shape: var(--pch-radius-medium);
+      --mat-button-text-container-shape: var(--pch-radius-medium);
+      --mat-button-protected-container-shape: var(--pch-radius-medium);
+      --mat-button-tonal-container-shape: var(--pch-radius-medium);
+      --mat-icon-button-container-shape: var(--pch-radius-medium);
+    }
+  }
+
+  // Snackbars float above the shell's bottom navigation bar (compact).
+  @media (max-width: 599.98px) {
+    body:has(pch-shell) .mat-mdc-snack-bar-container {
+      margin-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  // Staggered entrance (pchStagger directive).
+  .pch-stagger {
+    animation:
+      pch-stagger-fade calc(var(--pch-spring-spatial-default-duration) * 0.45) ease-out both,
+      pch-stagger-slide var(--pch-spring-spatial-default-duration) var(--pch-spring-spatial-default)
+        both;
+    animation-delay: calc(min(var(--pch-stagger-index, 0), 12) * var(--pch-stagger));
+  }
+  @keyframes pch-stagger-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes pch-stagger-slide {
+    from {
+      transform: translateY(8%);
+    }
+  }
+
+  // Focus: our own ring on plain elements; Material components draw their
+  // strong focus indicator (same colour and width) instead.
+  :focus-visible:not([class*='mat-'], [class*='mdc-']) {
+    outline: var(--pch-focus-ring);
+    outline-offset: var(--pch-focus-offset);
+  }
+  @include mat.strong-focus-indicators(
+    (
+      border-style: solid,
+      border-width: 3px,
+      border-radius: var(--pch-radius-medium),
+    )
+  );
+  html {
+    --mat-focus-indicator-border-color: var(--mat-sys-secondary);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      animation-delay: 0ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

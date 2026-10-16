@@ -1,0 +1,127 @@
+.page-loading {
+  display: flex;
+  margin: 30vh auto 0;
+}
+
+.loading {
+  display: flex;
+  margin: 24px auto;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 16px 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--pch-radius-small);
+  background: none;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-large);
+  letter-spacing: var(--mat-sys-label-large-tracking);
+
+  .material-symbols-rounded {
+    font-size: 18px;
+    color: var(--mat-sys-primary);
+  }
+}
+
+.chip.action {
+  cursor: pointer;
+
+  // 48px touch target around the 32px chip.
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -8px 0;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--mat-sys-on-surface);
+    opacity: 0;
+    transition: opacity 150ms linear;
+  }
+
+  &:hover::after {
+    opacity: var(--mat-sys-hover-state-layer-opacity);
+  }
+
+  &:active::after {
+    opacity: var(--mat-sys-pressed-state-layer-opacity);
+  }
+}
+
+.no-season {
+  margin-top: 24px;
+}
+
+.round-number {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+
+  &[data-status='open'] {
+    background: var(--mat-sys-primary);
+    color: var(--mat-sys-on-primary);
+  }
+
+  &[data-status='closed'] {
+    background: var(--mat-sys-surface-container-high);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+// The whole row opens the matchup; the trailing button stays clickable above it.
+.stretched {
+  color: inherit;
+  text-decoration: none;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  &:focus-visible {
+    outline: none;
+
+    &::before {
+      outline: 3px solid var(--mat-sys-secondary);
+      outline-offset: -3px;
+      border-radius: var(--pch-radius-medium);
+    }
+  }
+}
+
+.trailing {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+pch-two-pane {
+  padding-bottom: 96px;
+}

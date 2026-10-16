@@ -1,0 +1,47 @@
+<header class="toolbar">
+  <div class="column toolbar-row" [class.with-back]="showBack()">
+    @if (showBack()) {
+      <button mat-icon-button type="button" aria-label="Back" matTooltip="Back" (click)="back()">
+        <span class="material-symbols-rounded" aria-hidden="true">arrow_back</span>
+      </button>
+    }
+    <div class="toolbar-title pch-title-large" aria-hidden="true">
+      @if (collapsed()) {
+        <span animate.enter="fade-in" animate.leave="fade-out">{{
+          toolbarTitle() ?? title()
+        }}</span>
+      }
+    </div>
+    <ng-content select="[pageActions]" />
+    @if (refreshable()) {
+      <button
+        mat-icon-button
+        type="button"
+        aria-label="Refresh"
+        matTooltip="Refresh"
+        [disabled]="refreshing()"
+        [attr.aria-busy]="refreshing()"
+        (click)="refresh.emit()"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
+      </button>
+    }
+  </div>
+</header>
+
+<div class="column header">
+  <h1 #headline class="pch-headline-medium">{{ title() }}</h1>
+  @if (subtitle()) {
+    <p class="subtitle pch-body-large">{{ subtitle() }}</p>
+  }
+</div>
+
+<div class="column content">
+  <ng-content />
+</div>
+
+<div class="fab"><ng-content select="[pageFab]" /></div>
+
+<div class="bottom-bar">
+  <div class="column"><ng-content select="[pageBottomBar]" /></div>
+</div>

@@ -1,0 +1,26 @@
+<button type="button" class="skip-link" (click)="main.focus()">Skip to content</button>
+<nav class="nav" aria-label="Main">
+  <span class="logo" role="img" aria-label="Peaches">🍑</span>
+  @for (d of destinations; track d.link; let i = $index) {
+    @let on = i === active();
+    <a
+      class="item"
+      [routerLink]="d.link"
+      [class.active]="on"
+      [attr.aria-current]="on ? 'page' : null"
+    >
+      <span class="indicator">
+        <span
+          class="material-symbols-rounded icon"
+          [class.pch-icon-filled]="on"
+          aria-hidden="true"
+          >{{ d.icon }}</span
+        >
+        <span class="label">{{ d.label }}</span>
+      </span>
+    </a>
+  }
+</nav>
+<main #main id="main" class="main" tabindex="-1">
+  <router-outlet />
+</main>

@@ -1,0 +1,160 @@
+@switch (phase()) {
+  @case ('loading') {
+    <pch-page title="Workout" showBack backLink="/">
+      <div class="loading"><pch-loading-indicator /></div>
+    </pch-page>
+  }
+  @case ('closed') {
+    <pch-page title="Matchup" showBack backLink="/">
+      <pch-empty-state
+        icon="hourglass_empty"
+        title="Not open yet"
+        message="The workout appears once the round opens."
+      />
+    </pch-page>
+  }
+  @case ('missing') {
+    <pch-page title="Workout" showBack backLink="/">
+      <pch-empty-state icon="error" title="Workout missing" />
+    </pch-page>
+  }
+  @default {
+    <pch-page
+      [title]="headline()"
+      [toolbarTitle]="workout()?.title ?? 'Workout'"
+      [subtitle]="subtitle()"
+      showBack
+      backLink="/"
+    >
+      <div pageActions class="score pch-label-large" role="status">
+        <span class="material-symbols-rounded pch-icon-filled" aria-hidden="true">star</span>
+        <pch-animated-number [value]="points()" [format]="formatPoints" />
+      </div>
+
+      <div [pchStagger]="0" aria-live="polite">
+        @if (final(); as f) {
+          <div class="final">
+            <div class="final-score">
+              <div class="pch-label-large muted-on">Final</div>
+              <div class="pch-display-small">{{ f.score }}</div>
+            </div>
+            <div class="pch-title-medium">{{ f.verdict }}</div>
+          </div>
+        } @else {
+          <pch-card variant="filled" class="banner">
+            <span
+              class="material-symbols-rounded"
+              [class.pch-icon-filled]="submitted()"
+              [class.done]="submitted()"
+              aria-hidden="true"
+              >{{ banner().icon }}</span
+            >
+            <span class="pch-body-medium">{{ banner().text }}</span>
+          </pch-card>
+        }
+      </div>
+
+      @for (block of blocks(); track $index; let b = $index) {
+        <section [attr.aria-label]="block.title">
+          <pch-section [title]="block.title">
+            @if (block.scored) {
+              <pch-status-label sectionTrailing color="primary">Scored</pch-status-label>
+            } @else {
+              <pch-status-label sectionTrailing>Not scored</pch-status-label>
+            }
+          </pch-section>
+          <pch-list-card [pchStagger]="b + 1">
+            @for (v of block.items; track v.item.id) {
+              <!-- The row is a larger mouse target; keyboard and screen readers use the
+                   labelled icon button inside it. -->
+              <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+              <div
+                class="item"
+                [class.clickable]="editable() && v.exercise"
+                (click)="rowClick($event, v)"
+              >
+                <div class="text">
+                  <span class="pch-title-medium">{{ v.name }}</span>
+                  <span class="pch-body-medium muted">{{ v.prescription }}</span>
+                  @if (v.loggedLoad) {
+                    <span class="pch-label-large load">{{ v.loggedLoad }}</span>
+                  }
+                  @if (v.exercise?.cues; as cues) {
+                    <span class="pch-body-small muted cues">{{ cues }}</span>
+                  }
+                  @if (v.scored) {
+                    <pch-wavy-progress class="progress" [value]="v.ratio" />
+                  }
+                </div>
+                @if (editable() && v.exercise) {
+                  @switch (v.state) {
+                    @case ('none') {
+                      <button
+                        matIconButton
+                        type="button"
+                        class="action tonal"
+                        matTooltip="Log sets"
+                        [attr.aria-label]="'Log sets: ' + v.name"
+                        (click)="logItem(v)"
+                      >
+                        <span class="material-symbols-rounded" aria-hidden="true">add</span>
+                      </button>
+                    }
+                    @case ('done') {
+                      <button
+                        matIconButton
+                        type="button"
+                        class="action filled"
+                        matTooltip="Edit sets"
+                        [attr.aria-label]="'Edit sets: ' + v.name"
+                        (click)="logItem(v)"
+                      >
+                        <span class="material-symbols-rounded" aria-hidden="true">check</span>
+                      </button>
+                    }
+                    @default {
+                      <button
+                        matIconButton
+                        type="button"
+                        class="action outlined"
+                        matTooltip="Edit sets"
+                        [attr.aria-label]="'Edit sets: ' + v.name"
+                        (click)="logItem(v)"
+                      >
+                        <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+                      </button>
+                    }
+                  }
+                } @else if (v.state === 'done') {
+                  <span class="action filled badge" role="img" aria-label="Logged">
+                    <span class="material-symbols-rounded" aria-hidden="true">check</span>
+                  </span>
+                } @else if (v.state === 'partial') {
+                  <span class="action outlined badge" role="img" aria-label="Partly logged">
+                    <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+                  </span>
+                } @else {
+                  <span class="action" aria-hidden="true"></span>
+                }
+              </div>
+            }
+          </pch-list-card>
+        </section>
+      }
+
+      @if (editable()) {
+        <button
+          pageBottomBar
+          matButton="filled"
+          type="button"
+          class="submit"
+          [disabled]="busy()"
+          (click)="submit()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">check</span>
+          Submit workout
+        </button>
+      }
+    </pch-page>
+  }
+}

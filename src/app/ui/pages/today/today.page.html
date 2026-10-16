@@ -1,0 +1,115 @@
+<pch-page
+  title="Today"
+  [subtitle]="subtitle()"
+  [maxWidth]="1080"
+  refreshable
+  [refreshing]="refreshing()"
+  (refresh)="refresh()"
+>
+  @if (matchups() === undefined) {
+    <div class="loading"><pch-loading-indicator /></div>
+  } @else {
+    <pch-two-pane [stackedGap]="16">
+      <div primaryPane>
+        <pch-section title="Up next" [top]="8" />
+        @for (m of open(); track m.id) {
+          <pch-matchup-hero-card class="hero" [pchStagger]="$index" [matchup]="m" />
+        } @empty {
+          <pch-card class="rest" variant="outlined" [pchStagger]="0">
+            <span class="peach" aria-hidden="true">🍑</span>
+            <div>
+              <h3 class="pch-title-large">Rest day</h3>
+              <p class="pch-body-medium muted">No workout due. Recovery is training too.</p>
+            </div>
+          </pch-card>
+        }
+        <ul class="stats" [pchStagger]="statsIndex()" aria-label="This week">
+          @for (s of stats(); track s.label) {
+            <li>
+              <pch-card variant="elevated" class="stat">
+                <span class="value pch-headline-small">{{ s.value }}</span>
+                <span class="label pch-label-medium">{{ s.label }}</span>
+              </pch-card>
+            </li>
+          }
+        </ul>
+      </div>
+
+      <div secondaryPane>
+        @if (upcoming().length > 0) {
+          <pch-section title="Coming up" [top]="8" />
+          <pch-list-card [pchStagger]="statsIndex() + 1">
+            @for (m of upcoming(); track m.id) {
+              <pch-matchup-row [matchup]="m" />
+            }
+          </pch-list-card>
+        }
+        <pch-section title="Recent workouts" [top]="upcoming().length > 0 ? 24 : 8" />
+        <div [pchStagger]="statsIndex() + 2">
+          @if (logs() === undefined) {
+            <div class="loading"><pch-loading-indicator [size]="36" /></div>
+          } @else if (recent().length === 0) {
+            <pch-card variant="outlined">Nothing logged yet.</pch-card>
+          } @else {
+            <pch-list-card>
+              @for (r of recent(); track r.log.id) {
+                @if (r.log.matchupId; as matchupId) {
+                  <a pch-list-row [routerLink]="['/matchups', matchupId]">
+                    <ng-container
+                      ngProjectAs="[rowLeading]"
+                      [ngTemplateOutlet]="logLeading"
+                      [ngTemplateOutletContext]="{ $implicit: r }"
+                    />
+                    {{ r.day }}
+                    <span rowSubtitle class="one-line">{{ r.names }}</span>
+                    <ng-container
+                      ngProjectAs="[rowTrailing]"
+                      [ngTemplateOutlet]="logTrailing"
+                      [ngTemplateOutletContext]="{ $implicit: r }"
+                    />
+                  </a>
+                } @else {
+                  <pch-list-row>
+                    <ng-container
+                      ngProjectAs="[rowLeading]"
+                      [ngTemplateOutlet]="logLeading"
+                      [ngTemplateOutletContext]="{ $implicit: r }"
+                    />
+                    {{ r.day }}
+                    <span rowSubtitle class="one-line">{{ r.names }}</span>
+                    <ng-container
+                      ngProjectAs="[rowTrailing]"
+                      [ngTemplateOutlet]="logTrailing"
+                      [ngTemplateOutletContext]="{ $implicit: r }"
+                    />
+                  </pch-list-row>
+                }
+              }
+            </pch-list-card>
+          }
+        </div>
+      </div>
+    </pch-two-pane>
+  }
+</pch-page>
+
+<ng-template #logLeading let-r>
+  <pch-shaped-avatar
+    [shape]="r.submitted ? 'softBurst' : 'circle'"
+    [color]="r.submitted ? 'primary-container' : 'surface-container-high'"
+    [foreground]="r.submitted ? 'on-primary-container' : 'on-surface-variant'"
+  >
+    <span class="material-symbols-rounded" aria-hidden="true">{{
+      r.submitted ? 'check' : 'edit'
+    }}</span>
+  </pch-shaped-avatar>
+</ng-template>
+
+<ng-template #logTrailing let-r>
+  <span class="log-meta pch-label-medium">
+    <span class="muted">{{ r.sets }} sets</span>
+    @if (r.volume) {
+      <span class="volume">{{ r.volume }}</span>
+    }
+  </span>
+</ng-template>
