@@ -2,26 +2,33 @@ import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 
-import { WeightUnits } from '../../../domain/core/units';
-import { Exercise } from '../../../domain/exercises/exercise';
+import { DistanceUnits, WeightUnits } from '../../../domain/core/units';
 import { ExerciseCatalog } from '../../../domain/exercises/exercise-catalog';
+import { LoggableExercise, loggableFromCatalog } from '../../../domain/exercises/loggable';
+import { RoutineItem } from '../../../domain/models/library';
 import { UnitSystem } from '../../../domain/models/training';
-import { prescription, WorkoutItem } from '../../../domain/models/workout';
 import { ExerciseLogEntry, exerciseLogEntry } from '../../../domain/models/workout-log';
 import { settle } from '../../../../testing/test-app';
 import { openSetLogger } from './set-logger-sheet';
 
-/** Recording sets, weights and RPE for one workout item. */
+/** Recording sets, weights and RPE for one exercise. */
 describe('SetLoggerSheet', () => {
   const catalog = ExerciseCatalog.standard();
-  const squat = catalog.require('bb-back-squat');
-  const pushUp = catalog.require('bw-push-up');
+  const loggable = (id: string) => loggableFromCatalog(catalog.require(id));
+  const squat = loggable('bb-back-squat');
+  const pushUp = loggable('bw-push-up');
+  const run = loggable('bw-run');
+  const row = loggable('row-steady');
+  const plank = loggable('bw-forearm-plank');
 
-  const itemFor = (e: Exercise, sets = 3): WorkoutItem => ({
-    id: 'w-1-i0',
-    exerciseId: e.id,
-    prescription: prescription({ sets, reps: 8, restSeconds: 90 }),
-    scoringWeight: 1,
+  const target = (init: Partial<RoutineItem>): RoutineItem => ({
+    exerciseId: 'x',
+    exerciseName: 'X',
+    sets: 3,
+    reps: null,
+    seconds: null,
+    meters: null,
+    ...init,
   });
 
   beforeEach(() => {
@@ -36,16 +43,17 @@ describe('SetLoggerSheet', () => {
 
   /** Opens the sheet and returns its dialog element and the pending result. */
   async function open(
-    exercise: Exercise,
+    exercise: LoggableExercise,
     options: {
       units?: UnitSystem;
       previous?: number[];
       existing?: ExerciseLogEntry;
+      target?: RoutineItem;
     } = {},
   ) {
     const result = openSetLogger(TestBed.inject(MatBottomSheet), {
       exercise,
-      item: itemFor(exercise),
+      target: options.target ?? target({ reps: 8 }),
       existing: options.existing,
       units: options.units,
       previousLoadsKg: options.previous,
@@ -63,7 +71,7 @@ describe('SetLoggerSheet', () => {
         .startsWith(prefix),
     );
   const weightFields = (root: HTMLElement) =>
-    Array.from(root.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]'));
+    Array.from(root.querySelectorAll<HTMLInputElement>('input.weight'));
   const units = (root: HTMLElement, label: string) =>
     Array.from(root.querySelectorAll('.unit')).filter((u) => u.textContent?.trim() === label);
 
@@ -175,7 +183,6 @@ describe('SetLoggerSheet', () => {
       previous: [100],
       existing: exerciseLogEntry({
         exerciseId: 'bb-back-squat',
-        workoutItemId: 'w-1-i0',
         sets: [set(6, 80), set(6, 80), set(5, 82.5)],
       }),
     });
@@ -184,14 +191,15 @@ describe('SetLoggerSheet', () => {
     expect(entry.sets.map((s) => s.reps)).toEqual([6, 6, 5]);
   });
 
-  it('steps values, fills the prescription back in and records RPE', async () => {
+  it('steps values, puts the target back and records RPE', async () => {
     const { dialog, result } = await open(pushUp);
+    expect(dialog.textContent).toContain('Target: 3 × 8 reps');
     await click(buttons(dialog, 'Fewer reps')[0]);
     await click(buttons(dialog, 'More reps')[2]);
     const valueFields = () =>
       Array.from(dialog.querySelectorAll<HTMLInputElement>('input[inputmode="numeric"]'));
     expect(valueFields().map((f) => f.value)).toEqual(['7', '8', '9']);
-    await click(buttons(dialog, 'As prescribed')[0]);
+    await click(buttons(dialog, 'Use target')[0]);
     expect(valueFields().map((f) => f.value)).toEqual(['8', '8', '8']);
     const rpe8 = Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find(
       (b) => b.textContent?.trim() === '8',
@@ -199,25 +207,69 @@ describe('SetLoggerSheet', () => {
     await click(rpe8);
     const entry = await save(dialog, result);
     expect(entry.rpe).toBe(8);
-    expect(entry.workoutItemId).toBe('w-1-i0');
+    expect(entry.exerciseName).toBe(pushUp.name);
+    expect(entry.distanceKind).toBeNull();
   });
 
-  it('labels per-side sets left and right', async () => {
-    const exercise = catalog.all.find((e) => e.laterality === 'unilateral')!;
-    const sheet = openSetLogger(TestBed.inject(MatBottomSheet), {
-      exercise,
-      item: {
-        id: 'i',
-        exerciseId: exercise.id,
-        prescription: prescription({ sets: 2, reps: 5, restSeconds: 30, perSide: true }),
-        scoringWeight: 1,
-      },
-    });
+  it('adds and removes sets', async () => {
+    const { dialog, result } = await open(pushUp, { target: target({ sets: 2, reps: 12 }) });
+    await click(buttons(dialog, 'Add set')[0]);
+    await click(buttons(dialog, 'Add set')[0]);
+    await click(buttons(dialog, 'Remove set')[0]);
+    const labels = Array.from(dialog.querySelectorAll('.set-label')).map((l) => l.textContent);
+    expect(labels).toEqual(['Set 1', 'Set 2', 'Set 3']);
+    const entry = await save(dialog, result);
+    expect(entry.sets.map((s) => s.reps)).toEqual([12, 12, 12]);
+  });
+
+  it('without a target starts from three sets of ten', async () => {
+    const result = openSetLogger(TestBed.inject(MatBottomSheet), { exercise: pushUp });
     await settle();
     TestBed.tick();
-    const labels = Array.from(document.querySelectorAll('.set-label')).map((l) => l.textContent);
-    expect(labels).toEqual(['Set 1 · Left', 'Set 1 · Right', 'Set 2 · Left', 'Set 2 · Right']);
-    TestBed.inject(MatBottomSheet).dismiss();
-    expect(await sheet).toBeUndefined();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(buttons(dialog, 'Use target')).toHaveLength(0);
+    const entry = await save(dialog, result);
+    expect(entry.sets.map((s) => s.reps)).toEqual([10, 10, 10]);
+  });
+
+  it('timed exercises record seconds', async () => {
+    const { dialog, result } = await open(plank, { target: target({ sets: 2, seconds: 45 }) });
+    await click(buttons(dialog, 'More sec')[0]);
+    const entry = await save(dialog, result);
+    expect(entry.sets.map((s) => s.seconds)).toEqual([50, 45]);
+    expect(entry.sets.every((s) => s.reps === null)).toBe(true);
+  });
+
+  it('cardio records distance and time, in km or miles', async () => {
+    const { dialog, result } = await open(run, { units: 'imperial', target: target({ sets: 1 }) });
+    expect(units(dialog, 'mi')).toHaveLength(1);
+    const [distance, minutes] = Array.from(
+      dialog.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]'),
+    );
+    distance.value = '3.1';
+    distance.dispatchEvent(new Event('input'));
+    minutes.value = '27.5';
+    minutes.dispatchEvent(new Event('input'));
+    TestBed.tick();
+    const entry = await save(dialog, result);
+    expect(entry.distanceKind).toBe('runWalk');
+    expect(entry.sets).toEqual([
+      { reps: null, loadKg: null, seconds: 1650, meters: DistanceUnits.toMeters(3.1, 'imperial') },
+    ]);
+  });
+
+  it('rowing counts metres, and empty sets are dropped', async () => {
+    const { dialog, result } = await open(row, { target: target({ sets: 2, meters: 500 }) });
+    expect(units(dialog, 'm')).toHaveLength(2);
+    const fields = Array.from(
+      dialog.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]'),
+    );
+    expect(fields.map((f) => f.value)).toEqual(['500', '', '500', '']);
+    fields[2].value = '';
+    fields[2].dispatchEvent(new Event('input'));
+    TestBed.tick();
+    const entry = await save(dialog, result);
+    expect(entry.sets).toEqual([{ reps: null, loadKg: null, seconds: null, meters: 500 }]);
+    expect(entry.distanceKind).toBe('swimRow');
   });
 });

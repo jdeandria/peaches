@@ -1,82 +1,69 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { MatButton, MatIconButton } from '@angular/material/button';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { MatTooltip } from '@angular/material/tooltip';
+import { NgTemplateOutlet } from '@angular/common';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { MatButton } from '@angular/material/button';
 
-import { AppContainer } from '../../../application/app-container';
+import { MatchupSide } from '../../../application/season-service';
 import { localDateOfLocal } from '../../../domain/core/local-date';
-import { Exercise, takesLoad } from '../../../domain/exercises/exercise';
-import { scoreTotal } from '../../../domain/models/score';
-import { involves, isBye, opponentOf, winnerId } from '../../../domain/models/season';
-import {
-  isScored,
-  prescriptionUnit,
-  totalTarget,
-  WorkoutItem,
-} from '../../../domain/models/workout';
-import {
-  entryForItem,
-  ExerciseLogEntry,
-  isSubmitted,
-  totalMeters,
-  totalReps,
-  totalSeconds,
-  WorkoutLog,
-} from '../../../domain/models/workout-log';
-import { LoadHistory } from '../../../domain/services/load-history';
+import { CATEGORY_INFO, SCORING_CATEGORIES } from '../../../domain/models/scoring';
+import { involves, isBye, winnerId } from '../../../domain/models/season';
+import { totalSets } from '../../../domain/models/workout-log';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
-import { WavyProgress } from '../../expressive/wavy-progress';
 import { Fmt } from '../../format';
 import { AnimatedNumber } from '../../layout/animated-number';
 import { Card } from '../../layout/card';
 import { EmptyState } from '../../layout/empty-state';
 import { ListCard } from '../../layout/list-card';
+import { ListRow } from '../../layout/list-row';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
-import { StatusLabel } from '../../layout/status-label';
-import { openSetLogger } from './set-logger-sheet';
 
-interface ItemView {
-  readonly item: WorkoutItem;
-  readonly exercise: Exercise | undefined;
-  readonly name: string;
-  readonly prescription: string;
-  readonly loggedLoad: string | null;
-  readonly scored: boolean;
-  readonly ratio: number;
-  /** none: nothing logged; done: target met; partial: logged below target. */
-  readonly state: 'none' | 'done' | 'partial';
+/** One category row of the comparison table. */
+interface CategoryRow {
+  readonly label: string;
+  readonly icon: string;
+  readonly weight: number;
+  readonly per: string;
+  readonly mine: string;
+  readonly minePoints: string;
+  readonly theirs: string;
+  readonly theirPoints: string;
+  readonly leader: 'me' | 'them' | null;
 }
 
-interface BlockView {
-  readonly title: string;
-  readonly scored: boolean;
-  readonly items: readonly ItemView[];
+interface LogRow {
+  readonly id: string;
+  readonly day: string;
+  readonly names: string;
+  readonly sets: number;
+  readonly points: string;
+  /** Only my own logs open (crate-mates' are read from the Crate's copies). */
+  readonly link: readonly string[] | null;
 }
 
 /**
- * The generated workout for a matchup, with per-exercise logging and a live
- * score (port of `MatchupScreen`). The same workout is shown to both Peaches.
+ * A week's head-to-head: each side brings their own workouts, and
+ * everything they log that week scores with the Season's weights. Shows the
+ * score (live, then final), where each side earned it, and the workouts.
  */
 @Component({
   selector: 'pch-matchup-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    MatButton,
-    MatIconButton,
-    MatTooltip,
-    Page,
-    Section,
-    Card,
-    ListCard,
-    EmptyState,
-    StatusLabel,
-    Stagger,
     AnimatedNumber,
-    WavyProgress,
+    Card,
+    EmptyState,
+    ListCard,
+    ListRow,
     LoadingIndicator,
+    MatButton,
+    NgTemplateOutlet,
+    Page,
+    RouterLink,
+    Section,
+    Stagger,
   ],
   templateUrl: './matchup.page.html',
   styleUrl: './matchup.page.scss',
@@ -85,217 +72,171 @@ export class MatchupPage {
   readonly matchupId = input.required<string>();
 
   private readonly state = inject(AppState);
-  private readonly sheet = inject(MatBottomSheet);
+  protected readonly fmt = Fmt;
 
-  private readonly matchupQuery = this.state.query(
+  private readonly boardQuery = this.state.query(
     () => this.matchupId(),
-    (id, app) => app.seasons.getMatchup(id),
+    (id, app) => app.seasonService.board(id),
   );
-  protected readonly matchup = computed(() => this.matchupQuery.value() ?? null);
-  private readonly workoutQuery = this.state.query(
-    () => this.matchup()?.workoutId ?? undefined,
-    (id, app) => app.workouts.getById(id),
-  );
-  protected readonly workout = computed(() => this.workoutQuery.value() ?? null);
-  /** loading → spinner; closed → "Not open yet"; missing → workout gone; ready. */
+  protected readonly board = computed(() => this.boardQuery.value() ?? null);
+  /** loading → spinner; missing → not found; ready. */
   protected readonly phase = computed(() => {
-    const m = this.matchupQuery.value();
-    if (m === undefined) return this.matchupQuery.error() ? 'closed' : 'loading';
-    if (m === null || m.workoutId === null) return 'closed';
-    const w = this.workoutQuery.value();
-    if (w === undefined) return this.workoutQuery.error() ? 'missing' : 'loading';
-    return w === null ? 'missing' : 'ready';
+    const b = this.boardQuery.value();
+    if (b === undefined) return this.boardQuery.error() ? 'missing' : 'loading';
+    return b === null ? 'missing' : 'ready';
   });
 
   private readonly me = this.state.peachId;
-  private readonly opponentId = computed(() => {
-    const m = this.matchup();
+  /** The side to show as "mine": mine if I play in it, else home. */
+  private readonly sides = computed(() => {
+    const b = this.board();
+    if (!b) return null;
     const me = this.me();
-    return m && me ? opponentOf(m, me) : null;
-  });
-  private readonly opponentName = this.state.query(
-    () => this.opponentId() ?? undefined,
-    async (id, app) => (await app.peaches.getById(id))?.displayName ?? null,
-  ).value;
-  private readonly window = this.state.query(
-    () => this.matchup()?.roundId,
-    (roundId, app) => app.seasonService.windowFor(roundId),
-  ).value;
-
-  // My log: found among my logs (or created on first save), then streamed.
-  private readonly createdLogId = signal<string | null>(null);
-  private readonly listedLog = computed(
-    () => this.state.myLogs.value()?.find((l) => l.matchupId === this.matchupId()) ?? null,
-  );
-  private readonly logId = computed(() => this.createdLogId() ?? this.listedLog()?.id ?? null);
-  private readonly liveLog = this.state.watch(
-    () => this.logId() ?? undefined,
-    (id, app) => app.logs.watch(id),
-  );
-  protected readonly log = computed<WorkoutLog | null>(() => {
-    if (this.logId() === null) return null;
-    return this.liveLog.value() ?? this.listedLog();
+    const mineIsAway = me !== null && b.away?.peachId === me;
+    return {
+      mine: mineIsAway ? b.away! : b.home,
+      theirs: mineIsAway ? b.home : b.away,
+      playing: me !== null && involves(b.matchup, me),
+    };
   });
 
-  protected readonly submitted = computed(() => {
-    const log = this.log();
-    return log !== null && isSubmitted(log);
-  });
-  protected readonly editable = computed(() => {
-    const m = this.matchup();
-    const me = this.me();
-    return !!m && !!me && involves(m, me) && !this.submitted() && m.status !== 'complete';
-  });
-  protected readonly busy = signal(false);
+  private readonly names = this.state.query(
+    () => {
+      const b = this.board();
+      return b ? [b.home.peachId, ...(b.away ? [b.away.peachId] : [])] : undefined;
+    },
+    async (ids, app) =>
+      new Map((await app.peaches.getByIds(ids)).map((p) => [p.id, p.displayName])),
+  ).value;
+
+  protected nameOf(side: MatchupSide | null): string {
+    if (!side) return '';
+    if (side.peachId === this.me()) return 'You';
+    return this.names()?.get(side.peachId) ?? '…';
+  }
 
   protected readonly headline = computed(() => {
-    const m = this.matchup();
-    if (m && isBye(m)) return 'Bye round';
-    return `You vs ${this.opponentName() ?? '…'}`;
+    const b = this.board();
+    const s = this.sides();
+    if (!b || !s) return 'Matchup';
+    if (isBye(b.matchup)) return s.playing ? 'Your bye week' : `${this.nameOf(s.mine)}’s bye week`;
+    return `${this.nameOf(s.mine)} vs ${this.nameOf(s.theirs)}`;
   });
+
   protected readonly subtitle = computed(() => {
-    const w = this.workout();
-    if (!w) return '';
-    return [w.title, Fmt.focus(w.focus), `~${w.estimatedMinutes} min`]
-      .filter((s) => s !== null)
-      .join(' · ');
+    const b = this.board();
+    if (!b) return '';
+    return `${b.crate.name} · Week ${b.round.index + 1} · ${Fmt.week(b.round.weekStart)}`;
   });
 
-  protected readonly points = computed(() => {
-    const w = this.workout();
-    const log = this.log();
-    return w && log ? scoreTotal(this.state.app.scoring.score(w, log)) : 0;
-  });
-  protected readonly formatPoints = (v: number) => `${Fmt.points(v)} pts`;
+  protected readonly formatPoints = (v: number) => Fmt.points(v);
 
-  /** The final score once the round has closed, from my point of view. */
-  protected readonly final = computed(() => {
-    const m = this.matchup();
-    const me = this.me();
-    if (!m || m.result === null || me === null) return null;
-    const home = m.homePeachId === me;
-    const mine = home ? m.result.homePoints : m.result.awayPoints;
-    const theirs = home ? m.result.awayPoints : m.result.homePoints;
-    const winner = winnerId(m);
-    return {
-      score: isBye(m) ? Fmt.points(mine) : `${Fmt.points(mine)} – ${Fmt.points(theirs)}`,
-      verdict: isBye(m)
-        ? 'Bye round'
-        : winner === null
-          ? 'Tie'
-          : winner === me
-            ? 'You won'
-            : `${this.opponentName() ?? 'They'} won`,
-    };
+  /** Live until the round closes, then the stored result. */
+  protected readonly score = computed(() => {
+    const b = this.board();
+    const s = this.sides();
+    if (!b || !s) return null;
+    const result = b.matchup.result;
+    const homeIsMine = s.mine.peachId === b.matchup.homePeachId;
+    const mine = result ? (homeIsMine ? result.homePoints : result.awayPoints) : s.mine.score.total;
+    const theirs = result
+      ? homeIsMine
+        ? result.awayPoints
+        : result.homePoints
+      : (s.theirs?.score.total ?? 0);
+    return { mine, theirs, final: result !== null };
   });
 
-  /** Deadline while open, or confirmation once submitted. */
+  protected readonly verdict = computed(() => {
+    const b = this.board();
+    const s = this.sides();
+    const score = this.score();
+    if (!b || !s || !score) return '';
+    if (isBye(b.matchup))
+      return score.final ? 'Bye week: points count, no win or loss' : 'Bye week';
+    if (score.final) {
+      const winner = winnerId(b.matchup);
+      if (winner === null) return 'Tie';
+      return winner === s.mine.peachId
+        ? `${this.nameOf(s.mine)} won`
+        : `${this.nameOf(s.theirs)} won`;
+    }
+    if (score.mine === score.theirs) return 'All square';
+    const leader = this.nameOf(score.mine > score.theirs ? s.mine : s.theirs);
+    return leader === 'You' ? 'You lead' : `${leader} leads`;
+  });
+
+  /** Time left while the week is on, the grace period after, or nothing once final. */
   protected readonly banner = computed(() => {
-    if (this.submitted()) {
-      return { icon: 'check_circle', text: 'Submitted. Results arrive when the round closes.' };
+    const b = this.board();
+    if (!b || b.matchup.result !== null) return null;
+    const now = this.state.nowTick();
+    if (now < b.window.opensAt) return `Starts ${Fmt.day(b.round.weekStart)}`;
+    if (b.window.covers(now)) {
+      const left = Fmt.closesIn(b.window.endsAt.getTime() - now.getTime()).replace(
+        'closes',
+        'ends',
+      );
+      return `Everything you both log this week counts · week ${left}`;
     }
-    const window = this.window();
-    if (!window) return { icon: 'schedule', text: 'Log each exercise as you go.' };
-    const closes = window.closesAt;
-    return {
-      icon: 'schedule',
-      text:
-        `Logging ${Fmt.closesIn(window.remainingMsAt(this.state.nowTick()))} · ` +
-        `${Fmt.day(localDateOfLocal(closes))} ${Fmt.time(closes)}`,
-    };
+    return `Week over: submit any last workouts · ${Fmt.closesIn(b.window.remainingMsAt(now))}`;
   });
 
-  protected readonly blocks = computed<BlockView[]>(() => {
-    const w = this.workout();
-    if (!w) return [];
-    const log = this.log();
+  /** Whether "Log a workout" makes sense here: my matchup, in its week. */
+  protected readonly canLog = computed(() => {
+    const b = this.board();
+    const s = this.sides();
+    return (
+      !!b && !!s?.playing && b.matchup.result === null && b.window.covers(this.state.nowTick())
+    );
+  });
+
+  protected readonly categories = computed<CategoryRow[]>(() => {
+    const b = this.board();
+    const s = this.sides();
+    if (!b || !s) return [];
     const units = this.state.units();
-    return w.blocks.map((block) => ({
-      title: Fmt.block(block.type),
-      scored: block.items.some(isScored),
-      items: block.items.map((item) => {
-        const exercise = this.state.catalog.byId(item.exerciseId);
-        const entry = log ? entryForItem(log, item.id) : undefined;
-        const target = totalTarget(item.prescription);
-        const ratio =
-          target === 0 || !entry ? 0 : Math.min(1, Math.max(0, achieved(item, entry) / target));
-        return {
-          item,
-          exercise,
-          name: exercise?.name ?? item.exerciseId,
-          prescription: Fmt.prescription(item.prescription),
-          loggedLoad: entry ? Fmt.loggedLoad(entry, units) : null,
-          scored: isScored(item),
-          ratio,
-          state: !entry ? 'none' : ratio >= 1 ? 'done' : 'partial',
-        } satisfies ItemView;
-      }),
-    }));
+    const amountOf = (side: MatchupSide | null, c: string) =>
+      side?.score.categories.find((x) => x.category === c);
+    return SCORING_CATEGORIES.filter((c) => b.season.weights[c] > 0).map((c) => {
+      const mine = amountOf(s.mine, c);
+      const theirs = amountOf(s.theirs, c);
+      const mp = mine?.points ?? 0;
+      const tp = theirs?.points ?? 0;
+      return {
+        label: Fmt.category(c),
+        icon: Fmt.categoryIcon(c),
+        weight: b.season.weights[c],
+        per: Fmt.per(c, CATEGORY_INFO[c].par, units),
+        mine: Fmt.amount(c, mine?.amount ?? 0, units),
+        minePoints: Fmt.points(mp),
+        theirs: Fmt.amount(c, theirs?.amount ?? 0, units),
+        theirPoints: Fmt.points(tp),
+        leader: s.theirs === null || mp === tp ? null : mp > tp ? 'me' : 'them',
+      };
+    });
   });
 
-  /** Opens the set logger for an item and records what comes back. */
-  protected async logItem(view: ItemView): Promise<void> {
-    const exercise = view.exercise;
-    if (!this.editable() || !exercise) return;
-    const current = this.log();
-    const entry = await openSetLogger(this.sheet, {
-      exercise,
-      item: view.item,
-      existing: current ? entryForItem(current, view.item.id) : null,
-      units: this.state.units(),
-      previousLoadsKg: takesLoad(exercise)
-        ? LoadHistory.lastLoadsKg(this.state.myLogs.value() ?? [], exercise.id, current?.id)
-        : null,
-    });
-    if (!entry) return;
-    await this.record(entry);
+  protected readonly hasOpponent = computed(() => this.sides()?.theirs != null);
+
+  private logRows(side: MatchupSide | null): LogRow[] {
+    const b = this.board();
+    if (!side || !b) return [];
+    const mine = side.peachId === this.me();
+    return [...side.logs]
+      .sort((x, y) => x.startedAt.getTime() - y.startedAt.getTime())
+      .map((log) => ({
+        id: log.id,
+        day: Fmt.day(localDateOfLocal(log.startedAt)),
+        names: log.entries.map((e) => e.exerciseName).join(', '),
+        sets: totalSets(log),
+        points: Fmt.points(this.state.app.scoring.scoreLog(log, b.season.weights).total),
+        link: mine ? ['/log', log.id] : null,
+      }));
   }
 
-  private async record(entry: ExerciseLogEntry): Promise<void> {
-    await this.state.run(async (app) => {
-      const log = await this.ensureLog(app);
-      await app.loggingService.recordEntry(log.id, entry);
-    });
-  }
-
-  protected async submit(): Promise<void> {
-    if (this.busy()) return;
-    this.busy.set(true);
-    try {
-      await this.state.run(async (app) => {
-        const log = await this.ensureLog(app);
-        await app.loggingService.submit(log.id, this.state.now());
-      }, 'Workout submitted. Nice work.');
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  private async ensureLog(app: AppContainer): Promise<WorkoutLog> {
-    const m = this.matchup();
-    const me = this.me();
-    if (!m || !me) throw new Error('No matchup');
-    const log = await app.loggingService.logForMatchup(m, me, this.state.now());
-    if (this.createdLogId() !== log.id) this.createdLogId.set(log.id);
-    return log;
-  }
-
-  /** Row clicks open the logger too (pointer convenience; the button is the control). */
-  protected rowClick(event: MouseEvent, view: ItemView): void {
-    if ((event.target as Element).closest('button')) return;
-    if (getSelection()?.toString()) return;
-    void this.logItem(view);
-  }
-}
-
-/** Achieved volume in the prescription's own unit. */
-function achieved(item: WorkoutItem, entry: ExerciseLogEntry): number {
-  switch (prescriptionUnit(item.prescription)) {
-    case 'duration':
-      return totalSeconds(entry);
-    case 'distance':
-      return totalMeters(entry);
-    default:
-      return totalReps(entry);
-  }
+  protected readonly myLogs = computed(() => this.logRows(this.sides()?.mine ?? null));
+  protected readonly theirLogs = computed(() => this.logRows(this.sides()?.theirs ?? null));
+  protected readonly myName = computed(() => this.nameOf(this.sides()?.mine ?? null));
+  protected readonly theirName = computed(() => this.nameOf(this.sides()?.theirs ?? null));
 }

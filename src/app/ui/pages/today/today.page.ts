@@ -1,10 +1,16 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { MatButton } from '@angular/material/button';
 
-import { localDateOfLocal } from '../../../domain/core/local-date';
+import { localDateOfLocal, startOfWeek } from '../../../domain/core/local-date';
 import { isBye, Matchup, Round, winnerId } from '../../../domain/models/season';
-import { isSubmitted, volumeLoadKg, WorkoutLog } from '../../../domain/models/workout-log';
+import {
+  isSubmitted,
+  totalSets,
+  volumeLoadKg,
+  WorkoutLog,
+} from '../../../domain/models/workout-log';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { ShapedAvatar } from '../../expressive/shaped-avatar';
@@ -18,8 +24,6 @@ import { Stagger } from '../../layout/stagger';
 import { TwoPane } from '../../layout/two-pane';
 import { MatchupHeroCard, MatchupListRow } from './matchup-card';
 
-const MS_PER_DAY = 86_400_000;
-
 interface LogRowView {
   readonly log: WorkoutLog;
   readonly submitted: boolean;
@@ -30,8 +34,8 @@ interface LogRowView {
 }
 
 /**
- * What the Peach should do today: the due workout first, then the week at a
- * glance, what's coming, and recent history (port of `TodayScreen`).
+ * The Peach's home: log a workout first, then this week's matchups and
+ * where they stand, the week at a glance, what's coming, and recent history.
  */
 @Component({
   selector: 'pch-today-page',
@@ -39,6 +43,7 @@ interface LogRowView {
   imports: [
     NgTemplateOutlet,
     RouterLink,
+    MatButton,
     Page,
     Section,
     TwoPane,
@@ -80,7 +85,7 @@ export class TodayPage {
   );
   protected readonly upcoming = computed(() => {
     const rounds = this.rounds.value();
-    const date = (m: Matchup) => rounds?.get(m.roundId)?.date ?? '';
+    const date = (m: Matchup) => rounds?.get(m.roundId)?.weekStart ?? '';
     return [...this.scheduled()]
       .sort((a, b) => (date(a) < date(b) ? -1 : date(a) > date(b) ? 1 : 0))
       .slice(0, 4);
@@ -88,14 +93,36 @@ export class TodayPage {
 
   protected readonly logs = this.state.myLogs.value;
 
-  /** Workouts and sets submitted in the last seven days, and the season record. */
+  /** The workout the Peach has going, if any. */
+  protected readonly draft = computed(
+    () => (this.logs() ?? []).find((l) => !isSubmitted(l)) ?? null,
+  );
+  protected readonly logCta = computed(() => {
+    const draft = this.draft();
+    if (draft && draft.entries.length > 0) {
+      return {
+        title: 'Workout in progress',
+        text: `${Fmt.count(draft.entries.length, 'exercise')} logged so far.`,
+        action: 'Continue',
+        icon: 'play_arrow',
+      };
+    }
+    return {
+      title: 'Log a workout',
+      text: 'A run, a lift, a class: everything you log scores in your Crates.',
+      action: 'Log a workout',
+      icon: 'add',
+    };
+  });
+
+  /** Workouts and sets submitted since Monday, and the season record. */
   protected readonly stats = computed(() => {
-    const now = this.state.nowTick().getTime();
+    const monday = startOfWeek(this.state.today());
     const me = this.state.peachId();
     const week = (this.logs() ?? []).filter(
-      (l) => isSubmitted(l) && now - (l.completedAt ?? l.startedAt).getTime() < 7 * MS_PER_DAY,
+      (l) => isSubmitted(l) && localDateOfLocal(l.startedAt) >= monday,
     );
-    const sets = week.reduce((n, l) => n + l.entries.reduce((m, e) => m + e.sets.length, 0), 0);
+    const sets = week.reduce((n, l) => n + totalSets(l), 0);
     let w = 0;
     let l = 0;
     let t = 0;
@@ -118,7 +145,7 @@ export class TodayPage {
     return (this.logs() ?? []).slice(0, 6).map((log) => {
       const names = log.entries
         .slice(0, 3)
-        .map((e) => this.state.catalog.byId(e.exerciseId)?.name ?? e.exerciseId)
+        .map((e) => e.exerciseName)
         .join(', ');
       const volumeKg = log.entries.reduce((v, e) => v + volumeLoadKg(e), 0);
       return {
@@ -126,14 +153,14 @@ export class TodayPage {
         submitted: isSubmitted(log),
         day: Fmt.day(localDateOfLocal(log.startedAt)),
         names: names || 'Empty log',
-        sets: log.entries.reduce((n, e) => n + e.sets.length, 0),
+        sets: totalSets(log),
         volume: volumeKg > 0 ? Fmt.volume(volumeKg, units) : null,
       };
     });
   });
 
-  /** Stagger indices follow the visual order. */
-  protected readonly statsIndex = computed(() => Math.max(1, this.open().length));
+  /** Stagger indices follow the visual order: the log card, then matchups, then stats. */
+  protected readonly statsIndex = computed(() => 1 + this.open().length);
 
   protected async refresh(): Promise<void> {
     this.refreshing.set(true);

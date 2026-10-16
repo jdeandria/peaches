@@ -11,7 +11,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 /**
  * A collapsible card for one movement pattern, with a ring showing how much
- * of the pattern is enabled. Rows exist only while expanded.
+ * of the pattern is in the chosen library. Rows exist only while expanded.
  */
 @Component({
   selector: 'pch-exercise-group-card',
@@ -36,13 +36,13 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
               [attr.r]="radius"
               [attr.stroke-dasharray]="circumference"
               [attr.stroke-dashoffset]="dashOffset()"
-              [class.empty]="g.enabled === 0"
+              [class.empty]="g.picked === 0"
             />
           </svg>
           <span class="text">
             <span class="pch-title-medium">{{ title() }}</span>
             <span class="pch-body-small muted">
-              {{ g.enabled }} of {{ g.exercises.length }} enabled
+              {{ g.picked }} of {{ g.exercises.length }} in library
             </span>
           </span>
           <span class="chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
@@ -54,9 +54,10 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
             <mat-slide-toggle
               class="row"
               labelPosition="before"
-              [checked]="able().has(e.id)"
+              [checked]="picked().has(e.id)"
+              [disabled]="disabled()"
               [aria-describedby]="'ex-sub-' + e.id"
-              (change)="setAble.emit({ exerciseId: e.id, able: $event.checked })"
+              (change)="setPicked.emit({ exerciseId: e.id, picked: $event.checked })"
             >
               <span class="name pch-body-large">{{ e.name }}</span>
               <span class="pch-body-medium muted" aria-hidden="true" [id]="'ex-sub-' + e.id">{{
@@ -177,10 +178,12 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 export class ExerciseGroupCard {
   readonly group = input.required<ExerciseGroup>();
   readonly expanded = input.required<boolean>();
-  /** Ids of the exercises the Peach can do. */
-  readonly able = input.required<ReadonlySet<string>>();
+  /** Ids of the exercises in the chosen library. */
+  readonly picked = input.required<ReadonlySet<string>>();
+  /** True when there is no library to add to. */
+  readonly disabled = input(false);
   readonly toggleExpanded = output<void>();
-  readonly setAble = output<{ exerciseId: string; able: boolean }>();
+  readonly setPicked = output<{ exerciseId: string; picked: boolean }>();
 
   protected readonly radius = RADIUS;
   protected readonly circumference = CIRCUMFERENCE;
@@ -189,8 +192,8 @@ export class ExerciseGroupCard {
   protected readonly title = computed(() => Fmt.pattern(this.group().pattern));
   protected readonly listId = computed(() => `exercise-group-${this.group().pattern}`);
   protected readonly dashOffset = computed(() => {
-    const { enabled, exercises } = this.group();
-    const fraction = exercises.length === 0 ? 0 : enabled / exercises.length;
+    const { picked, exercises } = this.group();
+    const fraction = exercises.length === 0 ? 0 : picked / exercises.length;
     return CIRCUMFERENCE * (1 - fraction);
   });
 }

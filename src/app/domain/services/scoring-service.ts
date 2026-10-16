@@ -1,78 +1,64 @@
+import {
+  addTotals,
+  CATEGORY_INFO,
+  CategoryScore,
+  CategoryTotals,
+  CategoryWeights,
+  LogScore,
+  SCORING_CATEGORIES,
+  ZERO_TOTALS,
+} from '../models/scoring';
 import { isBye, Matchup } from '../models/season';
-import { ItemScore, scoreTotal, WorkoutScore, ZERO_SCORE } from '../models/score';
-import { ScoringRules, STANDARD_SCORING_RULES } from '../models/scoring-rules';
-import {
-  prescriptionUnit,
-  scoredItems,
-  totalTarget,
-  Workout,
-  WorkoutItem,
-} from '../models/workout';
-import {
-  entryForItem,
-  ExerciseLogEntry,
-  totalMeters,
-  totalReps,
-  totalSeconds,
-  WorkoutLog,
-} from '../models/workout-log';
+import { WorkoutLog } from '../models/workout-log';
+import { MetricExtractor } from './metric-extractor';
 
-/** Turns a log of a workout into fantasy points. */
+/**
+ * Turns logs into fantasy points: each category earns its weight per par
+ * (`weight × amount / par`), so with 25 points on running a 5 km run earns
+ * 25 and a 10 km run 50. Points are linear in the amounts, so a week of
+ * logs scores the same summed per log or all at once.
+ */
 export class ScoringService {
-  score(workout: Workout, log: WorkoutLog | null, rules = STANDARD_SCORING_RULES): WorkoutScore {
-    const scored = scoredItems(workout);
-    if (scored.length === 0) return ZERO_SCORE;
-
-    const items: ItemScore[] = [];
-    let allComplete = true;
-    for (const item of scored) {
-      const entry = log ? entryForItem(log, item.id) : undefined;
-      const ratio = achievement(item, entry, rules);
-      if (ratio < rules.completionThreshold) allComplete = false;
-      items.push({
-        workoutItemId: item.id,
-        achievementRatio: ratio,
-        points: round2(rules.pointsPerItem * item.scoringWeight * ratio),
-      });
+  scoreTotals(totals: CategoryTotals, weights: CategoryWeights): LogScore {
+    const categories: CategoryScore[] = [];
+    let total = 0;
+    for (const category of SCORING_CATEGORIES) {
+      const amount = totals[category];
+      if (amount <= 0) continue;
+      const points = round2((weights[category] * amount) / CATEGORY_INFO[category].par);
+      categories.push({ category, amount, points });
+      total += points;
     }
-    return { items, completionBonus: allComplete ? rules.completionBonus : 0 };
+    return { categories, total: round2(total) };
   }
 
-  /** Resolves a Matchup from both Peaches' logs. A missing log scores zero. */
+  scoreLog(log: WorkoutLog, weights: CategoryWeights): LogScore {
+    return this.scoreTotals(MetricExtractor.extract(log), weights);
+  }
+
+  /** One score for several logs (a Peach's week in a matchup). */
+  scoreLogs(logs: Iterable<WorkoutLog>, weights: CategoryWeights): LogScore {
+    let totals = ZERO_TOTALS;
+    for (const log of logs) totals = addTotals(totals, MetricExtractor.extract(log));
+    return this.scoreTotals(totals, weights);
+  }
+
+  /**
+   * Resolves a Matchup from each side's submitted logs for its week. A
+   * Peach who logged nothing scores zero; a bye records the home side's
+   * points only.
+   */
   resolve(args: {
     matchup: Matchup;
-    workout: Workout;
-    homeLog: WorkoutLog | null;
-    awayLog: WorkoutLog | null;
-    rules?: ScoringRules;
+    homeLogs: Iterable<WorkoutLog>;
+    awayLogs: Iterable<WorkoutLog>;
+    weights: CategoryWeights;
   }): Matchup {
-    const { matchup, workout, homeLog, awayLog, rules = STANDARD_SCORING_RULES } = args;
-    const home = scoreTotal(this.score(workout, homeLog, rules));
-    const away = isBye(matchup) ? 0 : scoreTotal(this.score(workout, awayLog, rules));
+    const { matchup, homeLogs, awayLogs, weights } = args;
+    const home = this.scoreLogs(homeLogs, weights).total;
+    const away = isBye(matchup) ? 0 : this.scoreLogs(awayLogs, weights).total;
     return { ...matchup, status: 'complete', result: { homePoints: home, awayPoints: away } };
   }
-}
-
-function achievement(
-  item: WorkoutItem,
-  entry: ExerciseLogEntry | undefined,
-  rules: ScoringRules,
-): number {
-  if (!entry) return 0;
-  const target = totalTarget(item.prescription);
-  if (target <= 0) return 0;
-  let achieved: number;
-  switch (prescriptionUnit(item.prescription)) {
-    case 'duration':
-      achieved = totalSeconds(entry);
-      break;
-    case 'distance':
-      achieved = totalMeters(entry);
-      break;
-    default:
-      achieved = totalReps(entry);
-  }
-  return Math.min(achieved / target, rules.maxAchievementRatio);
 }
 
 function round2(value: number): number {

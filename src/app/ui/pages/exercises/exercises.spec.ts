@@ -11,10 +11,8 @@ import {
   toggleGroup,
 } from './exercise-groups';
 import { ExercisesPage } from './exercises.page';
-import { QuickSetupDialog } from './quick-setup-dialog';
-import { MatDialogRef } from '@angular/material/dialog';
 
-const NO_FILTER = { query: '', pattern: null, onlyMine: false } as const;
+const NO_FILTER = { query: '', pattern: null, onlyPicked: false } as const;
 
 describe('exercise groups', () => {
   const catalog = ExerciseCatalog.standard();
@@ -30,20 +28,20 @@ describe('exercise groups', () => {
     }
   });
 
-  it('filters by query, pattern and "I can do" and counts enabled exercises', () => {
+  it('filters by query, pattern and "In library" and counts library exercises', () => {
     const pistol = groupExercises(catalog, { ...NO_FILTER, query: 'pistol' }, new Set());
     expect(pistol.flatMap((g) => g.exercises.map((e) => e.name))).toContain('Pistol Squat');
 
     const hinge = groupExercises(catalog, { ...NO_FILTER, pattern: 'hinge' }, new Set());
     expect(hinge.map((g) => g.pattern)).toEqual(['hinge']);
 
-    const able = new Set(['bw-pistol-squat']);
-    const mine = groupExercises(catalog, { ...NO_FILTER, onlyMine: true }, able);
+    const picked = new Set(['bw-pistol-squat']);
+    const mine = groupExercises(catalog, { ...NO_FILTER, onlyPicked: true }, picked);
     expect(mine).toHaveLength(1);
     expect(mine[0].exercises.map((e) => e.id)).toEqual(['bw-pistol-squat']);
-    expect(mine[0].enabled).toBe(1);
+    expect(mine[0].picked).toBe(1);
 
-    expect(groupExercises(catalog, { ...NO_FILTER, query: 'zzzz' }, able)).toEqual([]);
+    expect(groupExercises(catalog, { ...NO_FILTER, query: 'zzzz' }, picked)).toEqual([]);
   });
 
   it('expands by default only while filtering; toggles invert the default', () => {
@@ -51,7 +49,7 @@ describe('exercise groups', () => {
     expect(isFiltering({ ...NO_FILTER, query: '  ' })).toBe(false);
     expect(isFiltering({ ...NO_FILTER, query: 'row' })).toBe(true);
     expect(isFiltering({ ...NO_FILTER, pattern: 'carry' })).toBe(true);
-    expect(isFiltering({ ...NO_FILTER, onlyMine: true })).toBe(true);
+    expect(isFiltering({ ...NO_FILTER, onlyPicked: true })).toBe(true);
 
     let toggled = toggleGroup(new Set(), 'squat');
     expect(isExpanded(false, toggled, 'squat')).toBe(true);
@@ -80,26 +78,34 @@ describe('ExercisesPage', () => {
 
   async function render() {
     const f = TestBed.createComponent(ExercisesPage);
-    await settle();
-    await f.whenStable();
+    for (let i = 0; i < 3; i++) {
+      await settle();
+      await f.whenStable();
+    }
     return { f, el: f.nativeElement as HTMLElement };
   }
 
-  it('shows the search, the subtitle and collapsed groups', async () => {
+  async function lunchBreakLifters(): Promise<string> {
+    for (const m of await backend.container.crates.membershipsFor(DEMO_PEACH_ID)) {
+      const crate = await backend.container.crates.getById(m.crateId);
+      if (crate?.name === 'Lunch Break Lifters') return crate.id;
+    }
+    throw new Error('missing');
+  }
+
+  it('shows the search, the chosen library and collapsed groups', async () => {
     const { el } = await render();
     const search = el.querySelector<HTMLInputElement>('input[type=search]')!;
     expect(search.placeholder).toBe('Search 440 exercises');
-    const able = (await backend.container.capabilities.forPeach(DEMO_PEACH_ID)).filter(
-      (c) => c.status === 'able',
-    ).length;
-    expect(el.textContent).toContain(`${able} of 440 enabled for you`);
+    // Crates sort by name: Lunch Break Lifters' library comes first, and it's empty.
+    expect(el.textContent).toContain('0 in Lunch Break Lifters’s library');
     const headers = Array.from(el.querySelectorAll('button[aria-expanded]'));
     expect(headers.length).toBeGreaterThan(10);
     expect(headers.every((h) => h.getAttribute('aria-expanded') === 'false')).toBe(true);
     expect(el.querySelector('[role=switch]')).toBeNull();
   });
 
-  it('searching expands matching groups; a switch toggles the capability', async () => {
+  it('searching expands matching groups; a switch adds to the library', async () => {
     const { f, el } = await render();
     const search = el.querySelector<HTMLInputElement>('input[type=search]')!;
     search.value = 'Pistol';
@@ -111,17 +117,19 @@ describe('ExercisesPage', () => {
       // The name is the label minus its aria-hidden subtitle.
       el.querySelector(`#${b.getAttribute('aria-labelledby')} .name`)?.textContent?.trim();
     const pistol = switches.find((b) => labelOf(b) === 'Pistol Squat')!;
-    expect(pistol).toBeDefined();
-    const before = pistol.getAttribute('aria-checked');
+    expect(pistol.getAttribute('aria-checked')).toBe('false');
 
     pistol.click();
-    await settle();
-    await f.whenStable();
-    const cap = (await backend.container.capabilities.forPeach(DEMO_PEACH_ID)).find(
-      (c) => c.exerciseId === 'bw-pistol-squat',
-    );
-    expect(cap?.status).toBe(before === 'true' ? 'unable' : 'able');
-    expect(pistol.getAttribute('aria-checked')).not.toBe(before);
+    for (let i = 0; i < 3; i++) {
+      await settle();
+      await f.whenStable();
+    }
+    const entries = await backend.container.library.entries(await lunchBreakLifters());
+    expect(entries.map((e) => [e.exerciseId, e.addedBy])).toEqual([
+      ['bw-pistol-squat', DEMO_PEACH_ID],
+    ]);
+    expect(pistol.getAttribute('aria-checked')).toBe('true');
+    expect(el.textContent).toContain('1 in Lunch Break Lifters’s library');
 
     // Collapsing a group while filtering hides its rows.
     const header = el.querySelector<HTMLButtonElement>('button[aria-expanded=true]')!;
@@ -135,29 +143,5 @@ describe('ExercisesPage', () => {
     f.componentInstance.query.set('zzzzzz');
     await f.whenStable();
     expect(el.textContent).toContain('No exercises match');
-  });
-});
-
-describe('QuickSetupDialog', () => {
-  it('enables exercises for the chosen equipment and level', async () => {
-    const backend = await seededBackend({ seed: false });
-    const close = vi.fn();
-    TestBed.configureTestingModule({
-      providers: [...backend.providers, { provide: MatDialogRef, useValue: { close } }],
-    });
-    const f = TestBed.createComponent(QuickSetupDialog);
-    await f.whenStable();
-    const el: HTMLElement = f.nativeElement;
-    expect(el.textContent).toContain('Up to difficulty level 2');
-
-    // Signed in but with no profile: the auth uid is still the Peach id.
-    f.componentInstance.toggle('dumbbell', true);
-    await f.componentInstance.apply();
-    const expected = ExerciseCatalog.standard()
-      .performableWith(new Set(['wall', 'chair', 'dumbbell']))
-      .filter((e) => e.difficulty <= 2).length;
-    expect(close).toHaveBeenCalledWith(expected);
-    const caps = await backend.container.capabilities.forPeach(DEMO_PEACH_ID);
-    expect(caps).toHaveLength(expected);
   });
 });

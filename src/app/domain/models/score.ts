@@ -1,27 +1,3 @@
-/** Points earned on one scored workout item. */
-export interface ItemScore {
-  readonly workoutItemId: string;
-  /** Achieved volume divided by prescribed volume, after capping. */
-  readonly achievementRatio: number;
-  readonly points: number;
-}
-
-/** The full breakdown of a Peach's score for one workout. */
-export interface WorkoutScore {
-  readonly items: readonly ItemScore[];
-  readonly completionBonus: number;
-}
-
-export const ZERO_SCORE: WorkoutScore = Object.freeze({ items: [], completionBonus: 0 });
-
-export function itemPoints(s: WorkoutScore): number {
-  return s.items.reduce((sum, i) => sum + i.points, 0);
-}
-
-export function scoreTotal(s: WorkoutScore): number {
-  return itemPoints(s) + s.completionBonus;
-}
-
 /** The outcome of one played matchup from one Peach's point of view. */
 export type MatchOutcome = 'win' | 'loss' | 'tie';
 

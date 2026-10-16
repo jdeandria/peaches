@@ -1,0 +1,97 @@
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.intro {
+  margin: 0 0 16px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.budget {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.category {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px 10px 16px;
+}
+
+.icon {
+  color: var(--mat-sys-primary);
+}
+
+.what {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  button[matIconButton] {
+    --mat-icon-button-state-layer-size: 40px;
+    padding: 8px;
+  }
+
+  .outlined {
+    border: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .tonal {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+
+  input {
+    width: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--pch-radius-small);
+    background: transparent;
+    color: inherit;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+    }
+  }
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+
+  .save {
+    flex: 1;
+  }
+}
+
+.note {
+  margin: 12px 0 0;
+}
+
+.grace {
+  --pch-card-padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}

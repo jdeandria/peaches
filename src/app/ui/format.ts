@@ -1,10 +1,15 @@
-import { LocalDate, toUtcDate } from '../domain/core/local-date';
-import { WeightUnits } from '../domain/core/units';
+import { addDays, LocalDate, monthOf, toUtcDate } from '../domain/core/local-date';
+import { DistanceUnits, WeightUnits } from '../domain/core/units';
 import { Equipment, MovementPattern } from '../domain/exercises/taxonomy';
+import { ScoringCategory } from '../domain/models/scoring';
 import { MatchupStatus, RoundStatus, SeasonStatus } from '../domain/models/season';
-import { SessionFocus, TrainingGoal, UnitSystem } from '../domain/models/training';
-import { BlockType, Prescription, prescriptionUnit, targetPerSet } from '../domain/models/workout';
-import { ExerciseLogEntry } from '../domain/models/workout-log';
+import { UnitSystem } from '../domain/models/training';
+import {
+  ExerciseLogEntry,
+  totalMeters,
+  totalReps,
+  totalSeconds,
+} from '../domain/models/workout-log';
 
 /** Only English strings ship today; pinning the locale keeps output stable. */
 const LOCALE = 'en-US';
@@ -25,6 +30,11 @@ const longDayFormat = new Intl.DateTimeFormat(LOCALE, {
 const headerDayFormat = new Intl.DateTimeFormat(LOCALE, {
   weekday: 'long',
   month: 'long',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
+const monthDayFormat = new Intl.DateTimeFormat(LOCALE, {
+  month: 'short',
   day: 'numeric',
   timeZone: 'UTC',
 });
@@ -55,6 +65,16 @@ export const Fmt = {
     return headerDayFormat.format(toUtcDate(date));
   },
 
+  /** A Monday-to-Sunday week: "Oct 12 – 18", or "Oct 26 – Nov 1" across months. */
+  week(monday: LocalDate): string {
+    const sunday = addDays(monday, 6);
+    const end =
+      monthOf(sunday) === monthOf(monday)
+        ? sunday.slice(8).replace(/^0/, '')
+        : monthDayFormat.format(toUtcDate(sunday));
+    return `${monthDayFormat.format(toUtcDate(monday))} – ${end}`;
+  },
+
   /** A local wall-clock time, e.g. "6:00 AM". */
   time(instant: Date): string {
     return timeFormat.format(instant);
@@ -72,18 +92,6 @@ export const Fmt = {
   /** Whole points without decimals, otherwise one decimal. */
   points(value: number): string {
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
-  },
-
-  /** "3 × 10 reps / side · rest 60 s · RPE 7" */
-  prescription(p: Prescription): string {
-    const target = targetPerSet(p);
-    const unit = prescriptionUnit(p);
-    const amount =
-      unit === 'duration' ? `${target} s` : unit === 'distance' ? `${target} m` : `${target} reps`;
-    const side = p.perSide ? ' / side' : '';
-    const rest = p.restSeconds > 0 ? ` · rest ${p.restSeconds} s` : '';
-    const load = p.load ? ` · RPE ${p.load.rpe}` : '';
-    return `${p.sets} × ${amount}${side}${rest}${load}`;
   },
 
   /** A weight in the Peach's units, e.g. "22.5 kg" or "50 lb". */
@@ -112,16 +120,85 @@ export const Fmt = {
     return `Lifted ${low === high ? low : `${low}–${high}`} ${WeightUnits.label(units)}`;
   },
 
-  focus(focus: SessionFocus): string {
-    return FOCUS[focus];
+  /** A distance in km or miles, e.g. "5.2 km". */
+  distance(meters: number, units: UnitSystem): string {
+    return `${DistanceUnits.format(DistanceUnits.toDisplay(meters, units))} ${DistanceUnits.label(units)}`;
   },
 
-  goal(goal: TrainingGoal): string {
-    return GOAL[goal];
+  /** A duration as "45 s", "25:00" or "1:05:00". */
+  duration(seconds: number): string {
+    const s = Math.round(seconds);
+    if (s < 60) return `${s} s`;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const rest = String(s % 60).padStart(2, '0');
+    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${rest}` : `${m}:${rest}`;
   },
 
-  block(type: BlockType): string {
-    return BLOCK[type];
+  /**
+   * What an entry adds up to: "3 sets · 30 reps · 60 kg", "5.2 km · 26:00",
+   * "3 × 45 s".
+   */
+  entrySummary(entry: ExerciseLogEntry, units: UnitSystem): string {
+    const parts = [Fmt.count(entry.sets.length, 'set')];
+    const meters = totalMeters(entry);
+    const reps = totalReps(entry);
+    const seconds = totalSeconds(entry);
+    if (meters > 0) {
+      parts.push(
+        entry.distanceKind === 'swimRow' || entry.distanceKind === null
+          ? `${integerFormat.format(meters)} m`
+          : Fmt.distance(meters, units),
+      );
+    }
+    if (reps > 0) parts.push(`${integerFormat.format(reps)} reps`);
+    if (seconds > 0) parts.push(Fmt.duration(seconds));
+    const load = Fmt.loggedLoad(entry, units);
+    if (load) parts.push(load.replace(/^Lifted /, ''));
+    return parts.join(' · ');
+  },
+
+  /** The one number that sums an entry up: its distance, else its reps, else its time. */
+  entryHeadline(entry: ExerciseLogEntry, units: UnitSystem): string {
+    const meters = totalMeters(entry);
+    if (meters > 0) {
+      return entry.distanceKind === 'swimRow' || entry.distanceKind === null
+        ? `${integerFormat.format(meters)} m`
+        : Fmt.distance(meters, units);
+    }
+    const reps = totalReps(entry);
+    if (reps > 0) return `${integerFormat.format(reps)} reps`;
+    return Fmt.duration(totalSeconds(entry));
+  },
+
+  category(c: ScoringCategory): string {
+    return CATEGORY[c].label;
+  },
+
+  categoryIcon(c: ScoringCategory): string {
+    return CATEGORY[c].icon;
+  },
+
+  /** A category amount in the Peach's units: "12.4 km", "8.1 mi", "2,450 kg", "120 reps". */
+  amount(c: ScoringCategory, amount: number, units: UnitSystem): string {
+    switch (c) {
+      case 'runWalk':
+      case 'ride':
+        return Fmt.distance(amount * 1000, units);
+      case 'swimRow':
+        return `${integerFormat.format(amount)} m`;
+      case 'weightMoved':
+        return Fmt.volume(amount, units);
+      case 'reps':
+        return `${integerFormat.format(amount)} reps`;
+      default:
+        return `${integerFormat.format(amount)} min`;
+    }
+  },
+
+  /** What a category's par is, for explaining weights: "per 5 km", "per 3.1 mi". */
+  per(c: ScoringCategory, par: number, units: UnitSystem): string {
+    return `per ${Fmt.amount(c, par, units)}`;
   },
 
   pattern(p: MovementPattern): string {
@@ -150,26 +227,13 @@ export const Fmt = {
   },
 } as const;
 
-const FOCUS: Record<SessionFocus, string> = {
-  fullBody: 'Full body',
-  upperBody: 'Upper body',
-  lowerBody: 'Lower body',
-  conditioning: 'Conditioning',
-  coreAndMobility: 'Core & mobility',
-};
-
-const GOAL: Record<TrainingGoal, string> = {
-  strength: 'Strength',
-  hypertrophy: 'Muscle',
-  endurance: 'Endurance',
-  generalFitness: 'General fitness',
-};
-
-const BLOCK: Record<BlockType, string> = {
-  warmUp: 'Warm-up',
-  strength: 'Main work',
-  conditioning: 'Conditioning',
-  coolDown: 'Cool-down',
+const CATEGORY: Record<ScoringCategory, { label: string; icon: string }> = {
+  runWalk: { label: 'Run & walk', icon: 'directions_run' },
+  ride: { label: 'Ride', icon: 'directions_bike' },
+  swimRow: { label: 'Swim & row', icon: 'pool' },
+  weightMoved: { label: 'Weight moved', icon: 'fitness_center' },
+  reps: { label: 'Reps', icon: 'repeat' },
+  activeMinutes: { label: 'Active minutes', icon: 'timer' },
 };
 
 const PATTERN: Record<MovementPattern, string> = {

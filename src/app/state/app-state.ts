@@ -26,7 +26,6 @@ import { AppContainer } from '../application/app-container';
 import { AuthUser } from '../application/auth-service';
 import { errorMessage } from '../application/errors';
 import { localDateOfLocal } from '../domain/core/local-date';
-import { isAble } from '../domain/models/capability';
 import { UnitSystem } from '../domain/models/training';
 import { deviceTimeZone } from '../data/tz/intl-zone-clock';
 import { APP_CONTAINER, AUTH_SERVICE, CLOCK } from './tokens';
@@ -43,7 +42,7 @@ const TICK_MS = 30_000;
  * live streams against the backend.
  *
  * Live data (the
- * Peach, their Crates, matchups, logs and capabilities) streams from the
+ * Peach, their Crates, matchups and logs) streams from the
  * repositories; one-shot queries made with {@link query} re-run whenever
  * {@link bump} is called after a mutation.
  */
@@ -107,14 +106,6 @@ export class AppState {
   readonly myLogs = this.watch(
     () => this.peachId() ?? undefined,
     (id, app) => app.logs.watchForPeach(id),
-  );
-  /** Ids of the exercises the current Peach can do. */
-  readonly myCapabilityIds = this.watch(
-    () => this.peachId() ?? undefined,
-    (id, app) =>
-      app.capabilities
-        .watchForPeach(id)
-        .pipe(map((caps) => new Set(caps.filter(isAble).map((c) => c.exerciseId)))),
   );
 
   /** The current Peach's display units (metric until the profile loads). */

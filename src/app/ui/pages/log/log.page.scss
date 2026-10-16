@@ -1,0 +1,125 @@
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.total {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: var(--pch-radius-large);
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+
+  .material-symbols-rounded {
+    grid-row: span 2;
+    font-size: 22px;
+  }
+
+  .muted {
+    color: inherit;
+    opacity: 0.8;
+  }
+}
+
+.points {
+  margin: 12px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+
+  strong {
+    color: var(--mat-sys-primary);
+  }
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 12px 16px;
+
+  &.clickable {
+    cursor: pointer;
+  }
+
+  &.clickable:hover {
+    background: color-mix(
+      in srgb,
+      var(--mat-sys-on-surface) calc(var(--mat-sys-hover-state-layer-opacity) * 100%),
+      transparent
+    );
+  }
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.action {
+  &.tonal {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+
+  &.filled {
+    background: var(--mat-sys-primary);
+    color: var(--mat-sys-on-primary);
+  }
+}
+
+.start {
+  --pch-card-padding: 24px;
+  --pch-card-radius: var(--pch-radius-extra-large);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  h2,
+  p {
+    margin: 0;
+  }
+}
+
+.peach {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.add {
+  width: 100%;
+  margin: 16px 0 24px;
+
+  .material-symbols-rounded {
+    margin-inline-end: 8px;
+    font-size: 20px;
+  }
+}
+
+.submit {
+  width: 100%;
+
+  .material-symbols-rounded {
+    margin-inline-end: 8px;
+    font-size: 20px;
+  }
+}

@@ -90,6 +90,11 @@ export function weekday(date: LocalDate): number {
   return js === 0 ? 7 : js;
 }
 
+/** The Monday on or before `date`: weeks run Monday to Sunday. */
+export function startOfWeek(date: LocalDate): LocalDate {
+  return addDays(date, 1 - weekday(date));
+}
+
 export function addDays(date: LocalDate, days: number): LocalDate {
   return fromUtcMs(toUtcDate(date).getTime() + days * MS_PER_DAY);
 }

@@ -115,13 +115,8 @@ export class CrateCard {
   );
 
   protected readonly meta = computed(() => {
-    const { settings } = this.crate();
     const count = this.data.value()?.memberCount;
-    return [
-      ...(count === undefined ? [] : [Fmt.count(count, 'Peach', 'Peaches')]),
-      Fmt.goal(settings.goal),
-      `${settings.workoutDurationMinutes} min`,
-    ].join(' · ');
+    return count === undefined ? '' : Fmt.count(count, 'Peach', 'Peaches');
   });
 
   protected readonly season = computed(() => {
@@ -131,9 +126,9 @@ export class CrateCard {
     const played = rounds.filter((r) => r.status === 'closed').length;
     const start = seasonStartDate(season);
     const progress =
-      season.status === 'scheduled' && start
+      season.status === 'scheduled'
         ? `Starts ${Fmt.day(start)}`
-        : `Round ${clamp(played + 1, 1, Math.max(1, rounds.length))} of ${rounds.length}`;
+        : `Week ${clamp(played + 1, 1, Math.max(1, rounds.length))} of ${rounds.length}`;
     return {
       name: season.name,
       progress,

@@ -1,15 +1,14 @@
 import { AppContainer } from '../../application/app-container';
-import { addDays, ISO_WEEKDAYS, weekday } from '../../domain/core/local-date';
+import { addDays, startOfWeek } from '../../domain/core/local-date';
 import { SeededRandom } from '../../domain/core/random';
 import { stableHash } from '../../domain/core/stable-hash';
 import { Exercise, takesLoad } from '../../domain/exercises/exercise';
+import { loggableFromCatalog, LoggableExercise } from '../../domain/exercises/loggable';
 import { Equipment } from '../../domain/exercises/taxonomy';
-import { crateSettings } from '../../domain/models/crate';
+import { loggableFromCustom } from '../../domain/models/library';
 import { peach, Peach } from '../../domain/models/peach';
-import { Matchup, matchupPeachIds } from '../../domain/models/season';
-import { workoutItems } from '../../domain/models/workout';
-import { exerciseLogEntry, setLog } from '../../domain/models/workout-log';
-import { ExerciseDayPlanner } from '../../domain/services/round-robin-scheduler';
+import { categoryWeights } from '../../domain/models/scoring';
+import { exerciseLogEntry, SetLog, setLog } from '../../domain/models/workout-log';
 
 /** The demo user's Peach id. */
 export const DEMO_PEACH_ID = 'me';
@@ -17,13 +16,39 @@ export const DEMO_PEACH_ID = 'me';
 const MS_PER_DAY = 86_400_000;
 const MS_PER_HOUR = 3_600_000;
 
+/** How each demo Peach likes to train, so the categories they win differ. */
+type Style = 'runner' | 'lifter' | 'mixed' | 'bodyweight' | 'rider';
+
+const STYLES: Readonly<Record<string, Style>> = {
+  [DEMO_PEACH_ID]: 'mixed',
+  ada: 'runner',
+  ben: 'lifter',
+  cho: 'rider',
+  dev: 'bodyweight',
+};
+
+/** What a session of each style looks like: exercise ids, in order. */
+const SESSIONS: Readonly<Record<Style, readonly (readonly string[])[]>> = {
+  runner: [['bw-run'], ['bw-run', 'bw-walking-lunge'], ['bw-jog']],
+  lifter: [
+    ['bb-back-squat', 'bb-bench-press'],
+    ['bb-deadlift', 'db-bent-over-row'],
+  ],
+  mixed: [['db-goblet-squat', 'db-bench-press', 'bw-forearm-plank'], ['bw-run'], ['kb-swing']],
+  bodyweight: [
+    ['bw-push-up', 'bw-air-squat', 'bw-burpee'],
+    ['bw-pull-up', 'bw-push-up'],
+  ],
+  rider: [['outdoor-cycling'], ['row-steady', 'bw-push-up'], ['outdoor-cycling']],
+};
+
 /**
- * Populates an in-memory backend with a believable Crate mid-season so the
+ * Populates an in-memory backend with believable Crates mid-season so the
  * app is explorable without a server. Also used by end-to-end tests.
  *
  * Everything is seeded (ids, logs, effort), so a given day always produces
  * the same demo. Dates are taken in `timeZone`, which the app sets to the
- * device's zone so "today" in the demo is the visitor's today.
+ * device's zone so "this week" in the demo is the visitor's week.
  */
 export class DemoSeeder {
   constructor(private readonly app: AppContainer) {}
@@ -31,6 +56,7 @@ export class DemoSeeder {
   async seed(now: Date, timeZone = 'UTC'): Promise<void> {
     const { app } = this;
     const today = app.zone.dateOf(now, timeZone);
+    const thisWeek = startOfWeek(today);
     const created = new Date(now.getTime() - 30 * MS_PER_DAY);
 
     const roster: Peach[] = [
@@ -48,25 +74,10 @@ export class DemoSeeder {
     ];
     for (const p of roster) await app.peaches.save(p);
 
-    // Everyone can do easy bodyweight work; most have dumbbells, Ben doesn't,
-    // so his matchups show the shared-equipment rule.
-    const enable = (peachId: string, equipment: Equipment[], maxDifficulty: number) =>
-      app.capabilityService.enableForEquipment({
-        peachId,
-        equipment: new Set(equipment),
-        maxDifficulty,
-        now: created,
-      });
-    for (const p of roster) await enable(p.id, ['wall', 'chair'], p.fitnessLevel);
-    for (const id of [DEMO_PEACH_ID, 'ada', 'cho', 'dev']) {
-      await enable(id, ['dumbbell', 'bench', 'resistanceBand'], 3);
-    }
-    await enable('ada', ['pullUpBar', 'kettlebell'], 4);
-
     const crate = await app.crateService.createCrate({
       ownerPeachId: 'ada',
       name: 'Weekend Warriors',
-      description: 'Three days a week, forty minutes, no excuses.',
+      description: 'Every workout counts. Most points each week wins.',
       timeZone,
       now: created,
     });
@@ -78,111 +89,165 @@ export class DemoSeeder {
     const second = await app.crateService.createCrate({
       ownerPeachId: DEMO_PEACH_ID,
       name: 'Lunch Break Lifters',
-      description: 'Tuesdays and Thursdays at noon.',
+      description: 'Heavy things at noon.',
       timeZone,
       now: created,
-      settings: crateSettings({ workoutDurationMinutes: 30, goal: 'strength' }),
     });
     await app.crateService.joinByInviteCode(second.inviteCode, 'cho', created);
 
-    // Season: three days a week including today, started ten days ago,
-    // running four weeks, so the demo always opens on an exercise day.
-    const planner = new ExerciseDayPlanner();
-    const start = addDays(today, -10);
-    const todayWeekday = weekday(today);
-    const days = planner.weekdaysBetween(
-      start,
-      addDays(start, 27),
-      new Set([0, 2, 4].map((offset) => ((todayWeekday - 1 + offset) % 7) + 1)),
-    );
-    const season = await app.seasonService.createSeason({
-      crate,
-      name: 'Autumn Kick-off',
-      exerciseDays: days,
+    // The Crate argued about what counts: Ada wants miles, Ben wants plates.
+    const vote = (
+      crateId: string,
+      peachId: string,
+      weights: Parameters<typeof categoryWeights>[0],
+    ) => app.votingService.castBallot(crateId, peachId, categoryWeights(weights), created);
+    await vote(crate.id, 'ada', {
+      runWalk: 40,
+      ride: 10,
+      swimRow: 10,
+      reps: 15,
+      activeMinutes: 25,
+    });
+    await vote(crate.id, 'ben', { weightMoved: 45, reps: 25, runWalk: 10, activeMinutes: 20 });
+    await vote(crate.id, 'dev', { reps: 40, runWalk: 20, weightMoved: 10, activeMinutes: 30 });
+    await vote(second.id, DEMO_PEACH_ID, { weightMoved: 60, reps: 30, activeMinutes: 10 });
+
+    // The library: a few catalog favourites, a made-up loop and a routine.
+    for (const [exerciseId, by] of [
+      ['kb-swing', 'ada'],
+      ['bw-burpee', 'dev'],
+      ['bb-deadlift', 'ben'],
+    ] as const) {
+      await app.libraryService.addCatalogExercise(crate.id, exerciseId, by, created);
+    }
+    const hillLoop = await app.libraryService.createCustomExercise({
+      crateId: crate.id,
+      peachId: 'ada',
+      name: 'Reservoir hill loop',
+      track: 'distance',
+      takesLoad: false,
+      distanceKind: 'runWalk',
+      now: created,
+    });
+    await app.libraryService.createRoutine({
+      crateId: crate.id,
+      peachId: 'dev',
+      name: 'Saturday sweat',
+      items: (
+        [
+          ['bw-burpee', 15],
+          ['bw-push-up', 20],
+          ['bw-air-squat', 25],
+        ] as const
+      ).map(([exerciseId, reps]) => ({
+        exerciseId,
+        exerciseName: app.catalog.require(exerciseId).name,
+        sets: 3,
+        reps,
+        seconds: null,
+        meters: null,
+      })),
       now: created,
     });
 
-    // Play out past rounds with plausible logs, open today's round if any.
+    // Season: started two weeks ago, six weeks long, so two weeks are
+    // final and this week is live.
+    const season = await app.seasonService.createSeason({
+      crate,
+      name: 'Autumn Kick-off',
+      startWeek: addDays(thisWeek, -14),
+      weeks: 6,
+      now: created,
+    });
+
+    // Everyone trains a few times a week, in their own style, up to now.
     const random = new SeededRandom(2026);
-    let roundIndex = 0;
-    for (const round of await app.seasons.roundsOf(season.id)) {
-      if (round.date > today) break;
-      await app.seasonService.openRound(round.id, now);
-      if (round.date === today) break;
-      // Log on the round's own evening so history reads naturally.
-      const loggedAt = new Date(
-        app.zone.startOfDay(round.date, timeZone).getTime() + 18 * MS_PER_HOUR,
-      );
-      for (const matchup of await app.seasons.matchupsInRound(round.id)) {
-        for (const peachId of matchupPeachIds(matchup)) {
-          await this.logPlausibly(matchup, peachId, random, loggedAt, roundIndex);
-        }
+    const custom = new Map([[hillLoop.id, loggableFromCustom(hillLoop)]]);
+    for (const p of roster) {
+      for (let day = addDays(thisWeek, -14); day <= today; day = addDays(day, 1)) {
+        if (random.nextDouble() > 0.5) continue;
+        const at = new Date(app.zone.startOfDay(day, timeZone).getTime() + 7 * MS_PER_HOUR);
+        if (at > now) continue;
+        const sessions = SESSIONS[STYLES[p.id]];
+        let ids = sessions[random.nextInt(sessions.length)];
+        if (p.id === 'ada' && random.nextDouble() < 0.3) ids = [hillLoop.id];
+        await this.logSession(p.id, ids, custom, random, at, day < thisWeek ? 0 : 1);
       }
-      await app.seasonService.closeRound(round.id);
-      roundIndex++;
     }
+
+    // Close the finished weeks and open this one.
+    await app.seasonService.syncSeason(season.id, now);
 
     await app.seasonService.createSeason({
       crate: second,
       name: 'Strength Block 1',
-      exerciseDays: planner.weekdaysBetween(
-        addDays(today, 1),
-        addDays(today, 21),
-        new Set([ISO_WEEKDAYS.tuesday, ISO_WEEKDAYS.thursday]),
-      ),
+      startWeek: addDays(thisWeek, 7),
+      weeks: 4,
       now: created,
     });
   }
 
-  private async logPlausibly(
-    matchup: Matchup,
+  private async logSession(
     peachId: string,
+    exerciseIds: readonly string[],
+    custom: ReadonlyMap<string, LoggableExercise>,
     random: SeededRandom,
-    now: Date,
-    roundIndex: number,
+    at: Date,
+    weekIndex: number,
   ): Promise<void> {
     const { app } = this;
-    const workout = matchup.workoutId ? await app.workouts.getById(matchup.workoutId) : null;
-    if (!workout) return;
-    // Some Peaches skip a round entirely.
-    if (random.nextDouble() < 0.12) return;
-    const log = await app.loggingService.logForMatchup(matchup, peachId, now);
-    for (const item of workoutItems(workout)) {
-      const p = item.prescription;
-      const effort = 0.6 + random.nextDouble() * 0.6;
-      const sides = p.perSide ? 2 : 1;
-      const exercise = app.catalog.byId(item.exerciseId);
+    const log = await app.loggingService.startLog(peachId, at);
+    for (const id of exerciseIds) {
+      const catalogExercise = app.catalog.byId(id);
+      const exercise = custom.get(id) ?? (catalogExercise && loggableFromCatalog(catalogExercise));
+      if (!exercise) continue;
+      const effort = 0.75 + random.nextDouble() * 0.5;
       const loadKg =
-        exercise && takesLoad(exercise) ? workingWeightKg(exercise, peachId, roundIndex) : null;
-      const scaled = (v: number | null) => (v === null ? null : Math.round(v * effort));
-      const sets = Array.from({ length: p.sets * sides }, () =>
-        setLog({
-          reps: scaled(p.reps),
-          seconds: scaled(p.seconds),
-          meters: scaled(p.meters),
-          loadKg,
-        }),
-      );
+        catalogExercise && takesLoad(catalogExercise)
+          ? workingWeightKg(catalogExercise, peachId, weekIndex)
+          : null;
       await app.loggingService.recordEntry(
         log.id,
         exerciseLogEntry({
-          exerciseId: item.exerciseId,
-          workoutItemId: item.id,
-          sets,
+          exerciseId: exercise.id,
+          exerciseName: exercise.name,
+          distanceKind: exercise.distanceKind,
+          sets: plausibleSets(exercise, effort, loadKg),
           rpe: 5 + random.nextInt(5),
         }),
+        at,
       );
     }
-    await app.loggingService.submit(log.id, now);
+    await app.loggingService.submit(log.id, new Date(at.getTime() + MS_PER_HOUR), {
+      durationMinutes: 30 + random.nextInt(4) * 10,
+    });
+  }
+}
+
+/** A few sets of what a Peach might do: a steady effort for cardio, sets for the rest. */
+function plausibleSets(e: LoggableExercise, effort: number, loadKg: number | null): SetLog[] {
+  switch (e.track) {
+    case 'distance': {
+      // About 5 km on foot, 20 km on a bike, 2 km rowing; pace stays human.
+      const metres =
+        e.distanceKind === 'ride' ? 20_000 : e.distanceKind === 'swimRow' ? 2000 : 5000;
+      const speed = e.distanceKind === 'ride' ? 7 : e.distanceKind === 'swimRow' ? 3.5 : 2.8;
+      const meters = Math.round((metres * effort) / 10) * 10;
+      return [setLog({ meters, seconds: Math.round(meters / speed) })];
+    }
+    case 'time':
+      return [1, 2, 3].map(() => setLog({ seconds: Math.round(45 * effort) }));
+    default:
+      return [1, 2, 3].map(() => setLog({ reps: Math.round(12 * effort), loadKg }));
   }
 }
 
 /**
  * A believable working weight: a base for the implement and movement, scaled
- * per Peach, rising a little each round so history shows progression.
+ * per Peach, rising a little each week so history shows progression.
  * Rounded to 2.5 kg like real plates.
  */
-export function workingWeightKg(exercise: Exercise, peachId: string, roundIndex: number): number {
+export function workingWeightKg(exercise: Exercise, peachId: string, weekIndex: number): number {
   const has = (e: Equipment) => exercise.equipment.includes(e);
   const implement = has('barbell')
     ? 40
@@ -204,6 +269,6 @@ export function workingWeightKg(exercise: Exercise, peachId: string, roundIndex:
         ? 1.1
         : 1.0;
   const strength = 0.8 + (stableHash(peachId) % 50) / 100;
-  const progress = 1 + 0.03 * roundIndex;
+  const progress = 1 + 0.03 * weekIndex;
   return Math.round((implement * pattern * strength * progress) / 2.5) * 2.5;
 }

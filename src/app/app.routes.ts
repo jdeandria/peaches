@@ -37,9 +37,24 @@ export const routes: Routes = [
           import('./ui/pages/crate-detail/crate-detail.page').then((m) => m.CrateDetailPage),
       },
       {
+        path: 'crates/:crateId/vote',
+        title: 'Vote',
+        loadComponent: () => import('./ui/pages/vote/vote.page').then((m) => m.VotePage),
+      },
+      {
         path: 'matchups/:matchupId',
-        title: 'Workout',
+        title: 'Matchup',
         loadComponent: () => import('./ui/pages/matchup/matchup.page').then((m) => m.MatchupPage),
+      },
+      {
+        path: 'log',
+        title: 'Log a workout',
+        loadComponent: () => import('./ui/pages/log/log.page').then((m) => m.LogPage),
+      },
+      {
+        path: 'log/:logId',
+        title: 'Workout',
+        loadComponent: () => import('./ui/pages/log/log.page').then((m) => m.LogPage),
       },
       {
         path: 'exercises',

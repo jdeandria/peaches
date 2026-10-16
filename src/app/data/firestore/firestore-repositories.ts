@@ -10,6 +10,7 @@ import {
   collection,
   collectionGroup,
   CollectionReference,
+  deleteDoc,
   doc,
   DocumentReference,
   DocumentSnapshot,
@@ -19,6 +20,7 @@ import {
   getDocs,
   limit,
   onSnapshot,
+  orderBy,
   query,
   Query,
   QuerySnapshot,
@@ -29,13 +31,8 @@ import {
 import { Observable, from, map, switchMap } from 'rxjs';
 
 import { Repositories } from '../../application/app-container';
-import { JsonMap } from '../../domain/core/json';
-import { LocalDate } from '../../domain/core/local-date';
-import {
-  capabilityFromJson,
-  capabilityToJson,
-  ExerciseCapability,
-} from '../../domain/models/capability';
+import { dateTimeToJson, JsonMap } from '../../domain/core/json';
+import { ballotFromJson, ballotToJson, RateBallot } from '../../domain/models/ballot';
 import {
   Crate,
   crateFromJson,
@@ -45,6 +42,17 @@ import {
   membershipFromJson,
   membershipToJson,
 } from '../../domain/models/crate';
+import {
+  CustomExercise,
+  customExerciseFromJson,
+  customExerciseToJson,
+  LibraryEntry,
+  libraryEntryFromJson,
+  libraryEntryToJson,
+  Routine,
+  routineFromJson,
+  routineToJson,
+} from '../../domain/models/library';
 import { Peach, peachFromJson, peachToJson } from '../../domain/models/peach';
 import {
   Matchup,
@@ -58,15 +66,14 @@ import {
   seasonFromJson,
   seasonToJson,
 } from '../../domain/models/season';
-import { Workout, workoutFromJson, workoutToJson } from '../../domain/models/workout';
 import { WorkoutLog, workoutLogFromJson, workoutLogToJson } from '../../domain/models/workout-log';
 import {
-  CapabilityRepository,
+  BallotRepository,
   CrateRepository,
+  LibraryRepository,
   PeachRepository,
   SeasonRepository,
   WorkoutLogRepository,
-  WorkoutRepository,
 } from '../../domain/repositories';
 
 /**
@@ -75,21 +82,22 @@ import {
  */
 export const COLLECTIONS = {
   peaches: 'peaches',
-  capabilities: 'capabilities',
   crates: 'crates',
   memberships: 'memberships',
+  /** Copies of submitted logs, under each Crate they were shared with. */
+  sharedLogs: 'logs',
+  ballots: 'ballots',
+  library: 'library',
+  customExercises: 'customExercises',
+  routines: 'routines',
   seasons: 'seasons',
   rounds: 'rounds',
   matchups: 'matchups',
-  workouts: 'workouts',
   workoutLogs: 'workoutLogs',
 } as const;
 
 /** Firestore `in` filters accept at most 30 values. */
 const WHERE_IN_LIMIT = 30;
-
-/** Batches are capped at 500 writes; stay well under. */
-const BATCH_LIMIT = 450;
 
 type Decode<T> = (json: JsonMap) => T;
 
@@ -266,43 +274,6 @@ export class FirestoreCrateRepository implements CrateRepository {
   }
 }
 
-export class FirestoreCapabilityRepository implements CapabilityRepository {
-  constructor(private readonly db: Firestore) {}
-
-  private col(peachId: string): CollectionReference {
-    return collection(this.db, COLLECTIONS.peaches, peachId, COLLECTIONS.capabilities);
-  }
-
-  async forPeach(peachId: string): Promise<ExerciseCapability[]> {
-    return decodeAll(await getDocs(this.col(peachId)), capabilityFromJson);
-  }
-
-  async forPeaches(peachIds: Iterable<string>): Promise<ExerciseCapability[]> {
-    const results = await Promise.all([...new Set(peachIds)].map((id) => this.forPeach(id)));
-    return results.flat();
-  }
-
-  /** Capability documents are keyed by exercise id: one per exercise per Peach. */
-  save(capability: ExerciseCapability): Promise<void> {
-    return setDoc(
-      doc(this.col(capability.peachId), capability.exerciseId),
-      capabilityToJson(capability),
-    );
-  }
-
-  async saveAll(capabilities: Iterable<ExerciseCapability>): Promise<void> {
-    for (const part of chunk(capabilities, BATCH_LIMIT)) {
-      const batch = writeBatch(this.db);
-      for (const c of part) batch.set(doc(this.col(c.peachId), c.exerciseId), capabilityToJson(c));
-      await batch.commit();
-    }
-  }
-
-  watchForPeach(peachId: string): Observable<ExerciseCapability[]> {
-    return watchQuery(this.col(peachId), (snap) => decodeAll(snap, capabilityFromJson));
-  }
-}
-
 export class FirestoreSeasonRepository implements SeasonRepository {
   constructor(private readonly db: Firestore) {}
 
@@ -388,17 +359,15 @@ export class FirestoreSeasonRepository implements SeasonRepository {
     return decodeAll(snap, matchupFromJson);
   }
 
-  /** `on` uses the denormalised `date` (composite index with `peachIds`). */
-  async matchupsFor(peachId: string, on?: LocalDate): Promise<Matchup[]> {
-    const base = this.peachMatchupsQuery(peachId);
-    const q = on === undefined ? base : query(base, where('date', '==', on));
-    return decodeAll(await getDocs(q), matchupFromJson);
+  async matchupsFor(peachId: string): Promise<Matchup[]> {
+    return decodeAll(await getDocs(this.peachMatchupsQuery(peachId)), matchupFromJson);
   }
 
   /**
-   * Matchup documents carry denormalised `peachIds` and `date` fields so
-   * "my matchups" and "matchups on a day" are single indexed queries.
-   * Updates merge so those fields survive a plain `saveMatchup`.
+   * Matchup documents carry denormalised `peachIds` and `weekStart` fields
+   * so "my matchups" is a single indexed query and a matchup's week is
+   * readable without its round. Updates merge so those fields survive a
+   * plain `saveMatchup`.
    */
   saveMatchup(matchup: Matchup): Promise<void> {
     return setDoc(
@@ -410,19 +379,19 @@ export class FirestoreSeasonRepository implements SeasonRepository {
 
   /**
    * Writes a whole schedule in one atomic batch, stamping each matchup with
-   * its Round's date. It is deliberately not chunked: a half-written
+   * its Round's week. It is deliberately not chunked: a half-written
    * schedule (rounds without their matchups) would let a device open a
    * Round with nobody in it.
    */
   async saveSchedule(rounds: readonly Round[], matchups: readonly Matchup[]): Promise<void> {
-    const dates = new Map(rounds.map((r) => [r.id, r.date]));
+    const weeks = new Map(rounds.map((r) => [r.id, r.weekStart]));
     const batch = writeBatch(this.db);
     for (const r of rounds) batch.set(doc(this.rounds(r.seasonId), r.id), roundToJson(r));
     for (const m of matchups) {
       batch.set(doc(this.matchups(m.seasonId), m.id), {
         ...matchupToJson(m),
         peachIds: matchupPeachIds(m),
-        date: dates.get(m.roundId) ?? null,
+        weekStart: weeks.get(m.roundId) ?? null,
       });
     }
     await batch.commit();
@@ -433,31 +402,15 @@ export class FirestoreSeasonRepository implements SeasonRepository {
   }
 }
 
-export class FirestoreWorkoutRepository implements WorkoutRepository {
-  constructor(private readonly db: Firestore) {}
-
-  private get col(): CollectionReference {
-    return collection(this.db, COLLECTIONS.workouts);
-  }
-
-  async getById(id: string): Promise<Workout | null> {
-    return decodeDoc(await getDoc(doc(this.col, id)), workoutFromJson);
-  }
-
-  getByIds(ids: Iterable<string>): Promise<Workout[]> {
-    return getByDocumentIds(this.col, ids, workoutFromJson);
-  }
-
-  save(workout: Workout): Promise<void> {
-    return setDoc(doc(this.col, workout.id), workoutToJson(workout));
-  }
-}
-
 export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
   constructor(private readonly db: Firestore) {}
 
   private get col(): CollectionReference {
     return collection(this.db, COLLECTIONS.workoutLogs);
+  }
+
+  private shared(crateId: string): CollectionReference {
+    return collection(this.db, COLLECTIONS.crates, crateId, COLLECTIONS.sharedLogs);
   }
 
   private peachQuery(peachId: string): Query {
@@ -472,19 +425,6 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
     return decodeDoc(await getDoc(doc(this.col, id)), workoutLogFromJson);
   }
 
-  /** Uses the (matchupId, peachId) composite index. */
-  async forMatchup(matchupId: string, peachId: string): Promise<WorkoutLog | null> {
-    const snap = await getDocs(
-      query(
-        this.col,
-        where('matchupId', '==', matchupId),
-        where('peachId', '==', peachId),
-        limit(1),
-      ),
-    );
-    return decodeFirst(snap, workoutLogFromJson);
-  }
-
   async forPeach(peachId: string): Promise<WorkoutLog[]> {
     const snap = await getDocs(this.peachQuery(peachId));
     return FirestoreWorkoutLogRepository.newestFirst(decodeAll(snap, workoutLogFromJson));
@@ -492,6 +432,38 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
 
   save(log: WorkoutLog): Promise<void> {
     return setDoc(doc(this.col, log.id), workoutLogToJson(log));
+  }
+
+  /**
+   * The private log and its copy under each Crate in one batch. Crate
+   * members can read the copies but never the Peach's own log collection,
+   * which also holds unsubmitted drafts.
+   */
+  async saveSubmitted(log: WorkoutLog): Promise<void> {
+    const json = workoutLogToJson(log);
+    const batch = writeBatch(this.db);
+    batch.set(doc(this.col, log.id), json);
+    for (const crateId of log.sharedWith) batch.set(doc(this.shared(crateId), log.id), json);
+    await batch.commit();
+  }
+
+  /** `startedAt` is an ISO string in UTC, so string order is time order. */
+  async sharedWith(crateId: string, from: Date, to: Date): Promise<WorkoutLog[]> {
+    const snap = await getDocs(
+      query(
+        this.shared(crateId),
+        where('startedAt', '>=', dateTimeToJson(from)),
+        where('startedAt', '<', dateTimeToJson(to)),
+      ),
+    );
+    return FirestoreWorkoutLogRepository.newestFirst(decodeAll(snap, workoutLogFromJson));
+  }
+
+  async recentlySharedWith(crateId: string, max: number): Promise<WorkoutLog[]> {
+    const snap = await getDocs(
+      query(this.shared(crateId), orderBy('startedAt', 'desc'), limit(max)),
+    );
+    return decodeAll(snap, workoutLogFromJson);
   }
 
   watch(id: string): Observable<WorkoutLog | null> {
@@ -505,14 +477,95 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
   }
 }
 
+/** Ballots are keyed by Peach id: one per member per Crate. */
+export class FirestoreBallotRepository implements BallotRepository {
+  constructor(private readonly db: Firestore) {}
+
+  private col(crateId: string): CollectionReference {
+    return collection(this.db, COLLECTIONS.crates, crateId, COLLECTIONS.ballots);
+  }
+
+  async forCrate(crateId: string): Promise<RateBallot[]> {
+    return decodeAll(await getDocs(this.col(crateId)), ballotFromJson);
+  }
+
+  save(ballot: RateBallot): Promise<void> {
+    return setDoc(doc(this.col(ballot.crateId), ballot.peachId), ballotToJson(ballot));
+  }
+}
+
+/** Library documents live under their Crate; catalog picks are keyed by exercise id. */
+export class FirestoreLibraryRepository implements LibraryRepository {
+  constructor(private readonly db: Firestore) {}
+
+  private col(crateId: string, name: string): CollectionReference {
+    return collection(this.db, COLLECTIONS.crates, crateId, name);
+  }
+
+  async entries(crateId: string): Promise<LibraryEntry[]> {
+    return decodeAll(await getDocs(this.col(crateId, COLLECTIONS.library)), libraryEntryFromJson);
+  }
+
+  saveEntry(entry: LibraryEntry): Promise<void> {
+    return setDoc(
+      doc(this.col(entry.crateId, COLLECTIONS.library), entry.exerciseId),
+      libraryEntryToJson(entry),
+    );
+  }
+
+  removeEntry(crateId: string, exerciseId: string): Promise<void> {
+    return deleteDoc(doc(this.col(crateId, COLLECTIONS.library), exerciseId));
+  }
+
+  async customExercises(crateId: string): Promise<CustomExercise[]> {
+    return decodeAll(
+      await getDocs(this.col(crateId, COLLECTIONS.customExercises)),
+      customExerciseFromJson,
+    );
+  }
+
+  saveCustomExercise(exercise: CustomExercise): Promise<void> {
+    return setDoc(
+      doc(this.col(exercise.crateId, COLLECTIONS.customExercises), exercise.id),
+      customExerciseToJson(exercise),
+    );
+  }
+
+  removeCustomExercise(crateId: string, id: string): Promise<void> {
+    return deleteDoc(doc(this.col(crateId, COLLECTIONS.customExercises), id));
+  }
+
+  async routines(crateId: string): Promise<Routine[]> {
+    return decodeAll(await getDocs(this.col(crateId, COLLECTIONS.routines)), routineFromJson);
+  }
+
+  async getRoutine(crateId: string, id: string): Promise<Routine | null> {
+    return decodeDoc(
+      await getDoc(doc(this.col(crateId, COLLECTIONS.routines), id)),
+      routineFromJson,
+    );
+  }
+
+  saveRoutine(routine: Routine): Promise<void> {
+    return setDoc(
+      doc(this.col(routine.crateId, COLLECTIONS.routines), routine.id),
+      routineToJson(routine),
+    );
+  }
+
+  removeRoutine(crateId: string, id: string): Promise<void> {
+    return deleteDoc(doc(this.col(crateId, COLLECTIONS.routines), id));
+  }
+}
+
 /** One of each repository, all on the same database. */
 export function firestoreRepositories(db: Firestore): Repositories {
   return {
     peaches: new FirestorePeachRepository(db),
     crates: new FirestoreCrateRepository(db),
-    capabilities: new FirestoreCapabilityRepository(db),
     seasons: new FirestoreSeasonRepository(db),
-    workouts: new FirestoreWorkoutRepository(db),
     logs: new FirestoreWorkoutLogRepository(db),
+    ballots: new FirestoreBallotRepository(db),
+    library: new FirestoreLibraryRepository(db),
   };
 }

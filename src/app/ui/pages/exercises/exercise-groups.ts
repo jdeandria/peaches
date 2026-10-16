@@ -7,21 +7,21 @@ import { Fmt } from '../../format';
 export interface ExerciseFilter {
   readonly query: string;
   readonly pattern: MovementPattern | null;
-  /** Only exercises the Peach can do ("I can do"). */
-  readonly onlyMine: boolean;
+  /** Only exercises in the chosen Crate's library ("In library"). */
+  readonly onlyPicked: boolean;
 }
 
 /** One movement pattern's matching exercises, sorted by name. */
 export interface ExerciseGroup {
   readonly pattern: MovementPattern;
   readonly exercises: readonly Exercise[];
-  /** How many of `exercises` the Peach can do. */
-  readonly enabled: number;
+  /** How many of `exercises` are in the chosen library. */
+  readonly picked: number;
 }
 
 /** True when any filter is active; filtering expands every group by default. */
 export function isFiltering(filter: ExerciseFilter): boolean {
-  return filter.query.trim() !== '' || filter.pattern !== null || filter.onlyMine;
+  return filter.query.trim() !== '' || filter.pattern !== null || filter.onlyPicked;
 }
 
 /**
@@ -31,12 +31,12 @@ export function isFiltering(filter: ExerciseFilter): boolean {
 export function groupExercises(
   catalog: ExerciseCatalog,
   filter: ExerciseFilter,
-  able: ReadonlySet<string>,
+  picked: ReadonlySet<string>,
 ): ExerciseGroup[] {
   const byPattern = new Map<MovementPattern, Exercise[]>();
   for (const e of catalog.search(filter.query)) {
     if (filter.pattern !== null && e.pattern !== filter.pattern) continue;
-    if (filter.onlyMine && !able.has(e.id)) continue;
+    if (filter.onlyPicked && !picked.has(e.id)) continue;
     let list = byPattern.get(e.pattern);
     if (!list) byPattern.set(e.pattern, (list = []));
     list.push(e);
@@ -47,7 +47,7 @@ export function groupExercises(
     if (!list) continue;
     // Code-unit order (not locale order), stable across devices.
     list.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    groups.push({ pattern, exercises: list, enabled: list.filter((e) => able.has(e.id)).length });
+    groups.push({ pattern, exercises: list, picked: list.filter((e) => picked.has(e.id)).length });
   }
   return groups;
 }

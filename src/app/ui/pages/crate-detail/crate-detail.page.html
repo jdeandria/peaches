@@ -25,14 +25,10 @@
     </button>
 
     <div class="chips">
-      <span class="chip">
-        <span class="material-symbols-rounded" aria-hidden="true">flag</span>
-        <span>{{ fmt.goal(c.settings.goal) }}</span>
-      </span>
-      <span class="chip">
-        <span class="material-symbols-rounded" aria-hidden="true">timer</span>
-        <span>{{ c.settings.workoutDurationMinutes }} min</span>
-      </span>
+      <a class="chip action" [routerLink]="['/crates', c.id, 'vote']">
+        <span class="material-symbols-rounded" aria-hidden="true">how_to_vote</span>
+        <span>{{ voteLine() }}</span>
+      </a>
       <button
         class="chip action"
         type="button"
@@ -51,7 +47,8 @@
           <pch-loading-indicator class="loading" [size]="40" />
         } @else if (s === null) {
           <pch-card variant="outlined" class="no-season">
-            No Season yet. The owner can start one.
+            No Season yet. {{ canManage() ? 'Start one' : 'The owner can start one' }}: every week
+            you’re paired up, and whoever logs more points wins.
           </pch-card>
         } @else {
           <pch-section [title]="s.name">
@@ -68,10 +65,10 @@
             <pch-loading-indicator class="loading" [size]="40" />
           }
 
-          <pch-section title="Rounds" />
+          <pch-section title="Weeks" />
           @let roundList = rounds();
           @if (roundList) {
-            <pch-list-card [pchStagger]="2">
+            <pch-list-card [pchStagger]="2" class="weeks">
               @for (r of roundList; track r.round.id) {
                 <pch-list-row [interactive]="!!r.matchupLink">
                   <span
@@ -96,8 +93,7 @@
                         type="button"
                         [disabled]="busyRound() !== null"
                         [attr.aria-label]="
-                          (r.action === 'open' ? 'Open round ' : 'Close round ') +
-                          (r.round.index + 1)
+                          (r.action === 'open' ? 'Open week ' : 'Close week ') + (r.round.index + 1)
                         "
                         (click)="runRound(r)"
                       >
@@ -116,26 +112,53 @@
             <pch-loading-indicator class="loading" [size]="40" />
           }
         }
+
+        <pch-section title="Recent workouts" />
+        @let feed = activity();
+        @if (feed.length === 0) {
+          <pch-card variant="outlined" [pchStagger]="3"
+            >Nothing logged yet. Workouts members log show up here.</pch-card
+          >
+        } @else {
+          <pch-list-card [pchStagger]="3" class="activity">
+            @for (a of feed; track a.id) {
+              @if (a.link) {
+                <a pch-list-row [routerLink]="a.link">
+                  <pch-shaped-avatar rowLeading [shapeId]="a.peachId" [name]="a.name" />
+                  {{ a.name }} · {{ a.day }}
+                  <span rowSubtitle class="one-line">{{ a.summary }}</span>
+                </a>
+              } @else {
+                <pch-list-row>
+                  <pch-shaped-avatar rowLeading [shapeId]="a.peachId" [name]="a.name" />
+                  {{ a.name }} · {{ a.day }}
+                  <span rowSubtitle class="one-line">{{ a.summary }}</span>
+                </pch-list-row>
+              }
+            }
+          </pch-list-card>
+        }
       </div>
 
       <div secondaryPane>
+        <pch-crate-library [crateId]="c.id" [canManage]="canManage()" [names]="names()" />
+
         <pch-section title="Peaches" />
         @let people = members.value();
         @if (people) {
-          <pch-list-card [pchStagger]="3">
-            @for (p of people; track p.id) {
-              @let owner = p.id === c.ownerPeachId;
+          <pch-list-card [pchStagger]="5" class="members">
+            @for (m of people; track m.peach.id) {
+              @let owner = m.membership.role === 'owner';
               <pch-list-row>
                 <pch-shaped-avatar
                   rowLeading
-                  [shapeId]="p.id"
-                  [name]="p.displayName"
+                  [shapeId]="m.peach.id"
+                  [name]="m.peach.displayName"
                   [color]="owner ? 'tertiary-container' : 'secondary-container'"
                   [foreground]="owner ? 'on-tertiary-container' : 'on-secondary-container'"
                 />
-                {{ p.displayName }}
-                <span rowSubtitle>{{ owner ? 'Owner' : 'Member' }}</span>
-                <span rowTrailing class="pch-label-medium muted">Level {{ p.fitnessLevel }}</span>
+                {{ m.peach.displayName }}
+                <span rowSubtitle>{{ roleLabel(m.membership.role) }}</span>
               </pch-list-row>
             }
           </pch-list-card>
@@ -145,7 +168,7 @@
       </div>
     </pch-two-pane>
 
-    @if (isOwner()) {
+    @if (canStartSeason()) {
       <button pageFab matFab extended type="button" (click)="newSeason(c)">
         <span class="material-symbols-rounded" aria-hidden="true">emoji_events</span>
         Season

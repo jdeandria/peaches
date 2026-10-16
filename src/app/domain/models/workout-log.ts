@@ -8,8 +8,10 @@ import {
   mapListFromJson,
   numberOrNullFromJson,
   requireString,
+  stringListFromJson,
   stringOrNull,
 } from '../core/json';
+import { DISTANCE_KINDS, DistanceKind } from './scoring';
 
 /** What was actually done in one set. */
 export interface SetLog {
@@ -31,12 +33,16 @@ export function setLog(init: Partial<SetLog>): SetLog {
 /**
  * Everything logged against one exercise in a session.
  *
- * `workoutItemId` links to a workout item when following a generated
- * workout; it is null for free-form logging.
+ * The exercise's name and distance kind are copied in when it is logged. A
+ * log is shared with every Crate its Peach belongs to, and an exercise from
+ * one Crate's private library means nothing in another, so the entry has to
+ * render and score on its own.
  */
 export interface ExerciseLogEntry {
   readonly exerciseId: string;
-  readonly workoutItemId: string | null;
+  readonly exerciseName: string;
+  /** Which distance category metres count toward; null when distance doesn't score. */
+  readonly distanceKind: DistanceKind | null;
   readonly sets: readonly SetLog[];
   readonly rpe: number | null;
   readonly notes: string | null;
@@ -46,7 +52,13 @@ export type NewExerciseLogEntry = Pick<ExerciseLogEntry, 'exerciseId' | 'sets'> 
   Partial<ExerciseLogEntry>;
 
 export function exerciseLogEntry(init: NewExerciseLogEntry): ExerciseLogEntry {
-  const e: ExerciseLogEntry = { workoutItemId: null, rpe: null, notes: null, ...init };
+  const e: ExerciseLogEntry = {
+    exerciseName: init.exerciseId,
+    distanceKind: null,
+    rpe: null,
+    notes: null,
+    ...init,
+  };
   if (e.rpe !== null && (e.rpe < 1 || e.rpe > 10)) throw new RangeError('rpe is 1..10');
   return e;
 }
@@ -72,33 +84,41 @@ export const WORKOUT_LOG_STATUSES = ['inProgress', 'submitted'] as const;
 export type WorkoutLogStatus = (typeof WORKOUT_LOG_STATUSES)[number];
 
 /**
- * A Peach's record of a training session.
+ * A Peach's record of a training session, owned by the Peach.
  *
- * This is the single source of truth for "what I did". A log may be tied to
- * a Matchup (then it is scored) or stand alone (plain exercise logging).
+ * Logs belong to no Crate or Matchup. When submitted, a log is shared with
+ * every Crate the Peach is active in (`sharedWith`); a Matchup scores the
+ * shared logs its two Peaches started inside its week, so one workout counts
+ * in every Crate, each with that Crate's own weights.
  */
 export interface WorkoutLog {
   readonly id: string;
   readonly peachId: string;
-  readonly workoutId: string | null;
-  readonly matchupId: string | null;
+  /** The Crate routine this log was started from, if any. */
+  readonly routineId: string | null;
+  /** Decides which week the log counts toward. */
   readonly startedAt: Date;
   readonly completedAt: Date | null;
   readonly status: WorkoutLogStatus;
   readonly entries: readonly ExerciseLogEntry[];
+  /** How long the whole session took, as the Peach reports it on submit. */
+  readonly durationMinutes: number | null;
   readonly notes: string | null;
+  /** Crates the log was shared with on submit. */
+  readonly sharedWith: readonly string[];
 }
 
 export type NewWorkoutLog = Pick<WorkoutLog, 'id' | 'peachId' | 'startedAt'> & Partial<WorkoutLog>;
 
 export function workoutLog(init: NewWorkoutLog): WorkoutLog {
   return {
-    workoutId: null,
-    matchupId: null,
+    routineId: null,
     completedAt: null,
     status: 'inProgress',
     entries: [],
+    durationMinutes: null,
     notes: null,
+    sharedWith: [],
     ...init,
   };
 }
@@ -107,22 +127,26 @@ export function isSubmitted(log: WorkoutLog): boolean {
   return log.status === 'submitted';
 }
 
-export function entryForItem(log: WorkoutLog, workoutItemId: string): ExerciseLogEntry | undefined {
-  return log.entries.find((e) => e.workoutItemId === workoutItemId);
+export function entryFor(log: WorkoutLog, exerciseId: string): ExerciseLogEntry | undefined {
+  return log.entries.find((e) => e.exerciseId === exerciseId);
 }
 
-function sameSlot(a: ExerciseLogEntry, b: ExerciseLogEntry): boolean {
-  return a.workoutItemId !== null
-    ? a.workoutItemId === b.workoutItemId
-    : b.workoutItemId === null && a.exerciseId === b.exerciseId;
-}
-
-/**
- * Returns a copy with `entry` replacing any existing entry for the same
- * workout item (or exercise, for free logs).
- */
+/** Returns a copy with `entry` replacing any existing entry for the same exercise. */
 export function upsertEntry(log: WorkoutLog, entry: ExerciseLogEntry): WorkoutLog {
-  return { ...log, entries: [...log.entries.filter((e) => !sameSlot(e, entry)), entry] };
+  const i = log.entries.findIndex((e) => e.exerciseId === entry.exerciseId);
+  const entries = [...log.entries];
+  if (i < 0) entries.push(entry);
+  else entries[i] = entry;
+  return { ...log, entries };
+}
+
+/** Returns a copy without the entry for `exerciseId`. */
+export function removeEntry(log: WorkoutLog, exerciseId: string): WorkoutLog {
+  return { ...log, entries: log.entries.filter((e) => e.exerciseId !== exerciseId) };
+}
+
+export function totalSets(log: WorkoutLog): number {
+  return log.entries.reduce((n, e) => n + e.sets.length, 0);
 }
 
 function setFromJson(json: JsonMap): SetLog {
@@ -134,10 +158,19 @@ function setFromJson(json: JsonMap): SetLog {
   };
 }
 
+/** Unknown or missing kinds decode as null: the distance then simply doesn't score. */
+export function distanceKindFromJson(raw: unknown): DistanceKind | null {
+  return typeof raw === 'string' && (DISTANCE_KINDS as readonly string[]).includes(raw)
+    ? (raw as DistanceKind)
+    : null;
+}
+
 export function entryFromJson(json: JsonMap): ExerciseLogEntry {
+  const exerciseId = requireString(json['exerciseId'], 'exerciseId');
   return {
-    exerciseId: requireString(json['exerciseId'], 'exerciseId'),
-    workoutItemId: stringOrNull(json['workoutItemId']),
+    exerciseId,
+    exerciseName: stringOrNull(json['exerciseName']) ?? exerciseId,
+    distanceKind: distanceKindFromJson(json['distanceKind']),
     sets: mapListFromJson(json['sets']).map(setFromJson),
     rpe: intOrNullFromJson(json['rpe']),
     notes: stringOrNull(json['notes']),
@@ -147,7 +180,8 @@ export function entryFromJson(json: JsonMap): ExerciseLogEntry {
 export function entryToJson(e: ExerciseLogEntry): JsonMap {
   return {
     exerciseId: e.exerciseId,
-    workoutItemId: e.workoutItemId,
+    exerciseName: e.exerciseName,
+    distanceKind: e.distanceKind,
     sets: e.sets.map((s) => ({
       reps: s.reps,
       loadKg: s.loadKg,
@@ -163,13 +197,14 @@ export function workoutLogFromJson(json: JsonMap): WorkoutLog {
   return {
     id: requireString(json['id'], 'id'),
     peachId: requireString(json['peachId'], 'peachId'),
-    workoutId: stringOrNull(json['workoutId']),
-    matchupId: stringOrNull(json['matchupId']),
+    routineId: stringOrNull(json['routineId']),
     startedAt: dateTimeFromJson(json['startedAt']),
     completedAt: dateTimeOrNullFromJson(json['completedAt']),
     status: enumFromJson(WORKOUT_LOG_STATUSES, json['status'], 'inProgress'),
     entries: mapListFromJson(json['entries']).map(entryFromJson),
+    durationMinutes: intOrNullFromJson(json['durationMinutes']),
     notes: stringOrNull(json['notes']),
+    sharedWith: stringListFromJson(json['sharedWith']),
   };
 }
 
@@ -177,12 +212,13 @@ export function workoutLogToJson(log: WorkoutLog): JsonMap {
   return {
     id: log.id,
     peachId: log.peachId,
-    workoutId: log.workoutId,
-    matchupId: log.matchupId,
+    routineId: log.routineId,
     startedAt: dateTimeToJson(log.startedAt),
     completedAt: log.completedAt ? dateTimeToJson(log.completedAt) : null,
     status: log.status,
     entries: log.entries.map(entryToJson),
+    durationMinutes: log.durationMinutes,
     notes: log.notes,
+    sharedWith: [...log.sharedWith],
   };
 }

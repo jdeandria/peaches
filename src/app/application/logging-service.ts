@@ -1,101 +1,105 @@
 import { IdGenerator } from '../domain/core/ids';
-import { involves, Matchup } from '../domain/models/season';
-import { WorkoutScore, ZERO_SCORE } from '../domain/models/score';
-import { STANDARD_SCORING_RULES } from '../domain/models/scoring-rules';
+import { isActiveMembership } from '../domain/models/crate';
+import { Routine } from '../domain/models/library';
 import {
   ExerciseLogEntry,
   isSubmitted,
+  removeEntry,
   upsertEntry,
   WorkoutLog,
   workoutLog,
 } from '../domain/models/workout-log';
-import {
-  CrateRepository,
-  SeasonRepository,
-  WorkoutLogRepository,
-  WorkoutRepository,
-} from '../domain/repositories';
-import { RoundWindowService } from '../domain/services/round-window';
-import { ScoringService } from '../domain/services/scoring-service';
+import { CrateRepository, WorkoutLogRepository } from '../domain/repositories';
+import { implausibility } from '../domain/services/plausibility';
 import { DomainError } from './errors';
 
-/** Recording what a Peach did: against a Matchup's workout or free-form. */
+/** The longest session a Peach can report. */
+export const MAX_SESSION_MINUTES = 600;
+
+/**
+ * Recording what a Peach did. Logs are the Peach's own: they are not tied to
+ * a Crate or Matchup, and submitting one shares it with every Crate the
+ * Peach is active in, where it scores toward that week's matchup.
+ */
 export class LoggingService {
   constructor(
     private readonly deps: {
       logs: WorkoutLogRepository;
-      workouts: WorkoutRepository;
-      ids: IdGenerator;
-      seasons: SeasonRepository;
       crates: CrateRepository;
-      windows: RoundWindowService;
-      scoring?: ScoringService;
+      ids: IdGenerator;
     },
   ) {}
 
-  private get scoring(): ScoringService {
-    return this.deps.scoring ?? DEFAULT_SCORING;
+  /** The Peach's newest unsubmitted log, if they have one going. */
+  async currentLog(peachId: string): Promise<WorkoutLog | null> {
+    return (await this.deps.logs.forPeach(peachId)).find((l) => !isSubmitted(l)) ?? null;
   }
 
-  /** Returns the Peach's log for the matchup, creating it on first use. */
-  async logForMatchup(matchup: Matchup, peachId: string, now: Date): Promise<WorkoutLog> {
-    if (!involves(matchup, peachId)) throw new DomainError('You are not part of this matchup.');
-    if (matchup.workoutId === null) throw new DomainError('This round has not opened yet.');
-    const existing = await this.deps.logs.forMatchup(matchup.id, peachId);
-    if (existing) return existing;
+  async startLog(peachId: string, now: Date, routine?: Routine): Promise<WorkoutLog> {
     const log = workoutLog({
       id: this.deps.ids.newId(),
       peachId,
-      workoutId: matchup.workoutId,
-      matchupId: matchup.id,
       startedAt: now,
+      routineId: routine?.id ?? null,
     });
     await this.deps.logs.save(log);
     return log;
   }
 
-  async startFreeLog(peachId: string, now: Date): Promise<WorkoutLog> {
-    const log = workoutLog({ id: this.deps.ids.newId(), peachId, startedAt: now });
-    await this.deps.logs.save(log);
-    return log;
-  }
-
-  /** Adds or replaces the entry for one exercise / workout item. */
-  async recordEntry(logId: string, entry: ExerciseLogEntry): Promise<WorkoutLog> {
-    const updated = upsertEntry(await this.requireEditable(logId), entry);
+  /**
+   * Adds or replaces the entry for one exercise. A log counts toward the
+   * week it was started in, so the clock restarts when the first exercise is
+   * recorded: a log opened on Sunday but filled in on Tuesday is Tuesday's.
+   */
+  async recordEntry(logId: string, entry: ExerciseLogEntry, now: Date): Promise<WorkoutLog> {
+    const problem = implausibility(entry);
+    if (problem) throw new DomainError(problem);
+    const log = await this.requireEditable(logId);
+    const started = log.entries.length === 0 ? { ...log, startedAt: now } : log;
+    const updated = upsertEntry(started, entry);
     await this.deps.logs.save(updated);
     return updated;
   }
 
-  async submit(logId: string, now: Date, notes?: string | null): Promise<WorkoutLog> {
+  async removeEntry(logId: string, exerciseId: string): Promise<WorkoutLog> {
+    const updated = removeEntry(await this.requireEditable(logId), exerciseId);
+    await this.deps.logs.save(updated);
+    return updated;
+  }
+
+  /**
+   * Freezes the log and shares it with the Peach's active Crates. Points
+   * land in a matchup only if the log is submitted before that week's
+   * round closes.
+   */
+  async submit(
+    logId: string,
+    now: Date,
+    details: { durationMinutes?: number | null; notes?: string | null } = {},
+  ): Promise<WorkoutLog> {
     const log = await this.requireEditable(logId);
-    if (log.matchupId !== null && !(await this.windowOpen(log.matchupId, now))) {
-      throw new DomainError('The logging window for this round has closed.');
+    if (log.entries.length === 0) throw new DomainError('Log at least one exercise first.');
+    const minutes = details.durationMinutes ?? log.durationMinutes;
+    if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0)) {
+      throw new DomainError('Session length must be a whole number of minutes.');
     }
+    if (minutes !== null && minutes > MAX_SESSION_MINUTES) {
+      throw new DomainError('A session can’t be longer than 10 hours.');
+    }
+    const crates = (await this.deps.crates.membershipsFor(log.peachId))
+      .filter(isActiveMembership)
+      .map((m) => m.crateId)
+      .sort();
     const submitted: WorkoutLog = {
       ...log,
       status: 'submitted',
       completedAt: now,
-      notes: notes ?? log.notes,
+      durationMinutes: minutes,
+      notes: details.notes?.trim() || log.notes,
+      sharedWith: crates,
     };
-    await this.deps.logs.save(submitted);
+    await this.deps.logs.saveSubmitted(submitted);
     return submitted;
-  }
-
-  /** Live score for a log against its workout (zero for free logs). */
-  async scoreFor(log: WorkoutLog, rules = STANDARD_SCORING_RULES): Promise<WorkoutScore> {
-    const workout = log.workoutId === null ? null : await this.deps.workouts.getById(log.workoutId);
-    return workout ? this.scoring.score(workout, log, rules) : ZERO_SCORE;
-  }
-
-  private async windowOpen(matchupId: string, now: Date): Promise<boolean> {
-    const { seasons, crates, windows } = this.deps;
-    const matchup = await seasons.getMatchup(matchupId);
-    const round = matchup ? await seasons.getRound(matchup.roundId) : null;
-    const season = round ? await seasons.getById(round.seasonId) : null;
-    const crate = season ? await crates.getById(season.crateId) : null;
-    if (!round || !crate) return false;
-    return windows.windowFor(round, crate).isOpenAt(now);
   }
 
   private async requireEditable(logId: string): Promise<WorkoutLog> {
@@ -105,5 +109,3 @@ export class LoggingService {
     return log;
   }
 }
-
-const DEFAULT_SCORING = new ScoringService();
