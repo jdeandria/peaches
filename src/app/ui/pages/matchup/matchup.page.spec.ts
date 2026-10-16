@@ -73,7 +73,8 @@ describe('MatchupPage', () => {
       'Reps',
       'Active minutes',
     ]);
-    expect(text(el.querySelector('.category'))).toContain('23 pts per 5 km');
+    expect(text(el.querySelector('.category:not(.heading)'))).toContain('23 pts per 5 km');
+    expect(text(el.querySelector('.category.heading'))).toBe('YouCho');
     expect(text(el)).toContain('Nothing logged this week yet.');
 
     // A run I log now shows up in the score.

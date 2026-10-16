@@ -2,7 +2,7 @@
  * A calendar date with no time or zone component, as an ISO-8601 string
  * (`yyyy-MM-dd`).
  *
- * Exercise days, season boundaries and logging windows are all calendar
+ * Matchup weeks, season boundaries and logging windows are all calendar
  * dates in the owning Crate's time zone. Using `Date` for those would
  * silently drag a time zone along and produce off-by-one-day bugs, so the
  * domain uses this type instead and converts at the edges.

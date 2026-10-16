@@ -54,6 +54,14 @@
 
       <pch-section title="Where the points came from" />
       <pch-list-card [pchStagger]="2">
+        <div class="category heading pch-label-medium muted" aria-hidden="true">
+          <span class="icon-space"></span>
+          <span class="what"></span>
+          <span class="amount">{{ myName() }}</span>
+          @if (hasOpponent()) {
+            <span class="amount">{{ theirName() }}</span>
+          }
+        </div>
         @for (c of categories(); track c.label) {
           <div class="category">
             <span class="material-symbols-rounded icon" aria-hidden="true">{{ c.icon }}</span>

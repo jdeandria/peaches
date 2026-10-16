@@ -1,8 +1,8 @@
 /**
  * A small seeded pseudo-random generator (mulberry32).
  *
- * The workout generator and demo seeder must produce the same output for the
- * same seed on every device, so they never use `Math.random`. Mulberry32 is
+ * The demo seeder must produce the same output for the same seed on every
+ * device and test run, so it never uses `Math.random`. Mulberry32 is
  * fast, has a full 2^32 period and passes the statistical tests that matter
  * for weighted sampling.
  */

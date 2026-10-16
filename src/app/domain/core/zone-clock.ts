@@ -3,7 +3,7 @@ import { LocalDate, localDateOfUtc, toUtcDate } from './local-date';
 /**
  * Converts between calendar dates in an IANA time zone and UTC instants.
  *
- * The domain keeps exercise days as {@link LocalDate}s in the Crate's zone;
+ * The domain keeps matchup weeks as {@link LocalDate}s in the Crate's zone;
  * this is the single place where those dates meet the clock. The real
  * implementation uses the browser's `Intl` time-zone data; tests use
  * {@link UtcZoneClock}.

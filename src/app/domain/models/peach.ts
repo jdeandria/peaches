@@ -12,7 +12,7 @@ import { UNIT_SYSTEMS, UnitSystem } from './training';
 /**
  * A user of the app.
  *
- * A Peach is independent of any Crate: capabilities, logs and fitness level
+ * A Peach is independent of any Crate: logs and fitness level
  * belong to the Peach and are shared across every Crate they join.
  */
 export interface Peach {
@@ -21,8 +21,8 @@ export interface Peach {
   readonly email: string | null;
   readonly avatarUrl: string | null;
   /**
-   * Self-assessed level 1 (new to exercise) .. 5 (advanced). Caps the
-   * difficulty of exercises the generator will prescribe.
+   * Self-assessed level 1 (new to exercise) .. 5 (advanced). Kept from when
+   * workouts were generated; nothing scores or prescribes by it now.
    */
   readonly fitnessLevel: number;
   /** IANA time zone used to decide what "today" means for free logging. */
