@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Peaches</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Peaches: log workouts and compete with your Crate." />
+    <meta name="theme-color" content="#FFE5B4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1A1110" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Peaches" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="apple-touch-icon" href="icons/Icon-192.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <style>
+      /* Shown until Angular renders; kept tiny and inline so it paints at once. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 16px;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+        color: #5c5c5c;
+        background: #fff;
+      }
+      #splash span {
+        font-size: 64px;
+      }
+      @media (prefers-color-scheme: dark) {
+        #splash {
+          background: #131313;
+          color: #c6c6c6;
+        }
+      }
+      app-root:not(:empty) + #splash {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <app-root></app-root>
+    <div id="splash" role="status">
+      <span aria-hidden="true">🍑</span>
+      <p id="splash-message">Loading Peaches…</p>
+    </div>
+    <noscript>Peaches needs JavaScript to run.</noscript>
+  </body>
+</html>

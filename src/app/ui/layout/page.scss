@@ -1,0 +1,107 @@
+:host {
+  --pch-gutter: 16px;
+  display: flex;
+  flex-direction: column;
+  // Fill the viewport above the navigation bar so the bottom bar sits low.
+  min-height: calc(100dvh - var(--pch-bottom-inset, 0px));
+  @media (min-width: 600px) {
+    --pch-gutter: 24px;
+  }
+}
+
+.column {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--pch-page-max) + 2 * var(--pch-gutter));
+  margin-inline: auto;
+  padding-inline: var(--pch-gutter);
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--mat-sys-surface);
+}
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 64px;
+  padding-inline: calc(var(--pch-gutter) - 4px);
+  &.with-back {
+    padding-inline-start: calc(var(--pch-gutter) - 12px);
+  }
+}
+.toolbar-title {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  padding-inline-start: 4px;
+  font-weight: 500;
+  > span {
+    grid-area: 1 / 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+.fade-in {
+  animation: fade var(--pch-duration-short) var(--pch-ease-emphasized-decelerate);
+}
+.fade-out {
+  animation: fade var(--pch-duration-short) var(--pch-ease-emphasized-accelerate) reverse;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.header {
+  padding-bottom: 8px;
+  h1 {
+    margin: 0;
+  }
+}
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.content {
+  flex: 1;
+  padding-top: 8px;
+  padding-bottom: 32px;
+}
+:host:has(.fab:not(:empty)) .content {
+  padding-bottom: 96px;
+}
+
+.fab {
+  position: fixed;
+  z-index: 3;
+  inset-inline-end: var(--pch-gutter);
+  bottom: calc(
+    16px + var(--pch-bottom-inset, 0px) + var(--pch-safe-bottom, env(safe-area-inset-bottom, 0px))
+  );
+  &:empty {
+    display: none;
+  }
+}
+:host:has(.bottom-bar .column:not(:empty)) .fab {
+  bottom: calc(
+    88px + var(--pch-bottom-inset, 0px) + var(--pch-safe-bottom, env(safe-area-inset-bottom, 0px))
+  );
+}
+
+.bottom-bar {
+  position: sticky;
+  bottom: var(--pch-bottom-inset, 0px);
+  z-index: 2;
+  background: var(--mat-sys-surface-container);
+  padding: 12px 0 calc(12px + var(--pch-safe-bottom, env(safe-area-inset-bottom, 0px)));
+}
+.bottom-bar:has(.column:empty) {
+  display: none;
+}

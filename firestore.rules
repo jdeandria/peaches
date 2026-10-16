@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isSelf(peachId) { return signedIn() && request.auth.uid == peachId; }
+    function isMember(crateId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/crates/$(crateId)/memberships/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/crates/$(crateId)/memberships/$(request.auth.uid)).data.status == 'active';
+    }
+    function canManage(crateId) {
+      let m = get(/databases/$(database)/documents/crates/$(crateId)/memberships/$(request.auth.uid)).data;
+      return isMember(crateId) && (m.role == 'owner' || m.role == 'admin');
+    }
+    function seasonCrate(seasonId) {
+      return get(/databases/$(database)/documents/seasons/$(seasonId)).data.crateId;
+    }
+
+    // Profiles are public to signed-in users (names appear in standings);
+    // only the owner writes.
+    match /peaches/{peachId} {
+      allow read: if signedIn();
+      allow create, update: if isSelf(peachId) && request.resource.data.id == peachId;
+      allow delete: if false;
+
+      match /capabilities/{exerciseId} {
+        allow read: if signedIn();
+        allow write: if isSelf(peachId) && request.resource.data.peachId == peachId;
+      }
+    }
+
+    match /crates/{crateId} {
+      // Lookup by invite code needs a read before membership exists.
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.ownerPeachId == request.auth.uid;
+      allow update: if canManage(crateId) && request.resource.data.ownerPeachId == resource.data.ownerPeachId;
+      allow delete: if false;
+
+      match /memberships/{peachId} {
+        allow read: if signedIn();
+        // Join yourself as a plain member, or manage others as owner/admin.
+        allow create: if isSelf(peachId) && request.resource.data.role == 'member'
+                      || canManage(crateId);
+        allow update: if isSelf(peachId) && request.resource.data.role == resource.data.role
+                      || canManage(crateId);
+        allow delete: if false;
+      }
+    }
+
+    // There is no server: whichever member's device notices that a round
+    // is due opens it (generating the deterministic workout) or closes it
+    // (scoring submitted logs). So schedules are created by owners/admins,
+    // but any active member may advance round, matchup and season state.
+    match /seasons/{seasonId} {
+      allow read: if signedIn() && isMember(resource.data.crateId);
+      allow create: if signedIn() && canManage(request.resource.data.crateId);
+      allow update: if isMember(resource.data.crateId)
+                    && request.resource.data.crateId == resource.data.crateId
+                    && request.resource.data.participantIds == resource.data.participantIds;
+      allow delete: if false;
+
+      match /rounds/{roundId} {
+        allow read: if signedIn() && isMember(seasonCrate(seasonId));
+        allow create: if canManage(seasonCrate(seasonId));
+        allow update: if isMember(seasonCrate(seasonId))
+                      && request.resource.data.date == resource.data.date
+                      && request.resource.data.index == resource.data.index;
+        allow delete: if false;
+      }
+      match /matchups/{matchupId} {
+        allow read: if signedIn() && isMember(seasonCrate(seasonId));
+        allow create: if canManage(seasonCrate(seasonId));
+        allow update: if isMember(seasonCrate(seasonId))
+                      && request.resource.data.homePeachId == resource.data.homePeachId
+                      && request.resource.data.awayPeachId == resource.data.awayPeachId;
+        allow delete: if false;
+      }
+    }
+
+    // Workouts are generated client-side when a round opens. Their ids and
+    // contents derive from the matchup, so concurrent writers converge.
+    match /workouts/{workoutId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    match /workoutLogs/{logId} {
+      allow read: if signedIn();
+      allow create: if isSelf(request.resource.data.peachId);
+      // Owners edit until submitted; a submitted log is frozen.
+      allow update: if isSelf(resource.data.peachId)
+                    && resource.data.status != 'submitted'
+                    && request.resource.data.peachId == resource.data.peachId;
+      allow delete: if false;
+    }
+  }
+}

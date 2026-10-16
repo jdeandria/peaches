@@ -1,0 +1,25 @@
+// Global styles: the Peaches M3 theme — see src/app/ui/README.md.
+@use 'sass:meta';
+@use '@fontsource-variable/roboto-flex/opsz';
+@use './app/ui/theme/tokens';
+@use './app/ui/theme/springs';
+
+// Only the icons the app uses, subset from Material Symbols Rounded by
+// `npm run icons` (scripts/icons.mjs + scripts/subset-icons.py): a few
+// kilobytes instead of 5 MB, so it is precached and works offline.
+@font-face {
+  font-family: 'Material Symbols Rounded';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./assets/fonts/material-symbols-rounded.woff2') format('woff2');
+}
+
+html {
+  @include tokens.theme;
+}
+
+// The generated palette is emitted after mat.theme so its colours win.
+@include meta.load-css('./app/ui/theme/palette');
+
+@include tokens.globals;

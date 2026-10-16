@@ -1,0 +1,75 @@
+name: Deploy web
+
+# Every push to main goes live on Firebase Hosting; pull requests get a
+# temporary preview channel whose URL is posted on the PR.
+#
+# Secrets:
+#   FIREBASE_SERVICE_ACCOUNT  JSON key for a service account with the
+#                             "Firebase Hosting Admin" role (plus "Firebase
+#                             Rules Admin" and "Cloud Datastore Index Admin"
+#                             for the rules/indexes step)
+#   FIREBASE_PROJECT_ID       the Firebase project id
+# Variables:
+#   PEACHES_BACKEND           `firebase` once src/app/data/firebase/firebase-config.ts
+#                             holds the real web config; defaults to `demo`
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  checks: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  deploy:
+    name: Build and deploy to Firebase Hosting
+    runs-on: ubuntu-latest
+    env:
+      # Deploy steps run only once the Firebase secret exists, so pull
+      # requests stay green before Firebase is set up.
+      HAS_FIREBASE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    steps:
+      - name: Firebase not configured
+        if: env.HAS_FIREBASE != 'true'
+        run: echo "::notice::FIREBASE_SERVICE_ACCOUNT is not set; building only. See docs/RELEASING.md."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: |
+          if [ "${{ vars.PEACHES_BACKEND }}" = "firebase" ]; then
+            npm run build:firebase
+          else
+            npm run build
+          fi
+      - name: Deploy (live)
+        if: env.HAS_FIREBASE == 'true' && github.event_name != 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          channelId: live
+      - name: Deploy Firestore rules and indexes
+        if: env.HAS_FIREBASE == 'true' && github.event_name != 'pull_request'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx firebase deploy --only firestore --project "${{ secrets.FIREBASE_PROJECT_ID }}" --non-interactive
+      - name: Deploy (preview)
+        if: env.HAS_FIREBASE == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          expires: 7d

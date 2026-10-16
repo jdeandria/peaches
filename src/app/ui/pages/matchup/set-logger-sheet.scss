@@ -1,0 +1,160 @@
+:host {
+  display: block;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 8px 16px;
+}
+
+.handle {
+  width: 32px;
+  height: 4px;
+  margin: 8px auto 16px;
+  border-radius: 2px;
+  background: var(--mat-sys-on-surface-variant);
+  opacity: 0.4;
+}
+
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h2:focus {
+  outline: none;
+}
+
+.prescription {
+  margin-top: 4px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.last-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--mat-sys-primary);
+
+  .material-symbols-rounded {
+    font-size: 16px;
+  }
+}
+
+.sets {
+  margin: 20px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.set {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--pch-radius-large);
+  background: var(--mat-sys-surface-container-lowest);
+
+  .set-label {
+    flex: 1;
+  }
+
+  .steppers {
+    width: 168px;
+  }
+
+  &.weighted {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding-top: 12px;
+
+    .steppers {
+      display: flex;
+      align-items: center;
+      width: auto;
+    }
+
+    .stepper {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+}
+
+.divider {
+  align-self: center;
+  width: 1px;
+  height: 36px;
+  margin: 0 8px;
+  background: var(--mat-sys-outline-variant);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+
+  button {
+    --mat-icon-button-state-layer-size: 40px;
+    flex: none;
+    padding: 8px;
+  }
+
+  .outlined {
+    border: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .tonal {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+}
+
+.field {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+
+  input {
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--pch-radius-small);
+    background: transparent;
+    color: inherit;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: 0;
+    }
+  }
+
+  .unit {
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+h3 {
+  margin-bottom: 8px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+
+  .material-symbols-rounded {
+    margin-inline-end: 8px;
+    font-size: 18px;
+  }
+
+  .save {
+    flex: 1;
+  }
+}

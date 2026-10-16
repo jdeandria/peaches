@@ -1,0 +1,342 @@
+import { NgTemplateOutlet } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  Directive,
+  inject,
+  input,
+} from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
+import { MatButton } from '@angular/material/button';
+
+import { AppContainer } from '../../../application/app-container';
+import { isBye, Matchup, opponentOf, Round, winnerId } from '../../../domain/models/season';
+import { scoredItems } from '../../../domain/models/workout';
+import { entryForItem, isSubmitted } from '../../../domain/models/workout-log';
+import { RoundWindow } from '../../../domain/services/round-window';
+import { AppState } from '../../../state/app-state';
+import { ShapedAvatar } from '../../expressive/shaped-avatar';
+import { WavyProgress } from '../../expressive/wavy-progress';
+import { Fmt } from '../../format';
+import { DateBadge } from '../../layout/date-badge';
+import { ListRow } from '../../layout/list-row';
+
+/** Display data for a matchup that needs a lookup (opponent, round, crate, window). */
+export interface MatchupInfo {
+  readonly opponentName: string | null;
+  readonly round: Round | null;
+  readonly crateName: string | null;
+  readonly window: RoundWindow | null;
+}
+
+/** Resolves the names and dates a matchup card or row shows. */
+export async function loadMatchupInfo(
+  app: AppContainer,
+  m: Matchup,
+  me: string | null,
+): Promise<MatchupInfo> {
+  const opponentId = me === null ? null : opponentOf(m, me);
+  const [opponent, round, season, window] = await Promise.all([
+    opponentId === null ? null : app.peaches.getById(opponentId),
+    app.seasons.getRound(m.roundId),
+    app.seasons.getById(m.seasonId),
+    app.seasonService.windowFor(m.roundId),
+  ]);
+  const crate = season ? await app.crates.getById(season.crateId) : null;
+  return {
+    opponentName: opponent?.displayName ?? null,
+    round,
+    crateName: crate?.name ?? null,
+    window,
+  };
+}
+
+/** Shared lookups for the hero card and list row (port of `_MatchupView`). */
+@Directive()
+abstract class MatchupView {
+  protected readonly state = inject(AppState);
+  readonly matchup = input.required<Matchup>();
+
+  protected readonly info = this.state.query(
+    () => ({ m: this.matchup(), me: this.state.peachId() }),
+    ({ m, me }, app) => loadMatchupInfo(app, m, me),
+  );
+  protected readonly me = this.state.peachId;
+  protected readonly bye = computed(() => isBye(this.matchup()));
+  protected readonly opponentId = computed(() => {
+    const me = this.me();
+    return me === null ? null : opponentOf(this.matchup(), me);
+  });
+  protected readonly round = computed(() => this.info.value()?.round ?? null);
+  protected readonly crateName = computed(() => this.info.value()?.crateName ?? null);
+  protected readonly title = computed(() =>
+    this.bye() ? 'Bye round' : `vs ${this.info.value()?.opponentName ?? '…'}`,
+  );
+  /** Avatar initial source: "–" for a bye, "?" until the name loads. */
+  protected readonly avatarName = computed(() =>
+    this.bye() ? '–' : (this.info.value()?.opponentName ?? '?'),
+  );
+  protected readonly avatarId = computed(() => this.opponentId() ?? this.matchup().id);
+}
+
+/**
+ * The matchup that needs doing, as an M3 hero card on the primary
+ * container with a clear primary action and logging progress (port of
+ * `MatchupHeroCard`). The call to action is a link; clicking anywhere else
+ * on the card follows it too (pointer convenience only).
+ */
+@Component({
+  selector: 'pch-matchup-hero-card',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink, MatButton, ShapedAvatar, WavyProgress],
+  template: `
+    <!-- The card is a larger mouse target; keyboard and screen readers use its link. -->
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+    <div class="card" (click)="open($event)">
+      <div class="top">
+        <span class="meta pch-label-large">{{ roundLine() }}</span>
+        @if (closesIn(); as closes) {
+          <span class="pill pch-label-medium">
+            <span class="material-symbols-rounded" aria-hidden="true">schedule</span>{{ closes }}
+          </span>
+        }
+      </div>
+      <div class="who">
+        <pch-shaped-avatar
+          [shapeId]="avatarId()"
+          [name]="avatarName()"
+          [size]="52"
+          color="surface-container-lowest"
+          foreground="primary"
+        />
+        <div class="names">
+          <h3 class="pch-headline-small">{{ title() }}</h3>
+          @if (crateName(); as crate) {
+            <p class="meta pch-body-medium">{{ crate }}</p>
+          }
+        </div>
+      </div>
+      @if (total() > 0) {
+        <div class="progress-row pch-label-large">
+          <span>{{
+            submitted() ? 'Submitted' : done() + ' of ' + total() + ' exercises logged'
+          }}</span>
+          @if (workout(); as w) {
+            <span class="meta">~{{ w.estimatedMinutes }} min</span>
+          }
+        </div>
+        <pch-wavy-progress
+          [value]="progress()"
+          [flowing]="!submitted() && done() > 0"
+          color="primary"
+          trackColor="color-mix(in srgb, var(--mat-sys-surface-container-lowest) 70%, transparent)"
+        />
+      }
+      <a matButton="filled" class="cta" [routerLink]="link()">
+        <span class="material-symbols-rounded" aria-hidden="true">{{ cta().icon }}</span>
+        {{ cta().label }}
+      </a>
+    </div>
+  `,
+  styles: `
+    :host {
+      display: block;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      padding: 20px 24px 24px;
+      border-radius: var(--pch-radius-extra-large);
+      background: var(--mat-sys-primary-container);
+      color: var(--mat-sys-on-primary-container);
+      cursor: pointer;
+    }
+    .meta {
+      opacity: 0.8;
+    }
+    .top,
+    .who,
+    .progress-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .top .meta {
+      flex: 1;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 60%, transparent);
+    }
+    .pill .material-symbols-rounded {
+      font-size: 14px;
+    }
+    .who {
+      margin-top: 16px;
+    }
+    .names {
+      min-width: 0;
+    }
+    h3,
+    p {
+      margin: 0;
+    }
+    .progress-row {
+      justify-content: space-between;
+      margin: 20px 0 8px;
+    }
+    .cta {
+      margin-top: 20px;
+      width: 100%;
+    }
+    .cta .material-symbols-rounded {
+      margin-inline-end: 8px;
+      font-size: 20px;
+    }
+  `,
+})
+export class MatchupHeroCard extends MatchupView {
+  private readonly router = inject(Router);
+
+  protected readonly workout = this.state.query(
+    () => this.matchup().workoutId ?? undefined,
+    (id, app) => app.workouts.getById(id),
+  ).value;
+  protected readonly log = computed(
+    () => this.state.myLogs.value()?.find((l) => l.matchupId === this.matchup().id) ?? null,
+  );
+  protected readonly total = computed(() => {
+    const w = this.workout();
+    return w ? scoredItems(w).length : 0;
+  });
+  protected readonly done = computed(() => {
+    const w = this.workout();
+    const log = this.log();
+    if (!w || !log) return 0;
+    return scoredItems(w).filter((i) => entryForItem(log, i.id) !== undefined).length;
+  });
+  protected readonly submitted = computed(() => {
+    const log = this.log();
+    return log !== null && isSubmitted(log);
+  });
+  protected readonly progress = computed(() =>
+    this.submitted() ? 1 : this.total() === 0 ? 0 : this.done() / this.total(),
+  );
+  protected readonly roundLine = computed(() => {
+    const r = this.round();
+    return r ? `Round ${r.index + 1} · ${Fmt.focus(r.focus)}` : '';
+  });
+  protected readonly closesIn = computed(() => {
+    const window = this.info.value()?.window;
+    if (!window || this.submitted()) return null;
+    return Fmt.closesIn(window.remainingMsAt(this.state.nowTick()));
+  });
+  protected readonly link = computed(() => ['/matchups', this.matchup().id]);
+  protected readonly cta = computed(() =>
+    this.submitted()
+      ? { icon: 'visibility', label: 'View workout' }
+      : this.done() > 0
+        ? { icon: 'play_arrow', label: 'Continue workout' }
+        : { icon: 'bolt', label: 'Start workout' },
+  );
+
+  protected open(event: MouseEvent): void {
+    // The link handles its own clicks; text selection is not a click.
+    if ((event.target as Element).closest('a')) return;
+    if (getSelection()?.toString()) return;
+    void this.router.navigate(this.link());
+  }
+}
+
+/**
+ * A matchup as a list row: opponent, crate and focus, with a calendar
+ * badge for the date or the result once played (port of `MatchupListRow`).
+ * With `link` set the row opens the matchup.
+ */
+@Component({
+  selector: 'pch-matchup-row',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgTemplateOutlet, RouterLink, ListRow, ShapedAvatar, DateBadge],
+  template: `
+    <ng-template #trailing>
+      @if (result(); as r) {
+        <span class="result">
+          <span class="pch-title-small score" [class.won]="r.won">{{ r.score }}</span>
+          <span class="pch-label-small outcome">{{ r.outcome }}</span>
+        </span>
+      } @else if (round(); as round) {
+        <pch-date-badge [date]="round.date" />
+      }
+    </ng-template>
+    @if (link()) {
+      <a pch-list-row [routerLink]="['/matchups', matchup().id]">
+        <pch-shaped-avatar rowLeading [shapeId]="avatarId()" [name]="avatarName()" />
+        {{ title() }}
+        <span rowSubtitle class="one-line">{{ subtitle() }}</span>
+        <span rowTrailing><ng-container [ngTemplateOutlet]="trailing" /></span>
+      </a>
+    } @else {
+      <pch-list-row>
+        <pch-shaped-avatar rowLeading [shapeId]="avatarId()" [name]="avatarName()" />
+        {{ title() }}
+        <span rowSubtitle class="one-line">{{ subtitle() }}</span>
+        <span rowTrailing><ng-container [ngTemplateOutlet]="trailing" /></span>
+      </pch-list-row>
+    }
+  `,
+  styles: `
+    :host {
+      display: block;
+    }
+    .one-line {
+      display: block;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .result {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .score {
+      font-variant-numeric: tabular-nums;
+    }
+    .won {
+      color: var(--mat-sys-primary);
+    }
+    .outcome {
+      color: var(--mat-sys-on-surface-variant);
+    }
+  `,
+})
+export class MatchupListRow extends MatchupView {
+  /** Make the row a link to the matchup. */
+  readonly link = input(false);
+
+  protected readonly subtitle = computed(() => {
+    const r = this.round();
+    return [this.crateName(), r ? Fmt.focus(r.focus) : null].filter((s) => s !== null).join(' · ');
+  });
+
+  protected readonly result = computed(() => {
+    const m = this.matchup();
+    const me = this.me();
+    if (m.result === null || me === null) return null;
+    const home = m.homePeachId === me;
+    const mine = home ? m.result.homePoints : m.result.awayPoints;
+    const theirs = home ? m.result.awayPoints : m.result.homePoints;
+    const winner = winnerId(m);
+    const won = winner === me;
+    return {
+      won,
+      score: isBye(m) ? Fmt.points(mine) : `${Fmt.points(mine)}–${Fmt.points(theirs)}`,
+      outcome: isBye(m) ? 'Bye' : won ? 'Won' : winner === null ? 'Tie' : 'Lost',
+    };
+  });
+}
