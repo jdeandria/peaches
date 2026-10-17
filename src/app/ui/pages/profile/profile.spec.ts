@@ -32,9 +32,8 @@ describe('ProfilePage', () => {
     expect(el.querySelector('h1')?.textContent).toBe('Profile');
     expect(el.querySelector('pch-card h2')?.textContent).toBe('You');
     expect(el.textContent).toContain('2 Crates');
-    expect(el.textContent).toContain('440 exercises');
-    expect(el.textContent).toContain('Add favourites to your Crates’ libraries');
-    expect(el.querySelector('a[href="/exercises"]')).not.toBeNull();
+    // Exercises are added by logging them (decision #21); nothing links to a library.
+    expect(el.querySelector('a[href="/exercises"]')).toBeNull();
     expect(el.textContent).toContain(`Version ${APP_VERSION}`);
     // The demo cannot sign out, and the browser offered no install prompt.
     expect(el.textContent).not.toContain('Sign out');

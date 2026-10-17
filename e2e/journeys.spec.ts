@@ -23,7 +23,7 @@ test('core journey: log solo, see it score, vote on the rules', async ({ page })
   await expect(page.getByRole('heading', { name: 'vs Cho' })).toBeVisible();
 
   // Opening the log starts the clock; log a 5 km run.
-  await page.getByRole('link', { name: 'Log a workout' }).click();
+  await page.getByRole('link', { name: 'Start' }).click();
   await expect(page.getByText('Runs while this screen is open')).toBeVisible();
   await page.getByRole('button', { name: 'Add exercise' }).click();
   const picker = page.getByRole('dialog');
@@ -117,7 +117,7 @@ test('dispute a crate-mate’s numbers and vote on them', async ({ page }) => {
 test('edit a finished workout’s time', async ({ page }) => {
   await openApp(page);
   await page.locator('a[pch-list-row][href^="/log/"]').first().click();
-  await page.getByRole('button', { name: 'Edit time' }).click();
+  await page.getByRole('button', { name: 'Edit details' }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Session time').fill('75');
   await dialog.getByRole('button', { name: 'Save' }).click();
@@ -129,7 +129,7 @@ test('profile shows the seeded Peach and switches units', async ({ page }) => {
   await openApp(page);
   await nav(page, 'Profile').click();
   await expect(page.getByRole('heading', { name: 'You', exact: true })).toBeVisible();
-  await expect(page.getByText(/440 exercises/)).toBeVisible();
+  await expect(page.getByText('2 Crates')).toBeVisible();
   const imperial = page.getByRole('radio', { name: 'Imperial' });
   await imperial.click();
   await expect(imperial).toHaveAttribute('aria-checked', 'true');
@@ -137,7 +137,7 @@ test('profile shows the seeded Peach and switches units', async ({ page }) => {
 
 test('creating a crate opens its detail page', async ({ page }) => {
   await openApp(page, '/crates');
-  await page.getByRole('button', { name: 'New Crate' }).click();
+  await page.getByRole('button', { name: 'Add Crate' }).click();
   await page.getByRole('button', { name: /Create a Crate/ }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name').fill('Garage Gym');
@@ -158,7 +158,7 @@ test('creating a crate opens its detail page', async ({ page }) => {
 
 test('joining with a bad invite code shows an error', async ({ page }) => {
   await openApp(page, '/crates');
-  await page.getByRole('button', { name: 'New Crate' }).click();
+  await page.getByRole('button', { name: 'Add Crate' }).click();
   await page.getByRole('button', { name: /Join with invite code/ }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Invite code').fill('NOPE');

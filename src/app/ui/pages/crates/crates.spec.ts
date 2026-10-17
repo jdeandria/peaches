@@ -45,7 +45,7 @@ describe('Crates', () => {
       expect(warriors.textContent).toContain('Week 3 of 6');
       const lifters = links.find((a) => a.textContent?.includes('Lunch Break Lifters'))!;
       expect(lifters.textContent).toContain('Starts Mon, Oct 19');
-      expect(el.querySelector('button[matFab]')?.textContent).toContain('New Crate');
+      expect(el.querySelector('button[matFab]')?.textContent).toContain('Add Crate');
     });
 
     it('shows the empty state without Crates', async () => {

@@ -38,7 +38,7 @@ import { JoinCrateDialog } from './join-crate-dialog';
     }
     <button pageFab matFab extended type="button" (click)="openActions()">
       <span class="material-symbols-rounded" aria-hidden="true">add</span>
-      New Crate
+      Add Crate
     </button>
   </pch-page>`,
   styles: `

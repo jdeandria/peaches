@@ -19,13 +19,16 @@
       @if (!draft()) {
         <button matButton type="button" class="edit-details" (click)="editDetails()">
           <span class="material-symbols-rounded" aria-hidden="true">edit_calendar</span>
-          Edit time
+          Edit details
         </button>
       }
     </div>
 
     @if (pledges().length > 0) {
-      <ul class="pledges" [pchStagger]="0" aria-label="Your pledges this week">
+      <h2 id="pledges-caption" class="caption pch-label-large" [pchStagger]="0">
+        Your pledges this week
+      </h2>
+      <ul class="pledges" [pchStagger]="0" aria-labelledby="pledges-caption">
         @for (p of pledges(); track p.key) {
           <li class="pledge" [class.hit]="p.hit">
             <span class="material-symbols-rounded" aria-hidden="true">{{
@@ -39,7 +42,10 @@
     }
 
     @if (totals().length > 0) {
-      <ul class="totals" [pchStagger]="1" aria-label="This workout adds up to">
+      <h2 id="totals-caption" class="caption pch-label-large" [pchStagger]="1">
+        This workout adds up to
+      </h2>
+      <ul class="totals" [pchStagger]="1" aria-labelledby="totals-caption">
         @for (t of totals(); track t.category) {
           <li class="total">
             <span class="material-symbols-rounded" aria-hidden="true">{{ t.icon }}</span>

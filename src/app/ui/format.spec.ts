@@ -10,18 +10,18 @@ describe('Fmt', () => {
       sets: loads.map((kg) => ({ reps: 5, loadKg: kg, seconds: null, meters: null })),
     });
 
-  describe('loggedLoad', () => {
+  describe('load', () => {
     it('is null without weights', () => {
-      expect(Fmt.loggedLoad(entry([null, null]), 'metric')).toBeNull();
+      expect(Fmt.load(entry([null, null]), 'metric')).toBeNull();
     });
 
     it('collapses equal weights and shows a range otherwise', () => {
-      expect(Fmt.loggedLoad(entry([60, 60, 60]), 'metric')).toBe('Lifted 60 kg');
-      expect(Fmt.loggedLoad(entry([60, 62.5, null]), 'metric')).toBe('Lifted 60–62.5 kg');
+      expect(Fmt.load(entry([60, 60, 60]), 'metric')).toBe('60 kg');
+      expect(Fmt.load(entry([60, 62.5, null]), 'metric')).toBe('60–62.5 kg');
     });
 
     it('converts to pounds', () => {
-      expect(Fmt.loggedLoad(entry([61.234986]), 'imperial')).toBe('Lifted 135 lb');
+      expect(Fmt.load(entry([61.234986]), 'imperial')).toBe('135 lb');
     });
   });
 

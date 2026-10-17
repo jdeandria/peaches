@@ -55,7 +55,9 @@ describe('VotePage', () => {
     // I haven't voted: my draft is the Crate's current tally.
     expect(values(el)).toEqual(['23', '4', '3', '18', '27', '25']);
     expect(text(el.querySelector('.budget'))).toContain('All 100 points given');
-    expect(text(el)).toContain('per 5 km · Crate 23 · this Season 23');
+    // The Season froze the same weights, so the Crate's number stands alone.
+    expect(text(el)).toContain('per 5 km · Crate 23');
+    expect(text(el)).not.toContain('this Season 23');
     expect(text(el)).toContain('keeps the rules it started with');
     // Not the owner: no grace period.
     expect(text(el)).not.toContain('Grace period');

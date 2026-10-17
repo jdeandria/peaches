@@ -13,16 +13,19 @@
     backLink="/crates"
     [maxWidth]="1080"
   >
-    <button
-      pageActions
-      matIconButton
-      type="button"
-      [attr.aria-label]="canShare ? 'Share invite code' : 'Copy invite code'"
-      [matTooltip]="canShare ? 'Share invite code' : 'Copy invite code'"
-      (click)="share(c)"
-    >
-      <span class="material-symbols-rounded" aria-hidden="true">share</span>
-    </button>
+    <!-- Without a native share sheet the code chip below already copies the code. -->
+    @if (canShare) {
+      <button
+        pageActions
+        matIconButton
+        type="button"
+        aria-label="Share invite code"
+        matTooltip="Share invite code"
+        (click)="share(c)"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">share</span>
+      </button>
+    }
 
     <div class="chips">
       <a class="chip action" [routerLink]="['/crates', c.id, 'vote']">

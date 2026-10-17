@@ -33,7 +33,9 @@
             <span class="pch-title-medium">{{ c.label }}</span>
             <span class="pch-body-small muted"
               >{{ c.per }} · Crate {{ c.crate
-              }}{{ c.season !== null ? ' · this Season ' + c.season : '' }}</span
+              }}{{
+                c.season !== null && c.season !== c.crate ? ' · this Season ' + c.season : ''
+              }}</span
             >
           </div>
           <div class="stepper">
@@ -87,7 +89,11 @@
             <span class="pch-body-small muted">{{ r.describe }}</span>
             <span class="pch-body-small muted"
               >Crate {{ r.crate }}{{ r.unit
-              }}{{ r.season !== null ? ' · this Season ' + r.season + r.unit : '' }}</span
+              }}{{
+                r.season !== null && r.season !== r.crate
+                  ? ' · this Season ' + r.season + r.unit
+                  : ''
+              }}</span
             >
           </div>
           <div class="stepper">

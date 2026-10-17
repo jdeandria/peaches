@@ -18,7 +18,8 @@
   border-radius: var(--pch-radius-extra-large);
   background: var(--mat-sys-surface-container-high);
 
-  .material-symbols-rounded {
+  // The clock's own icon, not the one in its Edit details button.
+  > .material-symbols-rounded {
     grid-row: span 2;
     font-size: 32px;
     color: var(--mat-sys-on-surface-variant);
@@ -36,17 +37,27 @@
   .edit-details {
     grid-column: 3;
     grid-row: 1 / span 2;
+
+    .material-symbols-rounded {
+      margin-inline-end: 8px;
+      font-size: 20px;
+    }
   }
 
   &.running {
     background: var(--mat-sys-primary-container);
     color: var(--mat-sys-on-primary-container);
 
-    .material-symbols-rounded,
+    > .material-symbols-rounded,
     .hint {
       color: inherit;
     }
   }
+}
+
+.caption {
+  margin: 0 0 8px;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .pledges {

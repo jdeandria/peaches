@@ -47,21 +47,6 @@ export function peach(init: NewPeach): Peach {
   return p;
 }
 
-export function fitnessLevelLabel(level: number): string {
-  switch (level) {
-    case 1:
-      return 'Getting started';
-    case 2:
-      return 'Regular mover';
-    case 3:
-      return 'Fit';
-    case 4:
-      return 'Athletic';
-    default:
-      return 'Advanced';
-  }
-}
-
 export function peachFromJson(json: JsonMap): Peach {
   return {
     id: requireString(json['id'], 'id'),

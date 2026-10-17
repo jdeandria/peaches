@@ -23,7 +23,7 @@ import {
 } from './crate-exercise';
 import { Dispute, disputeFromJson, disputeToJson } from './dispute';
 import { Lineup, lineupFromJson, lineupToJson } from './lineup';
-import { fitnessLevelLabel, peach, peachFromJson, peachToJson } from './peach';
+import { peach, peachFromJson, peachToJson } from './peach';
 import {
   addTotals,
   categoryWeights,
@@ -112,8 +112,6 @@ describe('model JSON round trips', () => {
     });
     expect(() => peach({ id: 'p', displayName: 'P', createdAt: now, fitnessLevel: 0 })).toThrow();
     expect(() => peach({ id: 'p', displayName: 'P', createdAt: now, fitnessLevel: 6 })).toThrow();
-    expect(fitnessLevelLabel(1)).toBe('Getting started');
-    expect(fitnessLevelLabel(5)).toBe('Advanced');
   });
 
   it('Crate with settings', () => {

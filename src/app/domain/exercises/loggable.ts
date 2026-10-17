@@ -7,8 +7,8 @@ export const LOG_TRACKS = ['reps', 'time', 'distance'] as const;
 export type LogTrack = (typeof LOG_TRACKS)[number];
 
 /**
- * Anything a Peach can log: a catalog exercise or a custom exercise from one
- * of their Crates' libraries. The set logger and the log page only need
+ * Anything a Peach can log: a catalog exercise or a custom one, made up while
+ * logging or shared by a crate-mate. The set logger and the log page only need
  * this much, so both kinds are handled alike.
  */
 export interface LoggableExercise {

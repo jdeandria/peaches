@@ -204,5 +204,3 @@ export interface LogScore {
   readonly categories: readonly CategoryScore[];
   readonly total: number;
 }
-
-export const ZERO_LOG_SCORE: LogScore = Object.freeze({ categories: [], total: 0 });

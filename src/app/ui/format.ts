@@ -82,11 +82,6 @@ export const Fmt = {
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
   },
 
-  /** A weight in the Peach's units, e.g. "22.5 kg" or "50 lb". */
-  weight(kg: number, units: UnitSystem): string {
-    return `${WeightUnits.format(WeightUnits.toDisplay(kg, units))} ${WeightUnits.label(units)}`;
-  },
-
   /** Total volume load (sets × reps × weight), e.g. "2,450 kg". */
   volume(kg: number, units: UnitSystem): string {
     const shown = Math.round(WeightUnits.toDisplay(kg, units));
@@ -94,10 +89,10 @@ export const Fmt = {
   },
 
   /**
-   * The weights lifted across an entry's sets: "Lifted 20 kg" when they all
-   * match, otherwise the range "Lifted 20–25 kg". Null when none was logged.
+   * The weights lifted across an entry's sets: "20 kg" when they all match,
+   * otherwise the range "20–25 kg". Null when none was logged.
    */
-  loggedLoad(entry: ExerciseLogEntry, units: UnitSystem): string | null {
+  load(entry: ExerciseLogEntry, units: UnitSystem): string | null {
     const loads = entry.sets
       .map((s) => s.loadKg)
       .filter((kg): kg is number => kg !== null && kg > 0);
@@ -105,7 +100,7 @@ export const Fmt = {
     const shown = (kg: number) => WeightUnits.format(WeightUnits.toDisplay(kg, units));
     const low = shown(Math.min(...loads));
     const high = shown(Math.max(...loads));
-    return `Lifted ${low === high ? low : `${low}–${high}`} ${WeightUnits.label(units)}`;
+    return `${low === high ? low : `${low}–${high}`} ${WeightUnits.label(units)}`;
   },
 
   /** A distance in km or miles, e.g. "5.2 km". */
@@ -139,31 +134,21 @@ export const Fmt = {
    */
   entrySummary(entry: ExerciseLogEntry, units: UnitSystem): string {
     const parts = [Fmt.count(entry.sets.length, 'set')];
-    const meters = totalMeters(entry);
+    const distance = entryDistance(entry, units);
     const reps = totalReps(entry);
     const seconds = totalSeconds(entry);
-    if (meters > 0) {
-      parts.push(
-        entry.distanceKind === 'swimRow' || entry.distanceKind === null
-          ? `${integerFormat.format(meters)} m`
-          : Fmt.distance(meters, units),
-      );
-    }
+    if (distance) parts.push(distance);
     if (reps > 0) parts.push(`${integerFormat.format(reps)} reps`);
     if (seconds > 0) parts.push(Fmt.duration(seconds));
-    const load = Fmt.loggedLoad(entry, units);
-    if (load) parts.push(load.replace(/^Lifted /, ''));
+    const load = Fmt.load(entry, units);
+    if (load) parts.push(load);
     return parts.join(' · ');
   },
 
   /** The one number that sums an entry up: its distance, else its reps, else its time. */
   entryHeadline(entry: ExerciseLogEntry, units: UnitSystem): string {
-    const meters = totalMeters(entry);
-    if (meters > 0) {
-      return entry.distanceKind === 'swimRow' || entry.distanceKind === null
-        ? `${integerFormat.format(meters)} m`
-        : Fmt.distance(meters, units);
-    }
+    const distance = entryDistance(entry, units);
+    if (distance) return distance;
     const reps = totalReps(entry);
     if (reps > 0) return `${integerFormat.format(reps)} reps`;
     return Fmt.duration(totalSeconds(entry));
@@ -245,6 +230,15 @@ export const Fmt = {
     return `${n} ${n === 1 ? singular : plural}`;
   },
 } as const;
+
+/** An entry's distance: metres for swims, rows and the unclassified, else km or mi. Null if none. */
+function entryDistance(entry: ExerciseLogEntry, units: UnitSystem): string | null {
+  const meters = totalMeters(entry);
+  if (meters <= 0) return null;
+  return entry.distanceKind === 'swimRow' || entry.distanceKind === null
+    ? `${integerFormat.format(meters)} m`
+    : Fmt.distance(meters, units);
+}
 
 const CATEGORY: Record<ScoringCategory, { label: string; icon: string }> = {
   runWalk: { label: 'Run & walk', icon: 'directions_run' },

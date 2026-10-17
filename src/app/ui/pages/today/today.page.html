@@ -112,8 +112,8 @@
 <ng-template #logTrailing let-r>
   <span class="log-meta pch-label-medium">
     <span class="muted">{{ r.sets }} {{ r.sets === 1 ? 'set' : 'sets' }}</span>
-    @if (r.volume) {
-      <span class="volume">{{ r.volume }}</span>
+    @if (r.headline) {
+      <span class="amount">{{ r.headline }}</span>
     }
   </span>
 </ng-template>

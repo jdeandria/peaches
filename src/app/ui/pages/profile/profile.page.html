@@ -26,16 +26,6 @@
 
     <pch-section title="More" />
     <pch-list-card [pchStagger]="2" class="more">
-      <a pch-list-row routerLink="/exercises">
-        <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
-          >fitness_center</span
-        >
-        {{ catalogSize }} exercises
-        <span rowSubtitle>Add favourites to your Crates’ libraries</span>
-        <span rowTrailing class="material-symbols-rounded muted" aria-hidden="true"
-          >chevron_right</span
-        >
-      </a>
       @if (pwa.canInstall()) {
         <button pch-list-row type="button" (click)="install()">
           <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"

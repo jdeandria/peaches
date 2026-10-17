@@ -316,20 +316,16 @@ export class CrateDetailPage {
     }
   }
 
-  /** Native share sheet where there is one, else copy the code. */
+  /** The native share sheet; copies the code if sharing fails. */
   protected async share(crate: Crate): Promise<void> {
-    if (this.canShare) {
-      try {
-        await navigator.share({
-          title: crate.name,
-          text: `Join my Crate "${crate.name}" on Peaches with invite code ${crate.inviteCode}.`,
-        });
-        return;
-      } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-      }
+    try {
+      await navigator.share({
+        title: crate.name,
+        text: `Join my Crate "${crate.name}" on Peaches with invite code ${crate.inviteCode}.`,
+      });
+    } catch (e) {
+      if (!(e instanceof DOMException && e.name === 'AbortError')) await this.copyCode(crate);
     }
-    await this.copyCode(crate);
   }
 
   protected newSeason(crate: Crate): void {

@@ -40,6 +40,7 @@ describe('TodayPage', () => {
     const log = el.querySelector('pch-card.log')!;
     expect(text(log.querySelector('h3'))).toBe('Log a workout');
     expect(log.querySelector('a')?.getAttribute('href')).toBe('/log');
+    expect(text(log.querySelector('a'))).toBe('play_arrow Start');
 
     const heroes = el.querySelectorAll('pch-matchup-hero-card');
     expect(heroes).toHaveLength(1);
@@ -92,6 +93,8 @@ describe('TodayPage', () => {
     expect(recent[0].getAttribute('href')).toMatch(/^\/log\/.+/);
     expect(text(recent[0])).toContain('Run');
     expect(text(recent[0])).toMatch(/\d+ sets?/);
+    // Cardio rows sum up by distance, like lifting rows by weight moved.
+    expect(text(recent[0].querySelector('.amount'))).toMatch(/^[\d.]+ km$/);
   });
 
   it('offers to continue a workout in progress', async () => {

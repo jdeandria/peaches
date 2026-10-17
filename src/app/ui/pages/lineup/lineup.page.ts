@@ -201,8 +201,9 @@ export class LineupPage {
     if (!d || !r) return [];
     const units = this.state.units();
     const draft = this.draft();
+    // Averages are approximate, but nothing at all is exactly nothing.
     const usually = (c: ScoringCategory, form: CategoryTotals | null) =>
-      form === null ? null : `~${Fmt.amount(c, form[c], units)}`;
+      `${form && form[c] > 0 ? '~' : ''}${Fmt.amount(c, form?.[c] ?? 0, units)}`;
     return SCORING_CATEGORIES.filter((c) => r.weights[c] > 0).map((c) => {
       const target = draft.get(c) ?? null;
       const weight = r.weights[c];

@@ -6,12 +6,9 @@ import { MatButton } from '@angular/material/button';
 import { localDateOfLocal, startOfWeek } from '../../../domain/core/local-date';
 import { isLocked, LINEUP_OPENS_MS } from '../../../domain/models/lineup';
 import { isBye, Matchup, Round, winnerId } from '../../../domain/models/season';
-import {
-  isSubmitted,
-  totalSets,
-  volumeLoadKg,
-  WorkoutLog,
-} from '../../../domain/models/workout-log';
+import { ScoringCategory } from '../../../domain/models/scoring';
+import { isSubmitted, totalSets, WorkoutLog } from '../../../domain/models/workout-log';
+import { MetricExtractor } from '../../../domain/services/metric-extractor';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { ShapedAvatar } from '../../expressive/shaped-avatar';
@@ -31,8 +28,17 @@ interface LogRowView {
   readonly day: string;
   readonly names: string;
   readonly sets: number;
-  readonly volume: string | null;
+  /** The amount that sums the workout up: weight moved, else distance. */
+  readonly headline: string | null;
 }
+
+/** Which total headlines a workout row, in order of preference. */
+const HEADLINE_CATEGORIES: readonly ScoringCategory[] = [
+  'weightMoved',
+  'runWalk',
+  'ride',
+  'swimRow',
+];
 
 /**
  * The Peach's home: log a workout first, then this week's matchups and
@@ -136,8 +142,8 @@ export class TodayPage {
     return {
       title: 'Log a workout',
       text: 'Open it when you start: it times your session while you log.',
-      action: 'Log a workout',
-      icon: 'add',
+      action: 'Start',
+      icon: 'play_arrow',
     };
   });
 
@@ -173,14 +179,15 @@ export class TodayPage {
         .slice(0, 3)
         .map((e) => e.exerciseName)
         .join(', ');
-      const volumeKg = log.entries.reduce((v, e) => v + volumeLoadKg(e), 0);
+      const totals = MetricExtractor.extract(log);
+      const lead = HEADLINE_CATEGORIES.find((c) => totals[c] > 0);
       return {
         log,
         submitted: isSubmitted(log),
         day: Fmt.day(localDateOfLocal(log.startedAt)),
         names: names || 'Empty log',
         sets: totalSets(log),
-        volume: volumeKg > 0 ? Fmt.volume(volumeKg, units) : null,
+        headline: lead ? Fmt.amount(lead, totals[lead], units) : null,
       };
     });
   });

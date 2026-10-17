@@ -160,7 +160,7 @@ describe('LogPage', () => {
       Array.from(el.querySelectorAll('button')).some((b) => text(b)?.startsWith('Finish')),
     ).toBe(false);
 
-    button(el, 'Edit time')!.click();
+    button(el, 'Edit details')!.click();
     await stable(f);
     type(overlay().querySelector<HTMLInputElement>('input[inputmode=numeric]')!, '50');
     await stable(f);

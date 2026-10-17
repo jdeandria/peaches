@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
 
 import { Peach } from '../../../domain/models/peach';
 import { UnitSystem } from '../../../domain/models/training';
@@ -35,7 +34,6 @@ const UNIT_OPTIONS: readonly ButtonGroupOption<UnitSystem>[] = [
     ListRow,
     LoadingIndicator,
     Page,
-    RouterLink,
     Section,
     ShapedAvatar,
     Stagger,
@@ -49,7 +47,6 @@ export class ProfilePage {
 
   protected readonly version = APP_VERSION;
   protected readonly unitOptions = UNIT_OPTIONS;
-  protected readonly catalogSize = this.state.catalog.length;
 
   protected readonly peach = computed(() => this.state.peach.value());
   /** True while the profile is still loading (as opposed to signed out). */
