@@ -30,16 +30,13 @@ Android, iOS and desktop, and updates itself in the background.
 | Persistence | In-memory demo backend and Firestore repositories (contract- and rules-tested on the Firestore emulator) |
 | Auth | Firebase Auth (Google, Apple, email) behind an `AuthService`; demo mode auto-signs in |
 | CI (format, lint, type-check, unit, emulator, e2e, builds) | Done |
-| CD (Firebase Hosting with PR previews, GitHub Pages demo) | Workflows done; Hosting needs two secrets (`scripts/setup-ci.sh`) |
+| CD (Firebase Hosting with PR previews) | Workflows done; Hosting needs two secrets (`scripts/setup-ci.sh`) |
 
-## Live demo
+## Hosting
 
-Every push to `main` or a `feat/**` branch publishes the demo build to the
-`gh-pages` branch (see `.github/workflows/pages.yml`). Once Pages is enabled
-(Settings → Pages → Deploy from a branch → `gh-pages`, root) it is served at
-**https://jdeandria.github.io/peaches/**. The demo runs entirely in the
-browser with seeded data; nothing is saved between visits. Add
-`?demo=signed-out` to the URL to start on the sign-in screen.
+The app is served from Firebase Hosting only: every push to `main` deploys
+the Firebase build to `https://<project-id>.web.app`, and every pull request
+gets a 7-day preview channel (see [docs/RELEASING.md](docs/RELEASING.md)).
 
 ## Run it
 
@@ -51,7 +48,11 @@ npm start                    # http://localhost:4200, seeded demo
 ```
 
 The app starts in demo mode with a seeded Crate in the third week of a
-Season, so there is a matchup to win on the Today tab straight away. To run on Firebase, put your
+Season, so there is a matchup to win on the Today tab straight away. The
+demo runs entirely in the browser; nothing is saved between visits. Add
+`?demo=signed-out` to the URL to start on the sign-in screen.
+
+To run on Firebase, put your
 web app config in `src/app/data/firebase/firebase-config.ts` and build with
 `npm run build:firebase` (see docs/RELEASING.md). `npm run start:emulator`
 runs against `firebase emulators:start` on this machine.

@@ -8,7 +8,6 @@ All pipelines live in `.github/workflows/` and use the Node version in
 | `ci.yml` | every push except `main` (and fork PRs) | Format, lint, type-check, unit tests, Firestore emulator tests, builds, end-to-end journeys |
 | `deploy.yml` | push to `main`, manual run | Runs CI, then deploys the Firebase build to Hosting plus Firestore rules and indexes |
 | `preview.yml` | pull requests | Deploys a 7-day Hosting preview channel and comments its URL on the PR |
-| `pages.yml` | push to `main` or `feat/**` | Publishes the in-browser demo to GitHub Pages |
 
 ## ci.yml
 
@@ -100,13 +99,6 @@ carries `X-Content-Type-Options: nosniff`, a
 `strict-origin-when-cross-origin` referrer policy and
 `Cross-Origin-Opener-Policy: same-origin-allow-popups` (which keeps popup
 sign-in working).
-
-## pages.yml (GitHub Pages demo)
-
-Every push to `main` or `feat/**` builds the demo with the repository's
-base href and force-pushes it to the `gh-pages` branch, with `404.html`
-copied from `index.html` so deep links reach the Angular router. Enable it
-once under Settings → Pages → Deploy from a branch → `gh-pages`, root.
 
 ## Releasing a version
 
