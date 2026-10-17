@@ -1,8 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatSlider, MatSliderThumb } from '@angular/material/slider';
 
-import { fitnessLevelLabel, Peach } from '../../../domain/models/peach';
+import { Peach } from '../../../domain/models/peach';
 import { UnitSystem } from '../../../domain/models/training';
 import { AppState } from '../../../state/app-state';
 import { Pwa } from '../../../state/pwa';
@@ -35,8 +34,6 @@ const UNIT_OPTIONS: readonly ButtonGroupOption<UnitSystem>[] = [
     ListCard,
     ListRow,
     LoadingIndicator,
-    MatSlider,
-    MatSliderThumb,
     Page,
     RouterLink,
     Section,
@@ -52,20 +49,12 @@ export class ProfilePage {
 
   protected readonly version = APP_VERSION;
   protected readonly unitOptions = UNIT_OPTIONS;
-  protected readonly levelLabel = fitnessLevelLabel;
+  protected readonly catalogSize = this.state.catalog.length;
 
   protected readonly peach = computed(() => this.state.peach.value());
   /** True while the profile is still loading (as opposed to signed out). */
   protected readonly loading = computed(
     () => this.state.peachId() !== null && this.state.peach.value() === undefined,
-  );
-
-  /** The level shown while the slider is dragged, before it is saved. */
-  protected readonly draftLevel = signal<number | null>(null);
-  protected readonly level = computed(() => this.draftLevel() ?? this.peach()?.fitnessLevel ?? 1);
-
-  protected readonly capabilityCount = computed(
-    () => this.state.myCapabilityIds.value()?.size ?? 0,
   );
 
   protected readonly identityLine = computed(() => {
@@ -79,14 +68,6 @@ export class ProfilePage {
     this.state.authUser();
     return this.state.auth.availableProviders.size > 0;
   });
-
-  async saveLevel(peach: Peach, level: number): Promise<void> {
-    this.draftLevel.set(level);
-    if (level !== peach.fitnessLevel) {
-      await this.state.run((app) => app.peaches.save({ ...peach, fitnessLevel: level }));
-    }
-    this.draftLevel.set(null);
-  }
 
   async saveUnits(peach: Peach, units: UnitSystem | null): Promise<void> {
     if (units === null || units === peach.units) return;

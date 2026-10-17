@@ -4,7 +4,9 @@ import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { Matchup } from '../../../domain/models/season';
-import { seededBackend, settle, TestBackend } from '../../../../testing/test-app';
+import { exerciseLogEntry, setLog } from '../../../domain/models/workout-log';
+import { AppState } from '../../../state/app-state';
+import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { MatchupPage } from './matchup.page';
 
 @Component({ template: '' })
@@ -39,80 +41,93 @@ describe('MatchupPage', () => {
   }
 
   const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim();
-  const button = (root: ParentNode, name: string | RegExp) =>
-    Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find((b) => {
-      const label = b.getAttribute('aria-label') ?? text(b.querySelector('.mdc-button__label'));
-      return typeof name === 'string' ? label === name : name.test(label ?? '');
-    });
-  const score = (el: HTMLElement) =>
-    text(el.querySelector('.score pch-animated-number .pch-visually-hidden'));
+  const points = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('.scoreboard pch-animated-number .pch-visually-hidden')).map(
+      text,
+    );
 
-  it('shows the open workout, logs an item and submits', async () => {
+  it('shows this week’s live score, the breakdown and both sides’ workouts', async () => {
     const matchups = await setUp();
     const open = matchups.find((m) => m.status === 'inProgress')!;
     const f = await render(open.id);
     const el: HTMLElement = f.nativeElement;
 
-    expect(text(el.querySelector('h1'))).toBe('You vs Dev');
-    expect(text(el.querySelector('.subtitle'))).toMatch(/^Round 5 · Full body · ~\d+ min$/);
-    expect(score(el)).toBe('0 pts');
-    expect(text(el.querySelector('.banner .pch-body-medium'))).toMatch(
-      /^Logging closes in \d+ h · Tue, Oct 13 \d+:\d\d [AP]M$/,
-    );
+    expect(text(el.querySelector('h1'))).toBe('You vs Cho');
+    expect(text(el.querySelector('.subtitle'))).toBe('Weekend Warriors · Week 3 · Oct 12 – 18');
+    expect(points(el)).toEqual(['0', '31.8']);
+    expect(text(el.querySelector('.verdict'))).toBe('Live · Cho leads');
+    expect(text(el.querySelector('.banner'))).toContain('Everything you both log this week counts');
+    expect(el.querySelector('a.log')?.getAttribute('href')).toBe('/log');
+
     const headings = Array.from(el.querySelectorAll('h2')).map(text);
-    expect(headings).toEqual(['Warm-up', 'Main work', 'Conditioning', 'Cool-down']);
-    const labels = Array.from(el.querySelectorAll('pch-section pch-status-label')).map(text);
-    expect(labels).toEqual(['Not scored', 'Scored', 'Scored', 'Not scored']);
-    expect(el.querySelector('section[aria-label="Main work"] pch-wavy-progress')).not.toBeNull();
-    expect(el.querySelector('section[aria-label="Warm-up"] pch-wavy-progress')).toBeNull();
-
-    // Log the first scored exercise as prescribed.
-    const main = el.querySelector('section[aria-label="Main work"]')!;
-    const log = button(main, /^Log sets: /)!;
-    const name = log.getAttribute('aria-label')!.slice('Log sets: '.length);
-    log.click();
-    await stable(f);
-    const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(sheet.getAttribute('aria-label')).toBe(name);
-    button(sheet, 'As prescribed')!.click();
-    button(sheet, 'Save')!.click();
-    await stable(f);
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(score(el)).toBe('10 pts');
-    expect(button(main, `Edit sets: ${name}`)).toBeDefined();
-    expect(button(main, `Log sets: ${name}`)).toBeUndefined();
-
-    button(el, 'Submit workout')!.click();
-    await stable(f);
-    expect(document.body.textContent).toContain('Workout submitted. Nice work.');
-    expect(button(el, 'Submit workout')).toBeUndefined();
-    expect(text(el.querySelector('.banner .pch-body-medium'))).toBe(
-      'Submitted. Results arrive when the round closes.',
+    expect(headings).toEqual(['Where the points came from', 'Your workouts', 'Cho’s workouts']);
+    // Every category the Crate gave points to, with its weight per par.
+    const categories = Array.from(el.querySelectorAll('.category .what .pch-title-small')).map(
+      text,
     );
-    // Read-only once submitted.
-    expect(button(el, /^(Log|Edit) sets/)).toBeUndefined();
-    const log2 = await backend.container.logs.forMatchup(open.id, DEMO_PEACH_ID);
-    expect(log2?.status).toBe('submitted');
+    expect(categories).toEqual([
+      'Run & walk',
+      'Ride',
+      'Swim & row',
+      'Weight moved',
+      'Reps',
+      'Active minutes',
+    ]);
+    expect(text(el.querySelector('.category:not(.heading)'))).toContain('23 pts per 5 km');
+    expect(text(el.querySelector('.category.heading'))).toBe('YouCho');
+    expect(text(el)).toContain('Nothing logged this week yet.');
+
+    // A run I log now shows up in the score.
+    const log = await backend.container.loggingService.startLog(DEMO_PEACH_ID, FIXED_NOW);
+    await backend.container.loggingService.recordEntry(
+      log.id,
+      exerciseLogEntry({
+        exerciseId: 'bw-run',
+        exerciseName: 'Run',
+        distanceKind: 'runWalk',
+        sets: [setLog({ meters: 10_000, seconds: 3000 })],
+      }),
+      FIXED_NOW,
+    );
+    await backend.container.loggingService.submit(log.id, FIXED_NOW, { durationMinutes: 50 });
+    TestBed.inject(AppState).bump();
+    await stable(f);
+    // 10 km = 2 pars at 23; 50 min = 1.11 pars at 25.
+    expect(points(el)[0]).toBe('73.8');
+    expect(text(el.querySelector('.verdict'))).toBe('Live · You lead');
+    const mine = el.querySelectorAll('.logs > div')[0];
+    expect(mine.querySelector('a[pch-list-row]')?.getAttribute('href')).toBe(`/log/${log.id}`);
   });
 
-  it('shows the final score once the round has closed', async () => {
+  it('shows the final score once the week has closed', async () => {
     const matchups = await setUp();
-    const done = matchups.find((m) => m.status === 'complete' && m.awayPeachId !== null)!;
+    const done = matchups.find((m) => m.status === 'complete' && m.homePeachId === 'ada')!;
     const f = await render(done.id);
     const el: HTMLElement = f.nativeElement;
-    expect(text(el.querySelector('.final-score'))).toMatch(/^Final ?\d+(\.\d)? – \d+(\.\d)?$/);
-    expect(text(el.querySelector('.final > .pch-title-medium'))).toMatch(/^(You won|\w+ won|Tie)$/);
-    expect(button(el, 'Submit workout')).toBeUndefined();
-    expect(button(el, /^(Log|Edit) sets/)).toBeUndefined();
+    expect(text(el.querySelector('h1'))).toBe('You vs Ada');
+    expect(points(el)).toEqual(['174.1', '197.6']);
+    expect(text(el.querySelector('.verdict'))).toBe('Final · Ada won');
+    expect(el.querySelector('.banner')).toBeNull();
+    expect(el.querySelector('a.log')).toBeNull();
+    // Crate-mates' workouts are listed but only mine open.
+    const theirs = el.querySelectorAll('.logs > div')[1];
+    expect(theirs.querySelectorAll('pch-list-row').length).toBeGreaterThan(0);
+    expect(theirs.querySelector('a')).toBeNull();
   });
 
-  it('says when a matchup is not open yet', async () => {
+  it('shows a bye week that has not started yet', async () => {
     const matchups = await setUp();
-    const later = matchups.find((m) => m.status === 'scheduled' && m.workoutId === null);
-    const f = await render(later?.id ?? 'nope');
+    const bye = matchups.find((m) => m.status === 'scheduled' && m.awayPeachId === null)!;
+    const f = await render(bye.id);
     const el: HTMLElement = f.nativeElement;
-    expect(text(el.querySelector('h1'))).toBe('Matchup');
-    expect(text(el)).toContain('Not open yet');
-    expect(text(el)).toContain('The workout appears once the round opens.');
+    expect(text(el.querySelector('h1'))).toBe('Your bye week');
+    expect(text(el.querySelector('.banner .pch-body-medium'))).toBe('Starts Mon, Oct 19');
+    expect(el.querySelectorAll('.logs > div')).toHaveLength(1);
+  });
+
+  it('says when a matchup does not exist', async () => {
+    await setUp();
+    const f = await render('nope');
+    expect(text(f.nativeElement)).toContain('Matchup not found');
   });
 });

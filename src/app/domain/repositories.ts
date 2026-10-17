@@ -12,12 +12,11 @@
  */
 import { Observable } from 'rxjs';
 
-import { LocalDate } from './core/local-date';
-import { ExerciseCapability } from './models/capability';
+import { RateBallot } from './models/ballot';
 import { Crate, CrateMembership } from './models/crate';
+import { CustomExercise, LibraryEntry, Routine } from './models/library';
 import { Peach } from './models/peach';
 import { Matchup, Round, Season } from './models/season';
-import { Workout } from './models/workout';
 import { WorkoutLog } from './models/workout-log';
 
 export interface PeachRepository {
@@ -38,14 +37,6 @@ export interface CrateRepository {
   watchCratesFor(peachId: string): Observable<Crate[]>;
 }
 
-export interface CapabilityRepository {
-  forPeach(peachId: string): Promise<ExerciseCapability[]>;
-  forPeaches(peachIds: Iterable<string>): Promise<ExerciseCapability[]>;
-  save(capability: ExerciseCapability): Promise<void>;
-  saveAll(capabilities: Iterable<ExerciseCapability>): Promise<void>;
-  watchForPeach(peachId: string): Observable<ExerciseCapability[]>;
-}
-
 export interface SeasonRepository {
   getById(id: string): Promise<Season | null>;
   /** Newest first. */
@@ -62,26 +53,52 @@ export interface SeasonRepository {
   getMatchup(id: string): Promise<Matchup | null>;
   matchupsOf(seasonId: string): Promise<Matchup[]>;
   matchupsInRound(roundId: string): Promise<Matchup[]>;
-  /** Every matchup involving `peachId`, optionally only on `on`. */
-  matchupsFor(peachId: string, on?: LocalDate): Promise<Matchup[]>;
+  /** Every matchup involving `peachId`. */
+  matchupsFor(peachId: string): Promise<Matchup[]>;
   saveMatchup(matchup: Matchup): Promise<void>;
   saveSchedule(rounds: readonly Round[], matchups: readonly Matchup[]): Promise<void>;
   watchMatchupsFor(peachId: string): Observable<Matchup[]>;
 }
 
-export interface WorkoutRepository {
-  getById(id: string): Promise<Workout | null>;
-  getByIds(ids: Iterable<string>): Promise<Workout[]>;
-  save(workout: Workout): Promise<void>;
-}
-
 export interface WorkoutLogRepository {
   getById(id: string): Promise<WorkoutLog | null>;
-  forMatchup(matchupId: string, peachId: string): Promise<WorkoutLog | null>;
   /** Newest first by start time. */
   forPeach(peachId: string): Promise<WorkoutLog[]>;
+  /** Saves a log the Peach is still editing (never a submitted one). */
   save(log: WorkoutLog): Promise<void>;
+  /**
+   * Saves a submitted log and shares a copy with every Crate in its
+   * `sharedWith`, all at once: a log is either private and editable or
+   * submitted and visible in every Crate it counts for.
+   */
+  saveSubmitted(log: WorkoutLog): Promise<void>;
+  /** Logs shared with `crateId` that were started in `[from, to)`. */
+  sharedWith(crateId: string, from: Date, to: Date): Promise<WorkoutLog[]>;
+  /** The latest logs shared with `crateId`, newest first. */
+  recentlySharedWith(crateId: string, limit: number): Promise<WorkoutLog[]>;
   watch(id: string): Observable<WorkoutLog | null>;
   /** Newest first by start time. */
   watchForPeach(peachId: string): Observable<WorkoutLog[]>;
+}
+
+/** Each member's vote on the Crate's category weights, one per member. */
+export interface BallotRepository {
+  forCrate(crateId: string): Promise<RateBallot[]>;
+  save(ballot: RateBallot): Promise<void>;
+}
+
+/** A Crate's private library of catalog picks, custom exercises and routines. */
+export interface LibraryRepository {
+  entries(crateId: string): Promise<LibraryEntry[]>;
+  saveEntry(entry: LibraryEntry): Promise<void>;
+  removeEntry(crateId: string, exerciseId: string): Promise<void>;
+
+  customExercises(crateId: string): Promise<CustomExercise[]>;
+  saveCustomExercise(exercise: CustomExercise): Promise<void>;
+  removeCustomExercise(crateId: string, id: string): Promise<void>;
+
+  routines(crateId: string): Promise<Routine[]>;
+  getRoutine(crateId: string, id: string): Promise<Routine | null>;
+  saveRoutine(routine: Routine): Promise<void>;
+  removeRoutine(crateId: string, id: string): Promise<void>;
 }

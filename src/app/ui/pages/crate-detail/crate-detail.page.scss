@@ -26,6 +26,7 @@
   border-radius: var(--pch-radius-small);
   background: none;
   color: var(--mat-sys-on-surface);
+  text-decoration: none;
   font: var(--mat-sys-label-large);
   letter-spacing: var(--mat-sys-label-large-tracking);
 
@@ -120,6 +121,13 @@
 
 .muted {
   color: var(--mat-sys-on-surface-variant);
+}
+
+.one-line {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 pch-two-pane {

@@ -1,0 +1,123 @@
+@let d = loaded();
+@if (d === undefined) {
+  <pch-page title="What counts" showBack [backLink]="'/crates/' + crateId()">
+    <div class="loading"><pch-loading-indicator /></div>
+  </pch-page>
+} @else if (!d.crate || !d.member) {
+  <pch-page title="What counts" showBack backLink="/crates">
+    <pch-empty-state icon="search_off" title="Crate not found" />
+  </pch-page>
+} @else {
+  <pch-page
+    title="What counts"
+    [subtitle]="d.crate.name + ' · ' + d.votes + ' of ' + d.memberCount + ' voted'"
+    showBack
+    [backLink]="'/crates/' + crateId()"
+  >
+    <p class="intro pch-body-large" [pchStagger]="0">
+      Split {{ budget }} points across the kinds of training. The Crate scores with the average of
+      everyone’s votes. Each number is the points for one “par”: a solid session of that kind.
+    </p>
+
+    <div class="budget" [pchStagger]="0" role="status">
+      <span class="pch-title-medium">{{ status() }}</span>
+      <pch-wavy-progress [value]="spent() / budget" [color]="left() < 0 ? 'error' : 'primary'" />
+    </div>
+
+    <pch-list-card [pchStagger]="1">
+      @for (c of categories(); track c.category) {
+        <div class="category">
+          <span class="material-symbols-rounded icon" aria-hidden="true">{{ c.icon }}</span>
+          <div class="what">
+            <span class="pch-title-medium">{{ c.label }}</span>
+            <span class="pch-body-small muted"
+              >{{ c.per }} · Crate {{ c.crate
+              }}{{ c.season !== null ? ' · this Season ' + c.season : '' }}</span
+            >
+          </div>
+          <div class="stepper">
+            <button
+              matIconButton
+              class="outlined"
+              type="button"
+              [matTooltip]="'Less for ' + c.label"
+              [attr.aria-label]="'Less for ' + c.label"
+              (click)="nudge(c.category, -1)"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">remove</span>
+            </button>
+            <input
+              class="pch-title-large"
+              inputmode="numeric"
+              autocomplete="off"
+              [value]="c.mine"
+              [attr.aria-label]="'Points for ' + c.label"
+              (change)="set(c.category, $any($event.target).value)"
+            />
+            <button
+              matIconButton
+              class="tonal"
+              type="button"
+              [matTooltip]="'More for ' + c.label"
+              [attr.aria-label]="'More for ' + c.label"
+              (click)="nudge(c.category, 1)"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">add</span>
+            </button>
+          </div>
+        </div>
+      }
+    </pch-list-card>
+
+    <div class="actions">
+      <button matButton="outlined" type="button" (click)="evenSplit()">Even split</button>
+      <button
+        matButton="filled"
+        type="button"
+        class="save"
+        [disabled]="busy() || left() !== 0"
+        (click)="save()"
+      >
+        {{ d.mine ? 'Update my vote' : 'Cast my vote' }}
+      </button>
+    </div>
+    @if (d.season) {
+      <p class="pch-body-small muted note">
+        “{{ d.season.name }}” keeps the weights it started with; votes apply to the next Season.
+      </p>
+    }
+
+    @if (d.manager && grace() !== null) {
+      <pch-section title="Grace period" />
+      <pch-card variant="outlined" class="grace" [pchStagger]="2">
+        <div class="what">
+          <span class="pch-title-medium">{{ grace() }} h after Sunday</span>
+          <span class="pch-body-small muted"
+            >How long a finished week stays open for late submissions.</span
+          >
+        </div>
+        <div class="stepper">
+          <button
+            matIconButton
+            class="outlined"
+            type="button"
+            aria-label="Shorter grace period"
+            (click)="nudgeGrace(-1)"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">remove</span>
+          </button>
+          <button
+            matIconButton
+            class="tonal"
+            type="button"
+            aria-label="Longer grace period"
+            (click)="nudgeGrace(1)"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">add</span>
+          </button>
+          <button matButton="tonal" type="button" (click)="saveGrace()">Save</button>
+        </div>
+      </pch-card>
+    }
+  </pch-page>
+}

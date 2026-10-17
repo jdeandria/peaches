@@ -1,7 +1,7 @@
 import { dateTimeFromJson, FormatError } from './json';
 import { addDays, localDate, parseLocalDate } from './local-date';
 import { crateSettings } from '../models/crate';
-import { workoutFromJson } from '../models/workout';
+import { workoutLogFromJson } from '../models/workout-log';
 
 /** Edge cases in decoding and date arithmetic that once went wrong. */
 describe('port regressions', () => {
@@ -29,23 +29,18 @@ describe('port regressions', () => {
     );
   });
 
-  it('rejects a workout item without a prescription', () => {
+  it('rejects a log entry without an exercise id', () => {
     const json = {
-      id: 'w',
-      blocks: [{ type: 'strength', items: [{ id: 'i1', exerciseId: 'bw-push-up' }] }],
-      focus: 'fullBody',
-      goal: 'strength',
-      createdAt: '2026-10-10T09:00:00.000Z',
+      id: 'l',
+      peachId: 'p',
+      startedAt: '2026-10-10T09:00:00.000Z',
+      entries: [{ exerciseName: 'Push Up', sets: [{ reps: 10 }] }],
     };
-    expect(() => workoutFromJson(json)).toThrow(FormatError);
+    expect(() => workoutLogFromJson(json)).toThrow(FormatError);
   });
 
-  it('crate settings exclusions behave as sets', () => {
-    const s = crateSettings({
-      excludedExerciseIds: ['b', 'a', 'b'],
-      excludedJointStress: ['knee', 'knee'],
-    });
-    expect(s.excludedExerciseIds).toEqual(['b', 'a']);
-    expect(s.excludedJointStress).toEqual(['knee']);
+  it('crate settings reject a negative grace period', () => {
+    expect(() => crateSettings({ loggingGraceHours: -1 })).toThrow(RangeError);
+    expect(crateSettings({ loggingGraceHours: 0 }).loggingGraceHours).toBe(0);
   });
 });

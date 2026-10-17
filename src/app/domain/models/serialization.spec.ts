@@ -1,6 +1,6 @@
 import { FormatError, JsonMap } from '../core/json';
 import { localDate } from '../core/local-date';
-import { capabilityFromJson, capabilityToJson, ExerciseCapability, isAble } from './capability';
+import { ballotFromJson, ballotToJson, RateBallot } from './ballot';
 import {
   canManage,
   Crate,
@@ -8,20 +8,35 @@ import {
   CrateMembership,
   crateSettings,
   crateSettingsFromJson,
-  crateSettingsToJson,
   crateToJson,
   DEFAULT_CRATE_SETTINGS,
   isActiveMembership,
   membershipFromJson,
   membershipToJson,
 } from './crate';
+import {
+  CustomExercise,
+  customExerciseFromJson,
+  customExerciseToJson,
+  isCustomExerciseId,
+  LibraryEntry,
+  libraryEntryFromJson,
+  libraryEntryToJson,
+  loggableFromCustom,
+  Routine,
+  routineFromJson,
+  routineToJson,
+} from './library';
 import { fitnessLevelLabel, peach, peachFromJson, peachToJson } from './peach';
 import {
-  scoringRules,
-  scoringRulesFromJson,
-  scoringRulesToJson,
-  STANDARD_SCORING_RULES,
-} from './scoring-rules';
+  addTotals,
+  categoryWeights,
+  DEFAULT_WEIGHTS,
+  weightsFromJson,
+  weightsToJson,
+  weightsTotal,
+  ZERO_TOTALS,
+} from './scoring';
 import {
   involves,
   isBye,
@@ -32,6 +47,7 @@ import {
   matchupToJson,
   opponentOf,
   Round,
+  roundEndDate,
   roundFromJson,
   roundToJson,
   Season,
@@ -42,26 +58,15 @@ import {
   winnerId,
 } from './season';
 import {
-  itemById,
-  prescription,
-  prescriptionFromJson,
-  prescriptionUnit,
-  scoredItems,
-  targetPerSet,
-  totalTarget,
-  Workout,
-  workoutFromJson,
-  workoutItems,
-  workoutToJson,
-} from './workout';
-import {
-  entryForItem,
+  entryFor,
   exerciseLogEntry,
   isSubmitted,
+  removeEntry,
   setLog,
   totalMeters,
   totalReps,
   totalSeconds,
+  totalSets,
   upsertEntry,
   volumeLoadKg,
   workoutLog,
@@ -109,19 +114,7 @@ describe('model JSON round trips', () => {
     expect(fitnessLevelLabel(5)).toBe('Advanced');
   });
 
-  it('ExerciseCapability', () => {
-    const c: ExerciseCapability = {
-      peachId: 'p1',
-      exerciseId: 'bw-push-up',
-      status: 'unable',
-      updatedAt: now,
-      notes: 'wrist',
-    };
-    expect(capabilityFromJson(viaJson(capabilityToJson(c)))).toEqual(c);
-    expect(isAble(c)).toBe(false);
-  });
-
-  it('Crate with settings and scoring rules', () => {
+  it('Crate with settings', () => {
     const crate: Crate = {
       id: 'c1',
       name: 'Morning Crew',
@@ -129,28 +122,10 @@ describe('model JSON round trips', () => {
       ownerPeachId: 'p1',
       inviteCode: 'PEACH1',
       timeZone: 'America/New_York',
-      settings: crateSettings({
-        workoutDurationMinutes: 30,
-        goal: 'endurance',
-        scoringRules: scoringRules({ completionBonus: 5 }),
-        loggingGraceHours: 12,
-        excludedExerciseIds: ['bw-burpee'],
-        excludedJointStress: ['knee'],
-      }),
+      settings: crateSettings({ loggingGraceHours: 12 }),
       createdAt: now,
     };
     expect(crateFromJson(viaJson(crateToJson(crate)))).toEqual(crate);
-  });
-
-  it('Crate settings id sets are written sorted and read back de-duplicated', () => {
-    const s = crateSettings({ excludedExerciseIds: ['c', 'a', 'b'] });
-    expect(viaJson(crateSettingsToJson(s))['excludedExerciseIds']).toEqual(['a', 'b', 'c']);
-    const back = crateSettingsFromJson({
-      excludedExerciseIds: ['b', 'a', 'b'],
-      excludedJointStress: ['knee', 'wrist', 'knee'],
-    });
-    expect(back.excludedExerciseIds).toEqual(['b', 'a']);
-    expect(back.excludedJointStress).toEqual(['knee', 'wrist']);
   });
 
   it('Crate falls back to defaults for missing settings', () => {
@@ -184,27 +159,27 @@ describe('model JSON round trips', () => {
       id: 's1',
       crateId: 'c1',
       name: 'Autumn',
-      exerciseDays: [localDate(2026, 10, 12), localDate(2026, 10, 14)],
+      startWeek: localDate(2026, 10, 12),
+      weeks: 3,
       participantIds: ['p1', 'p2', 'p3'],
+      weights: categoryWeights({ runWalk: 50, reps: 50 }),
       status: 'active',
       createdAt: now,
     };
     expect(seasonFromJson(viaJson(seasonToJson(season)))).toEqual(season);
     expect(seasonStartDate(season)).toBe(localDate(2026, 10, 12));
-    expect(seasonEndDate(season)).toBe(localDate(2026, 10, 14));
+    expect(seasonEndDate(season)).toBe(localDate(2026, 11, 1));
     expect(isSeasonOpen(season)).toBe(true);
-    expect(seasonStartDate({ ...season, exerciseDays: [] })).toBeNull();
-    expect(seasonEndDate({ ...season, exerciseDays: [] })).toBeNull();
 
     const round: Round = {
       id: 'r1',
       seasonId: 's1',
       index: 0,
-      date: localDate(2026, 10, 12),
-      focus: 'lowerBody',
+      weekStart: localDate(2026, 10, 12),
       status: 'open',
     };
     expect(roundFromJson(viaJson(roundToJson(round)))).toEqual(round);
+    expect(roundEndDate(round)).toBe(localDate(2026, 10, 18));
 
     const m = matchup({
       id: 'm1',
@@ -212,7 +187,6 @@ describe('model JSON round trips', () => {
       roundId: 'r1',
       homePeachId: 'p1',
       awayPeachId: 'p2',
-      workoutId: 'w1',
       status: 'complete',
       result: { homePoints: 55.5, awayPoints: 40 },
     });
@@ -250,174 +224,156 @@ describe('model JSON round trips', () => {
     expect(winnerId({ ...base, result: { homePoints: 2, awayPoints: 2 } })).toBeNull();
   });
 
-  it('Workout with nested blocks and prescriptions', () => {
-    const workout: Workout = {
-      id: 'w1',
-      title: 'Round 1',
-      blocks: [
-        {
-          type: 'strength',
-          items: [
-            {
-              id: 'i1',
-              exerciseId: 'db-goblet-squat',
-              prescription: prescription({
-                sets: 3,
-                reps: 10,
-                restSeconds: 60,
-                load: { rpe: 7, note: 'Moderate' },
-              }),
-              scoringWeight: 1,
-            },
-            {
-              id: 'i2',
-              exerciseId: 'bw-side-plank',
-              prescription: prescription({ sets: 2, seconds: 30, restSeconds: 30, perSide: true }),
-              scoringWeight: 0.5,
-            },
-          ],
-        },
-      ],
-      focus: 'fullBody',
-      goal: 'generalFitness',
-      targetDifficulty: 2.5,
-      estimatedMinutes: 12,
-      seed: 42,
-      generatorVersion: 1,
-      createdAt: now,
-    };
-    expect(workoutFromJson(viaJson(workoutToJson(workout)))).toEqual(workout);
-    expect(totalTarget(itemById(workout, 'i2')!.prescription)).toBe(120);
-    expect(totalTarget(itemById(workout, 'i1')!.prescription)).toBe(30);
-    expect(itemById(workout, 'zz')).toBeUndefined();
-    expect(workoutItems(workout).map((i) => i.id)).toEqual(['i1', 'i2']);
-    expect(scoredItems(workout).length).toBe(2);
-  });
-
-  it('Prescription enforces exactly one unit', () => {
-    expect(() => prescription({ sets: 1, restSeconds: 0, reps: 5, seconds: 5 })).toThrow();
-    expect(() => prescription({ sets: 1, restSeconds: 0 })).toThrow();
-    expect(() => prescription({ sets: 0, restSeconds: 0, reps: 5 })).toThrow();
-    expect(() => prescription({ sets: 1, restSeconds: -1, reps: 5 })).toThrow();
-  });
-
-  it('Prescription derived values', () => {
-    const p = prescription({ sets: 3, meters: 40, restSeconds: 60 });
-    expect(targetPerSet(p)).toBe(40);
-    expect(totalTarget(p)).toBe(120);
-    expect(prescriptionUnit(p)).toBe('distance');
-    expect(prescriptionUnit(prescription({ sets: 1, seconds: 5, restSeconds: 0 }))).toBe(
-      'duration',
-    );
-    expect(prescriptionUnit(prescription({ sets: 1, reps: 5, restSeconds: 0 }))).toBe('reps');
-  });
-
   it('WorkoutLog and entries', () => {
     const log = workoutLog({
       id: 'l1',
       peachId: 'p1',
-      workoutId: 'w1',
-      matchupId: 'm1',
+      routineId: 'rt1',
       startedAt: now,
-      completedAt: new Date(now.getTime() + 40 * 60_000),
+      completedAt: new Date(now.getTime() + 3_600_000),
       status: 'submitted',
+      durationMinutes: 50,
+      notes: 'felt good',
+      sharedWith: ['c1', 'c2'],
       entries: [
         exerciseLogEntry({
-          exerciseId: 'db-goblet-squat',
-          workoutItemId: 'i1',
-          sets: [
-            setLog({ reps: 10, loadKg: 16 }),
-            setLog({ reps: 10, loadKg: 16 }),
-            setLog({ reps: 8, loadKg: 16 }),
-          ],
+          exerciseId: 'bw-run',
+          exerciseName: 'Run',
+          distanceKind: 'runWalk',
+          sets: [setLog({ meters: 5000, seconds: 1500 })],
+        }),
+        exerciseLogEntry({
+          exerciseId: 'db-bench-press',
+          exerciseName: 'Dumbbell Bench Press',
+          sets: [setLog({ reps: 10, loadKg: 22.5 }), setLog({ reps: 8, loadKg: 25 })],
           rpe: 8,
+          notes: 'last rep slow',
         }),
       ],
-      notes: 'Felt good',
     });
     expect(workoutLogFromJson(viaJson(workoutLogToJson(log)))).toEqual(log);
     expect(isSubmitted(log)).toBe(true);
-    expect(totalReps(log.entries[0])).toBe(28);
-    expect(volumeLoadKg(log.entries[0])).toBe(448);
+    expect(totalSets(log)).toBe(3);
+    expect(entryFor(log, 'bw-run')?.distanceKind).toBe('runWalk');
+    expect(entryFor(log, 'nope')).toBeUndefined();
   });
 
   it('entry totals add each unit separately', () => {
     const e = exerciseLogEntry({
       exerciseId: 'x',
-      sets: [setLog({ seconds: 30 }), setLog({ meters: 40 }), setLog({ seconds: 15, meters: 10 })],
+      sets: [setLog({ reps: 10, loadKg: 20 }), setLog({ seconds: 30 }), setLog({ meters: 40 })],
     });
-    expect(totalSeconds(e)).toBe(45);
-    expect(totalMeters(e)).toBe(50);
-    expect(totalReps(e)).toBe(0);
-    expect(volumeLoadKg(e)).toBe(0);
+    expect(totalReps(e)).toBe(10);
+    expect(totalSeconds(e)).toBe(30);
+    expect(totalMeters(e)).toBe(40);
+    expect(volumeLoadKg(e)).toBe(200);
+    expect(e.exerciseName).toBe('x');
   });
 
   it('set and entry builders validate', () => {
-    expect(() => setLog({ loadKg: 20 })).toThrow();
-    expect(() => exerciseLogEntry({ exerciseId: 'x', sets: [], rpe: 11 })).toThrow();
-    expect(() => exerciseLogEntry({ exerciseId: 'x', sets: [], rpe: 0 })).toThrow();
+    expect(() => setLog({ loadKg: 20 })).toThrow(RangeError);
+    expect(() => exerciseLogEntry({ exerciseId: 'x', sets: [], rpe: 11 })).toThrow(RangeError);
   });
 
-  it('WorkoutLog.upsertEntry replaces the entry for the same item', () => {
-    const log = workoutLog({
-      id: 'l1',
+  it('upsertEntry replaces the entry for the same exercise in place; removeEntry drops it', () => {
+    let log = workoutLog({ id: 'l', peachId: 'p', startedAt: now });
+    const a = exerciseLogEntry({ exerciseId: 'a', sets: [setLog({ reps: 1 })] });
+    const b = exerciseLogEntry({ exerciseId: 'b', sets: [setLog({ reps: 2 })] });
+    log = upsertEntry(upsertEntry(log, a), b);
+    const a2 = exerciseLogEntry({ exerciseId: 'a', sets: [setLog({ reps: 9 })] });
+    log = upsertEntry(log, a2);
+    expect(log.entries.map((e) => e.exerciseId)).toEqual(['a', 'b']);
+    expect(entryFor(log, 'a')).toBe(a2);
+    expect(removeEntry(log, 'a').entries).toEqual([b]);
+  });
+
+  it('RateBallot', () => {
+    const b: RateBallot = {
+      crateId: 'c1',
       peachId: 'p1',
-      startedAt: now,
-      entries: [
-        exerciseLogEntry({ exerciseId: 'a', workoutItemId: 'i1', sets: [setLog({ reps: 1 })] }),
-        exerciseLogEntry({ exerciseId: 'b', sets: [setLog({ reps: 1 })] }),
-      ],
+      weights: categoryWeights({ ride: 70, activeMinutes: 30 }),
+      updatedAt: now,
+    };
+    expect(ballotFromJson(viaJson(ballotToJson(b)))).toEqual(b);
+  });
+
+  it('Library entries, custom exercises and routines', () => {
+    const entry: LibraryEntry = {
+      crateId: 'c1',
+      exerciseId: 'kb-swing',
+      addedBy: 'p1',
+      addedAt: now,
+    };
+    expect(libraryEntryFromJson(viaJson(libraryEntryToJson(entry)))).toEqual(entry);
+
+    const custom: CustomExercise = {
+      id: 'custom-1',
+      crateId: 'c1',
+      name: 'Hill loop',
+      track: 'distance',
+      takesLoad: false,
+      distanceKind: 'runWalk',
+      createdBy: 'p1',
+      createdAt: now,
+    };
+    expect(customExerciseFromJson(viaJson(customExerciseToJson(custom)))).toEqual(custom);
+    expect(isCustomExerciseId(custom.id)).toBe(true);
+    expect(isCustomExerciseId('kb-swing')).toBe(false);
+    expect(loggableFromCustom(custom)).toEqual({
+      id: 'custom-1',
+      name: 'Hill loop',
+      track: 'distance',
+      takesLoad: false,
+      distanceKind: 'runWalk',
+      cues: null,
     });
-    const updated = upsertEntry(
-      upsertEntry(
-        log,
-        exerciseLogEntry({ exerciseId: 'a', workoutItemId: 'i1', sets: [setLog({ reps: 9 })] }),
-      ),
-      exerciseLogEntry({ exerciseId: 'b', sets: [setLog({ reps: 7 })] }),
-    );
-    expect(updated.entries.length).toBe(2);
-    expect(totalReps(entryForItem(updated, 'i1')!)).toBe(9);
-    expect(totalReps(updated.entries.find((e) => e.exerciseId === 'b')!)).toBe(7);
-    // The original is untouched.
-    expect(totalReps(entryForItem(log, 'i1')!)).toBe(1);
-  });
+    // Distance only scores on distance-tracked exercises.
+    expect(loggableFromCustom({ ...custom, track: 'reps' }).distanceKind).toBeNull();
 
-  it('upsertEntry keeps a free entry and an item entry for the same exercise apart', () => {
-    const log = workoutLog({
-      id: 'l',
-      peachId: 'p',
-      startedAt: now,
-      entries: [
-        exerciseLogEntry({ exerciseId: 'a', workoutItemId: 'i1', sets: [setLog({ reps: 1 })] }),
+    const routine: Routine = {
+      id: 'rt1',
+      crateId: 'c1',
+      name: 'Saturday sweat',
+      items: [
+        {
+          exerciseId: 'bw-burpee',
+          exerciseName: 'Burpee',
+          sets: 3,
+          reps: 15,
+          seconds: null,
+          meters: null,
+        },
       ],
+      createdBy: 'p1',
+      createdAt: now,
+    };
+    expect(routineFromJson(viaJson(routineToJson(routine)))).toEqual(routine);
+  });
+
+  it('category weights and totals', () => {
+    expect(weightsTotal(DEFAULT_WEIGHTS)).toBe(100);
+    expect(() => categoryWeights({ runWalk: 50 })).toThrow(RangeError);
+    expect(() => categoryWeights({ runWalk: 101, reps: -1 })).toThrow(RangeError);
+    expect(() => categoryWeights({ runWalk: 50.5, reps: 49.5 })).toThrow(RangeError);
+    const w = categoryWeights({ swimRow: 100 });
+    expect(weightsFromJson(viaJson(weightsToJson(w)))).toEqual(w);
+    expect(addTotals({ ...ZERO_TOTALS, reps: 3 }, { ...ZERO_TOTALS, reps: 4, ride: 2 })).toEqual({
+      ...ZERO_TOTALS,
+      reps: 7,
+      ride: 2,
     });
-    const updated = upsertEntry(
-      log,
-      exerciseLogEntry({ exerciseId: 'a', sets: [setLog({ reps: 2 })] }),
-    );
-    expect(updated.entries.length).toBe(2);
   });
 
-  it('ScoringRules', () => {
-    const r = scoringRules({ pointsPerItem: 20, completionThreshold: 0.9 });
-    expect(scoringRulesFromJson(viaJson(scoringRulesToJson(r)))).toEqual(r);
-    expect(scoringRulesFromJson({})).toEqual(STANDARD_SCORING_RULES);
-    expect(() => scoringRules({ pointsPerItem: 0 })).toThrow();
-    expect(() => scoringRules({ maxAchievementRatio: 0.9 })).toThrow();
-    expect(() => scoringRules({ completionThreshold: 1.1 })).toThrow();
-    expect(() => scoringRules({ completionBonus: -1 })).toThrow();
-  });
-
-  it('crateSettings validates its ranges', () => {
-    expect(() => crateSettings({ workoutDurationMinutes: 10 })).toThrow();
-    expect(() => crateSettings({ workoutDurationMinutes: 121 })).toThrow();
+  it('crateSettings validates its range', () => {
     expect(() => crateSettings({ loggingGraceHours: -1 })).toThrow();
+    expect(() => crateSettings({ loggingGraceHours: 49 })).toThrow();
     expect(crateSettings()).toEqual(DEFAULT_CRATE_SETTINGS);
   });
 });
 
 describe('forward compatibility and garbage input', () => {
   const iso = '2026-10-10T12:00:00.000Z';
+  const season = { id: 's', crateId: 'c', name: 'n', startWeek: '2026-10-12', createdAt: iso };
 
   it('unknown enum names fall back to defaults', () => {
     expect(peachFromJson({ id: 'p', displayName: 'P', createdAt: iso, units: 'stone' }).units).toBe(
@@ -432,18 +388,8 @@ describe('forward compatibility and garbage input', () => {
     });
     expect(m.role).toBe('member');
     expect(m.status).toBe('active');
-    expect(crateSettingsFromJson({ goal: 'yoga' }).goal).toBe('generalFitness');
-    expect(
-      seasonFromJson({ id: 's', crateId: 'c', name: 'n', status: 'paused', createdAt: iso }).status,
-    ).toBe('draft');
-    const r = roundFromJson({
-      id: 'r',
-      seasonId: 's',
-      date: '2026-10-10',
-      focus: 'cardio',
-      status: 'x',
-    });
-    expect(r.focus).toBe('fullBody');
+    expect(seasonFromJson({ ...season, status: 'paused' }).status).toBe('draft');
+    const r = roundFromJson({ id: 'r', seasonId: 's', weekStart: '2026-10-12', status: 'x' });
     expect(r.status).toBe('scheduled');
     expect(
       matchupFromJson({
@@ -454,49 +400,36 @@ describe('forward compatibility and garbage input', () => {
         status: 'abandoned',
       }).status,
     ).toBe('scheduled');
-    expect(
-      workoutLogFromJson({ id: 'l', peachId: 'p', startedAt: iso, status: 'archived' }).status,
-    ).toBe('inProgress');
-  });
-
-  it('unknown enum names without a safe default are rejected', () => {
-    expect(() =>
-      capabilityFromJson({ peachId: 'p', exerciseId: 'e', status: 'maybe', updatedAt: iso }),
-    ).toThrow(FormatError);
-    const workout = {
-      id: 'w',
-      blocks: [],
-      focus: 'fullBody',
-      goal: 'generalFitness',
-      createdAt: iso,
-    };
-    expect(() => workoutFromJson({ ...workout, focus: 'zen' })).toThrow(FormatError);
-    expect(() => workoutFromJson({ ...workout, goal: 'zen' })).toThrow(FormatError);
-    expect(() =>
-      workoutFromJson({ ...workout, blocks: [{ type: 'superset', items: [] }] }),
-    ).toThrow(FormatError);
-  });
-
-  it('unknown list entries are dropped', () => {
-    const s = crateSettingsFromJson({
-      excludedJointStress: ['knee', 'tail', 3, null, 'wrist'],
-      excludedExerciseIds: ['a', 7, null, 'b'],
-    });
-    expect(s.excludedJointStress).toEqual(['knee', 'wrist']);
-    expect(s.excludedExerciseIds).toEqual(['a', 'b']);
-    const season = seasonFromJson({
-      id: 's',
-      crateId: 'c',
-      name: 'n',
-      createdAt: iso,
-      participantIds: ['p1', 42, 'p2'],
-    });
-    expect(season.participantIds).toEqual(['p1', 'p2']);
-    expect(season.exerciseDays).toEqual([]);
     const log = workoutLogFromJson({
       id: 'l',
       peachId: 'p',
       startedAt: iso,
+      status: 'archived',
+      entries: [{ exerciseId: 'e', distanceKind: 'teleport', sets: [] }],
+    });
+    expect(log.status).toBe('inProgress');
+    // A distance kind from a newer client simply doesn't score here.
+    expect(log.entries[0].distanceKind).toBeNull();
+    expect(
+      customExerciseFromJson({
+        id: 'custom-x',
+        crateId: 'c',
+        name: 'X',
+        track: 'vibes',
+        createdBy: 'p',
+        createdAt: iso,
+      }).track,
+    ).toBe('reps');
+  });
+
+  it('unknown list entries are dropped', () => {
+    const s = seasonFromJson({ ...season, participantIds: ['p1', 42, 'p2'] });
+    expect(s.participantIds).toEqual(['p1', 'p2']);
+    const log = workoutLogFromJson({
+      id: 'l',
+      peachId: 'p',
+      startedAt: iso,
+      sharedWith: ['c1', 5, null],
       entries: [
         'junk',
         null,
@@ -504,6 +437,7 @@ describe('forward compatibility and garbage input', () => {
         { exerciseId: 'e', sets: [{ reps: 5 }, 'bad', { reps: 3, loadKg: 20.5 }] },
       ],
     });
+    expect(log.sharedWith).toEqual(['c1']);
     expect(log.entries.length).toBe(1);
     expect(log.entries[0].sets).toEqual([
       { reps: 5, loadKg: null, seconds: null, meters: null },
@@ -521,10 +455,17 @@ describe('forward compatibility and garbage input', () => {
     expect(m).toEqual(matchup({ id: 'm', seasonId: 's', roundId: 'r', homePeachId: 'h' }));
     const log = workoutLogFromJson({ id: 'l', peachId: 'p', startedAt: iso });
     expect(log).toEqual(workoutLog({ id: 'l', peachId: 'p', startedAt: new Date(iso) }));
-    const w = workoutFromJson({ id: 'w', focus: 'fullBody', goal: 'strength', createdAt: iso });
-    expect(w.blocks).toEqual([]);
-    expect(w.targetDifficulty).toBe(2);
-    expect(w.title).toBeNull();
+    const s = seasonFromJson(season);
+    expect(s.weeks).toBe(1);
+    expect(s.weights).toEqual(DEFAULT_WEIGHTS);
+    // Old entries without a stored name show their id.
+    const entry = workoutLogFromJson({
+      id: 'l',
+      peachId: 'p',
+      startedAt: iso,
+      entries: [{ exerciseId: 'bw-push-up', sets: [] }],
+    }).entries[0];
+    expect(entry.exerciseName).toBe('bw-push-up');
   });
 
   it('wrongly-typed scalars fall back instead of leaking through', () => {
@@ -539,19 +480,17 @@ describe('forward compatibility and garbage input', () => {
     expect(p.email).toBeNull();
     expect(p.fitnessLevel).toBe(2);
     expect(p.timeZone).toBe('UTC');
-    const rules = scoringRulesFromJson({ pointsPerItem: '20', completionBonus: null });
-    expect(rules.pointsPerItem).toBe(10);
-    expect(rules.completionBonus).toBe(10);
-    const pr = prescriptionFromJson({ sets: 'three', reps: 10, perSide: 'yes' });
-    expect(pr.sets).toBe(1);
-    expect(pr.perSide).toBe(false);
+    expect(crateSettingsFromJson({ loggingGraceHours: 'six' }).loggingGraceHours).toBe(6);
+  });
+
+  it('weights that do not spend exactly the budget fall back to the defaults', () => {
+    expect(weightsFromJson({ runWalk: 100, reps: 100 })).toEqual(DEFAULT_WEIGHTS);
+    expect(weightsFromJson({ runWalk: '100' })).toEqual(DEFAULT_WEIGHTS);
+    expect(weightsFromJson(null)).toEqual(DEFAULT_WEIGHTS);
+    expect(seasonFromJson({ ...season, weights: [1, 2] }).weights).toEqual(DEFAULT_WEIGHTS);
   });
 
   it('integers are truncated toward zero', () => {
-    const pr = prescriptionFromJson({ sets: 3.9, restSeconds: 59.9, reps: 10.5 });
-    expect(pr.sets).toBe(3);
-    expect(pr.restSeconds).toBe(59);
-    expect(pr.reps).toBe(10);
     expect(
       peachFromJson({ id: 'p', displayName: 'P', createdAt: iso, fitnessLevel: 4.99 }).fitnessLevel,
     ).toBe(4);
@@ -574,10 +513,11 @@ describe('forward compatibility and garbage input', () => {
     expect(() => peachFromJson({ id: 'p', displayName: 'P', createdAt: 12345 })).toThrow(
       FormatError,
     );
-    expect(() => roundFromJson({ id: 'r', seasonId: 's', date: '10/10/2026' })).toThrow();
+    expect(() => roundFromJson({ id: 'r', seasonId: 's', weekStart: '10/12/2026' })).toThrow();
+    expect(() => seasonFromJson({ ...season, startWeek: 'soon' })).toThrow();
     expect(() =>
-      seasonFromJson({ id: 's', crateId: 'c', name: 'n', createdAt: iso, exerciseDays: ['soon'] }),
-    ).toThrow();
+      routineFromJson({ id: 'r', crateId: 'c', createdBy: 'p', createdAt: iso }),
+    ).toThrow(FormatError);
   });
 
   it('timestamps are normalised to UTC ISO strings', () => {
@@ -595,9 +535,6 @@ describe('forward compatibility and garbage input', () => {
       settings: 'oops',
     });
     expect(crate.settings).toEqual(DEFAULT_CRATE_SETTINGS);
-    expect(crateSettingsFromJson({ scoringRules: [1, 2] }).scoringRules).toEqual(
-      STANDARD_SCORING_RULES,
-    );
     expect(
       matchupFromJson({ id: 'm', seasonId: 's', roundId: 'r', homePeachId: 'h', result: [] })
         .result,

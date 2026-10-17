@@ -42,6 +42,32 @@ export const WeightUnits = {
   },
 } as const;
 
+/**
+ * Distance conversion between storage (always metres) and display: kilometres
+ * or miles for travel on foot or by bike. Swimming and rowing are metres
+ * everywhere, the way pools and ergs count them.
+ */
+export const DistanceUnits = {
+  metersPerMile: 1609.344,
+
+  label(units: UnitSystem): string {
+    return units === 'metric' ? 'km' : 'mi';
+  },
+
+  toDisplay(meters: number, units: UnitSystem): number {
+    return units === 'metric' ? meters / 1000 : meters / DistanceUnits.metersPerMile;
+  },
+
+  toMeters(value: number, units: UnitSystem): number {
+    return Math.round(units === 'metric' ? value * 1000 : value * DistanceUnits.metersPerMile);
+  },
+
+  /** "5", "5.2", "13.11": up to two decimals, no trailing zeros. */
+  format(value: number): string {
+    return String(Math.round(value * 100) / 100);
+  },
+} as const;
+
 /** Rounds halves away from zero (`Math.round` rounds them up). */
 export function roundHalfAwayFromZero(value: number): number {
   return Math.sign(value) * Math.round(Math.abs(value));

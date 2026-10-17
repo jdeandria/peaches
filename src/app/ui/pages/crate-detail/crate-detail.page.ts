@@ -4,7 +4,8 @@ import { MatButton, MatFabButton, MatIconButton } from '@angular/material/button
 import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 
-import { Crate } from '../../../domain/models/crate';
+import { LocalDate, localDateOfLocal } from '../../../domain/core/local-date';
+import { canManage, Crate } from '../../../domain/models/crate';
 import { onWinningStreak, streak } from '../../../domain/models/score';
 import {
   involves,
@@ -29,28 +30,29 @@ import { Stagger } from '../../layout/stagger';
 import { StandingsRow, StandingsTable } from '../../layout/standings-table';
 import { StatusLabel } from '../../layout/status-label';
 import { TwoPane } from '../../layout/two-pane';
+import { CrateLibraryPanel } from './crate-library';
 import { NewSeasonDialog } from './new-season-dialog';
 
-/** A Season's round as shown in the Rounds list. */
+/** A Season's week as shown in the Weeks list. */
 export interface RoundView {
   readonly round: Round;
-  /** "Mon, Oct 12 · Full body" */
+  /** "Week 2 · Oct 12 – 18" */
   readonly title: string;
   /** "Bye" / "You have a matchup", or null when the current Peach is not in it. */
   readonly subtitle: string | null;
-  /** The current Peach's opened matchup in this round, if any. */
+  /** The current Peach's matchup this week once it has started, if any. */
   readonly matchupLink: readonly string[] | null;
-  /** The owner's action for the round, if any. */
+  /** The manager's action for the week, if any. */
   readonly action: 'open' | 'close' | null;
 }
 
-/** Builds the Rounds list (port of `_RoundTile`'s decisions). */
+/** Builds the Weeks list. */
 export function roundViews(args: {
   rounds: readonly Round[];
   matchups: readonly Matchup[];
   me: string | null;
   canManage: boolean;
-  today: string;
+  today: LocalDate;
 }): RoundView[] {
   const { rounds, matchups, me, canManage, today } = args;
   return rounds.map((round) => {
@@ -58,24 +60,28 @@ export function roundViews(args: {
       ? (matchups.find((m) => m.roundId === round.id && involves(m, me)) ?? null)
       : null;
     let action: RoundView['action'] = null;
-    if (canManage && round.status === 'scheduled' && round.date <= today) action = 'open';
+    if (canManage && round.status === 'scheduled' && round.weekStart <= today) action = 'open';
     else if (canManage && round.status === 'open') action = 'close';
     return {
       round,
-      title: `${Fmt.day(round.date)} · ${Fmt.focus(round.focus)}`,
+      title: `Week ${round.index + 1} · ${Fmt.week(round.weekStart)}`,
       subtitle: mine ? (isBye(mine) ? 'Bye' : 'You have a matchup') : null,
-      matchupLink: mine?.workoutId ? ['/matchups', mine.id] : null,
+      matchupLink: mine && round.status !== 'scheduled' ? ['/matchups', mine.id] : null,
       action,
     };
   });
 }
 
-/** Members, the current Season's standings and rounds, and owner actions. */
+/**
+ * A Crate: the current Season's standings and weeks, what members have been
+ * logging, the library they've built, members, and manager actions.
+ */
 @Component({
   selector: 'pch-crate-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Card,
+    CrateLibraryPanel,
     EmptyState,
     ListCard,
     ListRow,
@@ -113,13 +119,31 @@ export class CrateDetailPage {
     (id, app) => app.crates.getById(id),
   );
 
+  /** Active members with their profiles, owner first. */
   protected readonly members = this.state.query(
     () => this.crateId(),
     async (id, app) => {
       const memberships = await app.crateService.activeMembers(id);
-      return app.peaches.getByIds(memberships.map((m) => m.peachId));
+      const peaches = new Map(
+        (await app.peaches.getByIds(memberships.map((m) => m.peachId))).map((p) => [p.id, p]),
+      );
+      const rank = { owner: 0, admin: 1, member: 2 };
+      return memberships
+        .filter((m) => peaches.has(m.peachId))
+        .sort((a, b) => rank[a.role] - rank[b.role])
+        .map((m) => ({ membership: m, peach: peaches.get(m.peachId)! }));
     },
   );
+
+  private readonly names = computed(
+    () => new Map((this.members.value() ?? []).map((m) => [m.peach.id, m.peach.displayName])),
+  );
+
+  /** Owners and admins run Seasons and can tidy the library. */
+  protected readonly canManage = computed(() => {
+    const mine = this.members.value()?.find((m) => m.peach.id === this.me());
+    return !!mine && canManage(mine.membership);
+  });
 
   private readonly seasons = this.state.watch(
     () => this.crateId(),
@@ -151,15 +175,43 @@ export class CrateDetailPage {
     return data && data.seasonId === this.season()?.id ? data : undefined;
   });
 
-  protected readonly isOwner = computed(() => {
-    const crate = this.crate.value();
-    return !!crate && crate.ownerPeachId === this.me();
+  /** Ballots cast, for the "What counts" chip. */
+  private readonly ballots = this.state.query(
+    () => this.crateId(),
+    (id, app) => app.votingService.ballotsOf(id),
+  );
+  protected readonly voteLine = computed(() => {
+    const votes = this.ballots.value()?.length;
+    const members = this.members.value()?.length;
+    if (votes === undefined || members === undefined) return 'What counts';
+    return `What counts · ${votes} of ${members} voted`;
+  });
+
+  /** The latest workouts members shared with the Crate. */
+  private readonly recentLogs = this.state.query(
+    () => this.crateId(),
+    (id, app) => app.logs.recentlySharedWith(id, 8),
+  );
+  protected readonly activity = computed(() => {
+    const names = this.names();
+    const units = this.state.units();
+    return (this.recentLogs.value() ?? []).map((log) => ({
+      id: log.id,
+      peachId: log.peachId,
+      name: log.peachId === this.me() ? 'You' : (names.get(log.peachId) ?? 'A Peach'),
+      day: Fmt.day(localDateOfLocal(log.startedAt)),
+      summary: log.entries
+        .slice(0, 2)
+        .map((e) => `${e.exerciseName} ${Fmt.entryHeadline(e, units)}`)
+        .join(', '),
+      link: log.peachId === this.me() ? ['/log', log.id] : null,
+    }));
   });
 
   protected readonly standingRows = computed<StandingsRow[] | undefined>(() => {
     const data = this.data();
     if (!data) return undefined;
-    const names = new Map((this.members.value() ?? []).map((p) => [p.id, p.displayName]));
+    const names = this.names();
     return data.standings.map((s) => ({
       peachId: s.peachId,
       name: names.get(s.peachId) ?? 'Peach',
@@ -181,13 +233,23 @@ export class CrateDetailPage {
       rounds: data.rounds,
       matchups: data.matchups,
       me: this.me(),
-      canManage: this.isOwner(),
+      canManage: this.canManage(),
       today: this.state.today(),
     });
   });
 
+  /** A new Season can start once the last one is over. */
+  protected readonly canStartSeason = computed(() => {
+    const s = this.season();
+    return this.canManage() && s !== undefined && (s === null || !isSeasonOpen(s));
+  });
+
   protected roundStatusColor(status: RoundStatus): string | undefined {
     return status === 'open' ? 'primary' : undefined;
+  }
+
+  protected roleLabel(role: string): string {
+    return role === 'owner' ? 'Owner' : role === 'admin' ? 'Admin' : 'Member';
   }
 
   protected async runRound(view: RoundView): Promise<void> {
@@ -195,7 +257,7 @@ export class CrateDetailPage {
     this.busyRound.set(view.round.id);
     await this.state.run((app) =>
       view.action === 'open'
-        ? app.seasonService.openRound(view.round.id, this.state.now())
+        ? app.seasonService.openRound(view.round.id)
         : app.seasonService.closeRound(view.round.id),
     );
     this.busyRound.set(null);

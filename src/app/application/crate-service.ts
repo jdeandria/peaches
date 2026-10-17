@@ -1,8 +1,10 @@
 import { IdGenerator } from '../domain/core/ids';
 import {
+  canManage,
   Crate,
   CrateMembership,
   CrateSettings,
+  crateSettings,
   DEFAULT_CRATE_SETTINGS,
   isActiveMembership,
 } from '../domain/models/crate';
@@ -21,7 +23,7 @@ export interface CreateCrateArgs {
   readonly settings?: CrateSettings;
 }
 
-/** Crate lifecycle: creation, joining and leaving. */
+/** Crate lifecycle: creation, settings, joining and leaving. */
 export class CrateService {
   constructor(
     private readonly crates: CrateRepository,
@@ -83,6 +85,27 @@ export class CrateService {
       throw new DomainError('Owners cannot leave their Crate. Transfer ownership first.');
     }
     await this.crates.saveMembership({ ...membership, status: 'left' });
+  }
+
+  /** Owners and admins change a Crate's settings. */
+  async updateSettings(crateId: string, peachId: string, settings: CrateSettings): Promise<Crate> {
+    const crate = await this.crates.getById(crateId);
+    if (!crate) throw new DomainError('Crate not found.');
+    const membership = (await this.crates.membershipsOf(crateId)).find(
+      (m) => m.peachId === peachId && isActiveMembership(m),
+    );
+    if (!membership || !canManage(membership)) {
+      throw new DomainError('Only the owner can change Crate settings.');
+    }
+    let checked: CrateSettings;
+    try {
+      checked = crateSettings(settings);
+    } catch (e) {
+      throw new DomainError(e instanceof Error ? e.message : String(e));
+    }
+    const updated: Crate = { ...crate, settings: checked };
+    await this.crates.save(updated);
+    return updated;
   }
 
   async activeMembers(crateId: string): Promise<CrateMembership[]> {

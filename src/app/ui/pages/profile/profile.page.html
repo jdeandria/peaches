@@ -15,30 +15,9 @@
       </div>
     </pch-card>
 
-    <pch-section title="Fitness level" />
-    <pch-card class="level" [pchStagger]="1">
-      <div class="level-value">
-        <span class="pch-headline-small number" aria-hidden="true">{{ level() }}</span>
-        <span class="pch-title-medium" id="fitness-level-label">{{ levelLabel(level()) }}</span>
-      </div>
-      <mat-slider min="1" max="5" step="1" discrete>
-        <input
-          matSliderThumb
-          aria-label="Fitness level"
-          aria-describedby="fitness-level-help"
-          [value]="p.fitnessLevel"
-          (input)="draftLevel.set(+$any($event.target).value)"
-          (valueChange)="saveLevel(p, $event)"
-        />
-      </mat-slider>
-      <p class="pch-body-small muted help" id="fitness-level-help">
-        Caps how hard your workouts are prescribed. Matchups use the lower of the two Peaches.
-      </p>
-    </pch-card>
-
     <pch-section title="Units" />
     <pch-button-group
-      [pchStagger]="2"
+      [pchStagger]="1"
       label="Units"
       [options]="unitOptions"
       [selected]="p.units"
@@ -46,13 +25,13 @@
     />
 
     <pch-section title="More" />
-    <pch-list-card [pchStagger]="3" class="more">
+    <pch-list-card [pchStagger]="2" class="more">
       <a pch-list-row routerLink="/exercises">
         <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
           >fitness_center</span
         >
-        {{ capabilityCount() }} exercises you can do
-        <span rowSubtitle>Manage them in the Exercises tab</span>
+        {{ catalogSize }} exercises
+        <span rowSubtitle>Add favourites to your Crates’ libraries</span>
         <span rowTrailing class="material-symbols-rounded muted" aria-hidden="true"
           >chevron_right</span
         >

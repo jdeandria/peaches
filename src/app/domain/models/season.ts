@@ -10,38 +10,46 @@ import {
   stringListFromJson,
   stringOrNull,
 } from '../core/json';
-import { LocalDate, parseLocalDate } from '../core/local-date';
-import { SESSION_FOCUSES, SessionFocus } from './training';
+import { addDays, LocalDate, parseLocalDate } from '../core/local-date';
+import { CategoryWeights, weightsFromJson, weightsToJson } from './scoring';
 
 export const SEASON_STATUSES = ['draft', 'scheduled', 'active', 'complete', 'cancelled'] as const;
 export type SeasonStatus = (typeof SEASON_STATUSES)[number];
 
+/** How long a Season can run. */
+export const MAX_SEASON_WEEKS = 12;
+
 /**
- * A fantasy-style tournament run by one Crate.
+ * A fantasy-style tournament run by one Crate, one matchup per week.
  *
- * A Season is created from a list of *exercise days* decided ahead of time.
- * Each exercise day becomes a {@link Round}; each Round pairs the
- * participants into {@link Matchup}s. Participants are frozen when the
- * Season is scheduled so members who join later wait for the next Season.
+ * Each week (Monday to Sunday in the Crate's time zone) is a {@link Round}
+ * that pairs the participants into {@link Matchup}s. Participants are frozen
+ * when the Season is scheduled, so members who join later wait for the next
+ * Season. So are the category weights: the Crate's vote at scheduling time
+ * decides how the whole Season scores, and later votes apply to the next one.
  */
 export interface Season {
   readonly id: string;
   readonly crateId: string;
   readonly name: string;
-  /** Sorted, unique calendar days (in the Crate's time zone) on which a Round takes place. */
-  readonly exerciseDays: readonly LocalDate[];
+  /** The Monday the first week starts. */
+  readonly startWeek: LocalDate;
+  readonly weeks: number;
   /** Peaches competing in this Season, frozen at scheduling time. */
   readonly participantIds: readonly string[];
+  /** Points per par for each category, frozen at scheduling time. */
+  readonly weights: CategoryWeights;
   readonly status: SeasonStatus;
   readonly createdAt: Date;
 }
 
-export function seasonStartDate(s: Season): LocalDate | null {
-  return s.exerciseDays[0] ?? null;
+export function seasonStartDate(s: Season): LocalDate {
+  return s.startWeek;
 }
 
-export function seasonEndDate(s: Season): LocalDate | null {
-  return s.exerciseDays.at(-1) ?? null;
+/** The Sunday the last week ends. */
+export function seasonEndDate(s: Season): LocalDate {
+  return addDays(s.startWeek, s.weeks * 7 - 1);
 }
 
 export function isSeasonOpen(s: Season): boolean {
@@ -53,8 +61,10 @@ export function seasonFromJson(json: JsonMap): Season {
     id: requireString(json['id'], 'id'),
     crateId: requireString(json['crateId'], 'crateId'),
     name: requireString(json['name'], 'name'),
-    exerciseDays: stringListFromJson(json['exerciseDays']).map(parseLocalDate),
+    startWeek: parseLocalDate(requireString(json['startWeek'], 'startWeek')),
+    weeks: intFromJson(json['weeks'], 1),
     participantIds: stringListFromJson(json['participantIds']),
+    weights: weightsFromJson(mapFromJson(json['weights'])),
     status: enumFromJson(SEASON_STATUSES, json['status'], 'draft'),
     createdAt: dateTimeFromJson(json['createdAt']),
   };
@@ -65,8 +75,10 @@ export function seasonToJson(s: Season): JsonMap {
     id: s.id,
     crateId: s.crateId,
     name: s.name,
-    exerciseDays: [...s.exerciseDays],
+    startWeek: s.startWeek,
+    weeks: s.weeks,
     participantIds: [...s.participantIds],
+    weights: weightsToJson(s.weights),
     status: s.status,
     createdAt: dateTimeToJson(s.createdAt),
   };
@@ -75,16 +87,20 @@ export function seasonToJson(s: Season): JsonMap {
 export const ROUND_STATUSES = ['scheduled', 'open', 'closed'] as const;
 export type RoundStatus = (typeof ROUND_STATUSES)[number];
 
-/** One exercise day of a Season. */
+/** One week of a Season. */
 export interface Round {
   readonly id: string;
   readonly seasonId: string;
   /** Zero-based position within the Season. */
   readonly index: number;
-  readonly date: LocalDate;
-  /** The session emphasis every workout in this Round follows. */
-  readonly focus: SessionFocus;
+  /** The Monday the week starts, in the Crate's time zone. */
+  readonly weekStart: LocalDate;
   readonly status: RoundStatus;
+}
+
+/** The Sunday the round's week ends. */
+export function roundEndDate(r: Round): LocalDate {
+  return addDays(r.weekStart, 6);
 }
 
 export function roundFromJson(json: JsonMap): Round {
@@ -92,8 +108,7 @@ export function roundFromJson(json: JsonMap): Round {
     id: requireString(json['id'], 'id'),
     seasonId: requireString(json['seasonId'], 'seasonId'),
     index: intFromJson(json['index']),
-    date: parseLocalDate(requireString(json['date'], 'date')),
-    focus: enumFromJson(SESSION_FOCUSES, json['focus'], 'fullBody'),
+    weekStart: parseLocalDate(requireString(json['weekStart'], 'weekStart')),
     status: enumFromJson(ROUND_STATUSES, json['status'], 'scheduled'),
   };
 }
@@ -103,8 +118,7 @@ export function roundToJson(r: Round): JsonMap {
     id: r.id,
     seasonId: r.seasonId,
     index: r.index,
-    date: r.date,
-    focus: r.focus,
+    weekStart: r.weekStart,
     status: r.status,
   };
 }
@@ -127,10 +141,11 @@ export function homeWon(r: MatchupResult): boolean {
 }
 
 /**
- * A head-to-head pairing inside a Round.
+ * A head-to-head pairing for one week. Each Peach brings their own workouts:
+ * everything they log that week scores toward it.
  *
- * `awayPeachId` is null for a bye: the home Peach still receives a workout
- * and can score points-for, but no win or loss is recorded.
+ * `awayPeachId` is null for a bye: the home Peach still scores points-for,
+ * but no win or loss is recorded.
  */
 export interface Matchup {
   readonly id: string;
@@ -138,8 +153,6 @@ export interface Matchup {
   readonly roundId: string;
   readonly homePeachId: string;
   readonly awayPeachId: string | null;
-  /** The generated workout both Peaches perform. Null until generated. */
-  readonly workoutId: string | null;
   readonly status: MatchupStatus;
   readonly result: MatchupResult | null;
 }
@@ -148,7 +161,7 @@ export type NewMatchup = Pick<Matchup, 'id' | 'seasonId' | 'roundId' | 'homePeac
   Partial<Matchup>;
 
 export function matchup(init: NewMatchup): Matchup {
-  return { awayPeachId: null, workoutId: null, status: 'scheduled', result: null, ...init };
+  return { awayPeachId: null, status: 'scheduled', result: null, ...init };
 }
 
 export function isBye(m: Matchup): boolean {
@@ -185,7 +198,6 @@ export function matchupFromJson(json: JsonMap): Matchup {
     roundId: requireString(json['roundId'], 'roundId'),
     homePeachId: requireString(json['homePeachId'], 'homePeachId'),
     awayPeachId: stringOrNull(json['awayPeachId']),
-    workoutId: stringOrNull(json['workoutId']),
     status: enumFromJson(MATCHUP_STATUSES, json['status'], 'scheduled'),
     result: result
       ? {
@@ -203,7 +215,6 @@ export function matchupToJson(m: Matchup): JsonMap {
     roundId: m.roundId,
     homePeachId: m.homePeachId,
     awayPeachId: m.awayPeachId,
-    workoutId: m.workoutId,
     status: m.status,
     result: m.result ? { homePoints: m.result.homePoints, awayPoints: m.result.awayPoints } : null,
   };

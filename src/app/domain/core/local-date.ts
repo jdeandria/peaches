@@ -2,7 +2,7 @@
  * A calendar date with no time or zone component, as an ISO-8601 string
  * (`yyyy-MM-dd`).
  *
- * Exercise days, season boundaries and logging windows are all calendar
+ * Matchup weeks, season boundaries and logging windows are all calendar
  * dates in the owning Crate's time zone. Using `Date` for those would
  * silently drag a time zone along and produce off-by-one-day bugs, so the
  * domain uses this type instead and converts at the edges.
@@ -88,6 +88,11 @@ export function epochDay(date: LocalDate): number {
 export function weekday(date: LocalDate): number {
   const js = toUtcDate(date).getUTCDay(); // Sunday = 0
   return js === 0 ? 7 : js;
+}
+
+/** The Monday on or before `date`: weeks run Monday to Sunday. */
+export function startOfWeek(date: LocalDate): LocalDate {
+  return addDays(date, 1 - weekday(date));
 }
 
 export function addDays(date: LocalDate, days: number): LocalDate {

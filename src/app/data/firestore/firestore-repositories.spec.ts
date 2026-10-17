@@ -18,21 +18,20 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { FormatError } from '../../domain/core/json';
 import { localDate } from '../../domain/core/local-date';
-import { ExerciseCapability } from '../../domain/models/capability';
 import { Crate, CrateMembership, crateSettings } from '../../domain/models/crate';
+import { CustomExercise, Routine } from '../../domain/models/library';
 import { peach } from '../../domain/models/peach';
-import { scoringRules } from '../../domain/models/scoring-rules';
+import { categoryWeights, DEFAULT_WEIGHTS } from '../../domain/models/scoring';
 import { matchup, Round, Season } from '../../domain/models/season';
-import { prescription, Workout } from '../../domain/models/workout';
 import { exerciseLogEntry, setLog, workoutLog } from '../../domain/models/workout-log';
 import {
   COLLECTIONS,
-  FirestoreCapabilityRepository,
+  FirestoreBallotRepository,
   FirestoreCrateRepository,
+  FirestoreLibraryRepository,
   FirestorePeachRepository,
   FirestoreSeasonRepository,
   FirestoreWorkoutLogRepository,
-  FirestoreWorkoutRepository,
 } from './firestore-repositories';
 
 const PROJECT_ID = 'demo-peaches';
@@ -130,57 +129,17 @@ function membership(crateId: string, peachId: string, init: Partial<CrateMembers
   return { crateId, peachId, role: 'member', status: 'active', joinedAt: now, ...init } as const;
 }
 
-function capability(peachId: string, exerciseId: string): ExerciseCapability {
-  return { peachId, exerciseId, status: 'able', updatedAt: now, notes: null };
-}
-
 function season(id: string, crateId: string, createdAt = now): Season {
   return {
     id,
     crateId,
     name: id,
-    exerciseDays: [localDate(2026, 10, 10), localDate(2026, 10, 12)],
+    startWeek: localDate(2026, 10, 5),
+    weeks: 2,
     participantIds: ['a', 'b'],
+    weights: categoryWeights({ runWalk: 60, reps: 40 }),
     status: 'scheduled',
     createdAt,
-  };
-}
-
-function workout(id: string): Workout {
-  return {
-    id,
-    title: 'Full body',
-    blocks: [
-      {
-        type: 'strength',
-        items: [
-          {
-            id: 'i1',
-            exerciseId: 'push_up',
-            prescription: prescription({
-              sets: 3,
-              restSeconds: 60,
-              reps: 10,
-              load: { rpe: 7, note: null },
-            }),
-            scoringWeight: 1,
-          },
-          {
-            id: 'i2',
-            exerciseId: 'plank',
-            prescription: prescription({ sets: 2, restSeconds: 30, seconds: 45, perSide: true }),
-            scoringWeight: 0.5,
-          },
-        ],
-      },
-    ],
-    focus: 'fullBody',
-    goal: 'generalFitness',
-    targetDifficulty: 2.5,
-    estimatedMinutes: 40,
-    seed: 12345,
-    generatorVersion: 3,
-    createdAt: now,
   };
 }
 
@@ -286,14 +245,7 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
         description: 'Morning crew',
         inviteCode: 'ABC123',
         timeZone: 'America/New_York',
-        settings: crateSettings({
-          workoutDurationMinutes: 30,
-          goal: 'strength',
-          scoringRules: scoringRules({ pointsPerItem: 5, completionBonus: 0 }),
-          loggingGraceHours: 2,
-          excludedExerciseIds: ['burpee', 'pull_up'],
-          excludedJointStress: ['knee'],
-        }),
+        settings: crateSettings({ loggingGraceHours: 2 }),
       });
       await repo.save(c);
       expect(await repo.getById('c1')).toEqual(c);
@@ -364,56 +316,6 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
     });
   });
 
-  describe('FirestoreCapabilityRepository', () => {
-    let repo: FirestoreCapabilityRepository;
-    beforeEach(() => (repo = new FirestoreCapabilityRepository(db)));
-
-    it('round-trips capabilities keyed by exercise', async () => {
-      const c = { ...capability('a', 'squat'), status: 'unable', notes: 'Knee' } as const;
-      await repo.save(c);
-      await repo.save(capability('a', 'push_up'));
-      await repo.save({ ...capability('a', 'push_up'), notes: 'Updated' });
-
-      const found = await repo.forPeach('a');
-      expect(found).toHaveLength(2);
-      expect(found.find((x) => x.exerciseId === 'squat')).toEqual(c);
-      expect(found.find((x) => x.exerciseId === 'push_up')?.notes).toBe('Updated');
-      expect(await repo.forPeach('nobody')).toEqual([]);
-    });
-
-    it('forPeaches merges several Peaches and ignores duplicates', async () => {
-      await repo.save(capability('a', 'squat'));
-      await repo.save(capability('b', 'squat'));
-      await repo.save(capability('b', 'lunge'));
-      await repo.save(capability('c', 'squat'));
-      const found = await repo.forPeaches(['a', 'b', 'a']);
-      expect(found.map((c) => `${c.peachId}/${c.exerciseId}`).sort()).toEqual([
-        'a/squat',
-        'b/lunge',
-        'b/squat',
-      ]);
-    });
-
-    it('saveAll writes more than one batch', async () => {
-      const many = Array.from({ length: 1000 }, (_, i) => capability(`p${i % 2}`, `e${i}`));
-      await repo.saveAll(many);
-      expect(await repo.forPeach('p0')).toHaveLength(500);
-      expect(await repo.forPeach('p1')).toHaveLength(500);
-      await repo.saveAll([]);
-    });
-
-    it('watchForPeach emits the initial value, then every change', async () => {
-      const watched = record(repo.watchForPeach('a'));
-      expect(await watched.next()).toEqual([]);
-      await repo.save(capability('a', 'squat'));
-      await watched.next((cs) => cs.length === 1);
-      await repo.saveAll([capability('a', 'lunge'), capability('b', 'row')]);
-      const last = await watched.next((cs) => cs.length === 2);
-      expect(last.map((c) => c.exerciseId).sort()).toEqual(['lunge', 'squat']);
-      watched.stop();
-    });
-  });
-
   describe('FirestoreSeasonRepository', () => {
     let repo: FirestoreSeasonRepository;
     beforeEach(() => (repo = new FirestoreSeasonRepository(db)));
@@ -422,17 +324,10 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       id: 'r1',
       seasonId: 's1',
       index: 0,
-      date: localDate(2026, 10, 10),
-      focus: 'fullBody',
+      weekStart: localDate(2026, 10, 5),
       status: 'scheduled',
     };
-    const r2: Round = {
-      ...r1,
-      id: 'r2',
-      index: 1,
-      date: localDate(2026, 10, 12),
-      focus: 'upperBody',
-    };
+    const r2: Round = { ...r1, id: 'r2', index: 1, weekStart: localDate(2026, 10, 12) };
     const m1 = matchup({
       id: 'm1',
       seasonId: 's1',
@@ -449,7 +344,7 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
     });
     const bye = matchup({ id: 'm3', seasonId: 's1', roundId: 'r2', homePeachId: 'c' });
 
-    it('schedule denormalises date and peachIds for matchup queries', async () => {
+    it('schedule denormalises the week and peachIds for matchup queries', async () => {
       await repo.save(season('s1', 'c1'));
       // Out of order, to check roundsOf sorts by index.
       await repo.saveSchedule([r2, r1], [m1, m2, bye]);
@@ -460,21 +355,20 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       expect(await repo.matchupsOf('s1')).toHaveLength(3);
       expect(new Set(ids(await repo.matchupsInRound('r2')))).toEqual(new Set(['m2', 'm3']));
       expect(new Set(ids(await repo.matchupsFor('a')))).toEqual(new Set(['m1', 'm2']));
-      expect(ids(await repo.matchupsFor('a', localDate(2026, 10, 12)))).toEqual(['m2']);
-      expect(await repo.matchupsFor('a', localDate(2026, 10, 11))).toEqual([]);
       expect(ids(await repo.matchupsFor('c'))).toEqual(['m3']);
 
       const raw = (
         await getDoc(doc(db, COLLECTIONS.seasons, 's1', COLLECTIONS.matchups, 'm3'))
       ).data();
       expect(raw?.['peachIds']).toEqual(['c']);
-      expect(raw?.['date']).toBe('2026-10-12');
+      expect(raw?.['weekStart']).toBe('2026-10-12');
 
-      // Updating a matchup keeps the denormalised date.
-      await repo.saveMatchup({ ...m2, workoutId: 'w', status: 'inProgress' });
-      const updated = await repo.matchupsFor('a', localDate(2026, 10, 12));
-      expect(updated).toHaveLength(1);
-      expect(updated[0]?.workoutId).toBe('w');
+      // Updating a matchup keeps the denormalised week.
+      await repo.saveMatchup({ ...m2, status: 'inProgress' });
+      const updated = (
+        await getDoc(doc(db, COLLECTIONS.seasons, 's1', COLLECTIONS.matchups, 'm2'))
+      ).data();
+      expect(updated?.['weekStart']).toBe('2026-10-12');
       expect((await repo.getMatchup('m2'))?.status).toBe('inProgress');
       expect(await repo.getMatchup('nope')).toBeNull();
 
@@ -502,7 +396,7 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       expect(await repo.matchupsOf('s1')).toEqual([done]);
     });
 
-    it('saveMatchup writes peachIds and merges, keeping the schedule date', async () => {
+    it('saveMatchup writes peachIds and merges, keeping the schedule week', async () => {
       await repo.saveMatchup(m1);
       const ref = doc(db, COLLECTIONS.seasons, 's1', COLLECTIONS.matchups, 'm1');
       expect((await getDoc(ref)).data()?.['peachIds']).toEqual(['a', 'b']);
@@ -512,7 +406,7 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       await repo.saveMatchup({ ...m1, awayPeachId: null });
       const raw = (await getDoc(ref)).data();
       expect(raw?.['peachIds']).toEqual(['a']);
-      expect(raw?.['date']).toBe('2026-10-10');
+      expect(raw?.['weekStart']).toBe('2026-10-05');
       expect(await repo.matchupsFor('b')).toEqual([]);
     });
 
@@ -544,25 +438,6 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
     });
   });
 
-  describe('FirestoreWorkoutRepository', () => {
-    let repo: FirestoreWorkoutRepository;
-    beforeEach(() => (repo = new FirestoreWorkoutRepository(db)));
-
-    it('round-trips a Workout and returns null when missing', async () => {
-      const w = workout('w1');
-      await repo.save(w);
-      expect(await repo.getById('w1')).toEqual(w);
-      expect(await repo.getById('missing')).toBeNull();
-    });
-
-    it('getByIds handles more than one whereIn chunk', async () => {
-      const all = Array.from({ length: 35 }, (_, i) => `w${i}`);
-      await Promise.all(all.map((id) => repo.save(workout(id))));
-      const found = await repo.getByIds([...all, 'missing']);
-      expect(new Set(ids(found))).toEqual(new Set(all));
-    });
-  });
-
   describe('FirestoreWorkoutLogRepository', () => {
     let repo: FirestoreWorkoutLogRepository;
     beforeEach(() => (repo = new FirestoreWorkoutLogRepository(db)));
@@ -570,20 +445,26 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
     const full = workoutLog({
       id: 'l1',
       peachId: 'a',
-      workoutId: 'w1',
-      matchupId: 'm1',
+      routineId: 'rt1',
       startedAt: now,
       completedAt: later(40),
       status: 'submitted',
+      durationMinutes: 40,
+      sharedWith: ['c1', 'c2'],
       entries: [
         exerciseLogEntry({
           exerciseId: 'push_up',
-          workoutItemId: 'i1',
+          exerciseName: 'Push Up',
           sets: [setLog({ reps: 10 }), setLog({ reps: 8, loadKg: 12.5 })],
           rpe: 8,
           notes: 'Tough',
         }),
-        exerciseLogEntry({ exerciseId: 'plank', sets: [setLog({ seconds: 45 })] }),
+        exerciseLogEntry({
+          exerciseId: 'run',
+          exerciseName: 'Run',
+          distanceKind: 'runWalk',
+          sets: [setLog({ meters: 5000, seconds: 1500 })],
+        }),
       ],
       notes: 'Good session',
     });
@@ -594,13 +475,21 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       expect(await repo.getById('missing')).toBeNull();
     });
 
-    it('forMatchup finds the Peach’s log for a matchup', async () => {
-      await repo.save(full);
-      await repo.save(workoutLog({ id: 'l2', peachId: 'b', matchupId: 'm1', startedAt: now }));
-      expect((await repo.forMatchup('m1', 'a'))?.id).toBe('l1');
-      expect((await repo.forMatchup('m1', 'b'))?.id).toBe('l2');
-      expect(await repo.forMatchup('m1', 'c')).toBeNull();
-      expect(await repo.forMatchup('m2', 'a')).toBeNull();
+    it('saveSubmitted copies the log under every Crate it is shared with', async () => {
+      await repo.saveSubmitted(full);
+      expect(await repo.getById('l1')).toEqual(full);
+      const copy = await getDoc(doc(db, COLLECTIONS.crates, 'c2', COLLECTIONS.sharedLogs, 'l1'));
+      expect(copy.exists()).toBe(true);
+
+      await repo.saveSubmitted({ ...full, id: 'l2', startedAt: later(60 * 24 * 7) });
+      await repo.saveSubmitted({ ...full, id: 'l3', sharedWith: ['c2'], startedAt: later(10) });
+      // [from, to) on startedAt.
+      expect(ids(await repo.sharedWith('c1', now, later(60 * 24 * 7)))).toEqual(['l1']);
+      expect(ids(await repo.sharedWith('c2', now, later(60 * 24 * 7)))).toEqual(['l3', 'l1']);
+      expect(await repo.sharedWith('c1', later(1), later(2))).toEqual([]);
+      expect(await repo.sharedWith('c9', now, later(60 * 24 * 7))).toEqual([]);
+      expect(ids(await repo.recentlySharedWith('c2', 2))).toEqual(['l2', 'l3']);
+      expect((await repo.sharedWith('c1', now, later(1)))[0]).toEqual(full);
     });
 
     it('forPeach and watchForPeach list newest first', async () => {
@@ -624,6 +513,75 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       await repo.save(full);
       expect(await watched.next((l) => l?.status === 'submitted')).toEqual(full);
       watched.stop();
+    });
+  });
+
+  describe('FirestoreBallotRepository', () => {
+    it('keeps one ballot per member per Crate', async () => {
+      const repo = new FirestoreBallotRepository(db);
+      await repo.save({ crateId: 'c1', peachId: 'a', weights: DEFAULT_WEIGHTS, updatedAt: now });
+      const changed = categoryWeights({ ride: 100 });
+      await repo.save({ crateId: 'c1', peachId: 'a', weights: changed, updatedAt: later(5) });
+      await repo.save({ crateId: 'c2', peachId: 'a', weights: DEFAULT_WEIGHTS, updatedAt: now });
+      expect(await repo.forCrate('c1')).toEqual([
+        { crateId: 'c1', peachId: 'a', weights: changed, updatedAt: later(5) },
+      ]);
+      expect(await repo.forCrate('c3')).toEqual([]);
+    });
+  });
+
+  describe('FirestoreLibraryRepository', () => {
+    let repo: FirestoreLibraryRepository;
+    beforeEach(() => (repo = new FirestoreLibraryRepository(db)));
+
+    it('adds and removes catalog picks keyed by exercise', async () => {
+      const entry = { crateId: 'c1', exerciseId: 'kb-swing', addedBy: 'a', addedAt: now };
+      await repo.saveEntry(entry);
+      await repo.saveEntry({ ...entry, crateId: 'c2' });
+      expect(await repo.entries('c1')).toEqual([entry]);
+      await repo.removeEntry('c1', 'kb-swing');
+      expect(await repo.entries('c1')).toEqual([]);
+      expect(await repo.entries('c2')).toHaveLength(1);
+    });
+
+    it('round-trips custom exercises and routines', async () => {
+      const custom: CustomExercise = {
+        id: 'custom-1',
+        crateId: 'c1',
+        name: 'Hill loop',
+        track: 'distance',
+        takesLoad: false,
+        distanceKind: 'runWalk',
+        createdBy: 'a',
+        createdAt: now,
+      };
+      const routine: Routine = {
+        id: 'rt1',
+        crateId: 'c1',
+        name: 'Loop and swings',
+        items: [
+          {
+            exerciseId: 'custom-1',
+            exerciseName: 'Hill loop',
+            sets: 1,
+            reps: null,
+            seconds: null,
+            meters: 4000,
+          },
+        ],
+        createdBy: 'a',
+        createdAt: now,
+      };
+      await repo.saveCustomExercise(custom);
+      await repo.saveRoutine(routine);
+      expect(await repo.customExercises('c1')).toEqual([custom]);
+      expect(await repo.routines('c1')).toEqual([routine]);
+      expect(await repo.getRoutine('c1', 'rt1')).toEqual(routine);
+      expect(await repo.getRoutine('c1', 'nope')).toBeNull();
+      await repo.removeCustomExercise('c1', 'custom-1');
+      await repo.removeRoutine('c1', 'rt1');
+      expect(await repo.customExercises('c1')).toEqual([]);
+      expect(await repo.routines('c1')).toEqual([]);
     });
   });
 });

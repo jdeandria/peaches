@@ -40,11 +40,11 @@ describe('Crates', () => {
       );
       const warriors = links.find((a) => a.textContent?.includes('Weekend Warriors'))!;
       expect(warriors.getAttribute('href')).toMatch(/^\/crates\/.+/);
-      expect(warriors.textContent).toContain('5 Peaches · General fitness · 40 min');
+      expect(warriors.textContent).toContain('5 Peaches');
       expect(warriors.textContent).toContain('Autumn Kick-off');
-      expect(warriors.textContent).toMatch(/Round \d+ of 12/);
+      expect(warriors.textContent).toContain('Week 3 of 6');
       const lifters = links.find((a) => a.textContent?.includes('Lunch Break Lifters'))!;
-      expect(lifters.textContent).toContain('Starts Tue, Oct 13');
+      expect(lifters.textContent).toContain('Starts Mon, Oct 19');
       expect(el.querySelector('button[matFab]')?.textContent).toContain('New Crate');
     });
 
@@ -61,27 +61,22 @@ describe('Crates', () => {
   });
 
   describe('CreateCrateDialog', () => {
-    it('creates a Crate with the chosen settings and opens it', async () => {
+    it('creates a Crate and opens it', async () => {
       await setUp();
       const f = TestBed.createComponent(CreateCrateDialog);
       await f.whenStable();
       const el: HTMLElement = f.nativeElement;
       expect(el.querySelector('h2')?.textContent).toBe('New Crate');
-      expect(el.textContent).toContain('Workout length: 40 min');
+      expect(el.textContent).toContain('members vote on');
 
       const name = el.querySelector<HTMLInputElement>('input[matInput]')!;
       name.value = 'Garage Gym';
       name.dispatchEvent(new Event('input'));
-      const dialog = f.componentInstance;
-      dialog.goal.set('strength');
-      dialog.minutes.set(55);
-      await dialog.create();
+      await f.componentInstance.create();
 
       const crate = close.mock.calls[0][0];
       expect(crate.name).toBe('Garage Gym');
       expect(crate.ownerPeachId).toBe(DEMO_PEACH_ID);
-      expect(crate.settings.goal).toBe('strength');
-      expect(crate.settings.workoutDurationMinutes).toBe(55);
       expect(await backend.container.crates.getById(crate.id)).not.toBeNull();
       expect(TestBed.inject(Router).url).toBe(`/crates/${crate.id}`);
     });

@@ -2,31 +2,30 @@ import { IdGenerator } from '../domain/core/ids';
 import { ZoneClock } from '../domain/core/zone-clock';
 import { ExerciseCatalog } from '../domain/exercises/exercise-catalog';
 import {
-  CapabilityRepository,
+  BallotRepository,
   CrateRepository,
+  LibraryRepository,
   PeachRepository,
   SeasonRepository,
   WorkoutLogRepository,
-  WorkoutRepository,
 } from '../domain/repositories';
-import { ExercisePoolService } from '../domain/services/exercise-pool';
 import { RoundWindowService } from '../domain/services/round-window';
 import { ScoringService } from '../domain/services/scoring-service';
-import { WorkoutGenerator } from '../domain/services/workout-generator';
-import { CapabilityService } from './capability-service';
 import { CrateService } from './crate-service';
+import { LibraryService } from './library-service';
 import { LoggingService } from './logging-service';
 import { SeasonService } from './season-service';
 import { SessionService } from './session-service';
+import { VotingService } from './voting-service';
 
 /** The six repositories a backend provides. */
 export interface Repositories {
   readonly peaches: PeachRepository;
   readonly crates: CrateRepository;
-  readonly capabilities: CapabilityRepository;
   readonly seasons: SeasonRepository;
-  readonly workouts: WorkoutRepository;
   readonly logs: WorkoutLogRepository;
+  readonly ballots: BallotRepository;
+  readonly library: LibraryRepository;
 }
 
 /**
@@ -38,18 +37,17 @@ export interface Repositories {
 export class AppContainer implements Repositories {
   readonly peaches: PeachRepository;
   readonly crates: CrateRepository;
-  readonly capabilities: CapabilityRepository;
   readonly seasons: SeasonRepository;
-  readonly workouts: WorkoutRepository;
   readonly logs: WorkoutLogRepository;
+  readonly ballots: BallotRepository;
+  readonly library: LibraryRepository;
 
-  readonly pool: ExercisePoolService;
   readonly windows: RoundWindowService;
-  readonly generator: WorkoutGenerator;
   readonly scoring = new ScoringService();
   readonly crateService: CrateService;
-  readonly capabilityService: CapabilityService;
   readonly loggingService: LoggingService;
+  readonly votingService: VotingService;
+  readonly libraryService: LibraryService;
   readonly seasonService: SeasonService;
   readonly sessionService: SessionService;
 
@@ -62,34 +60,21 @@ export class AppContainer implements Repositories {
     ({
       peaches: this.peaches,
       crates: this.crates,
-      capabilities: this.capabilities,
       seasons: this.seasons,
-      workouts: this.workouts,
       logs: this.logs,
+      ballots: this.ballots,
+      library: this.library,
     } = repositories);
-    this.pool = new ExercisePoolService(catalog);
     this.windows = new RoundWindowService(zone);
-    this.generator = new WorkoutGenerator(ids);
     this.crateService = new CrateService(this.crates, ids);
-    this.capabilityService = new CapabilityService(this.capabilities, catalog);
-    this.loggingService = new LoggingService({
-      logs: this.logs,
-      workouts: this.workouts,
-      ids,
-      seasons: this.seasons,
-      crates: this.crates,
-      windows: this.windows,
-      scoring: this.scoring,
-    });
+    this.loggingService = new LoggingService({ logs: this.logs, crates: this.crates, ids });
+    this.votingService = new VotingService(this.ballots, this.crates);
+    this.libraryService = new LibraryService(this.library, this.crates, catalog, ids);
     this.seasonService = new SeasonService({
       seasons: this.seasons,
       crates: this.crates,
-      peaches: this.peaches,
-      capabilities: this.capabilities,
-      workouts: this.workouts,
       logs: this.logs,
-      pool: this.pool,
-      generator: this.generator,
+      voting: this.votingService,
       ids,
       windows: this.windows,
       scoring: this.scoring,

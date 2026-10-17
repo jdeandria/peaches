@@ -2,86 +2,44 @@ import {
   dateTimeFromJson,
   dateTimeToJson,
   enumFromJson,
-  enumListFromJson,
   intFromJson,
   JsonMap,
   mapFromJson,
   requireString,
-  stringListFromJson,
   stringOrNull,
 } from '../core/json';
-import { JOINT_STRESSES, JointStress } from '../exercises/taxonomy';
-import {
-  ScoringRules,
-  scoringRulesFromJson,
-  scoringRulesToJson,
-  STANDARD_SCORING_RULES,
-} from './scoring-rules';
-import { TRAINING_GOALS, TrainingGoal } from './training';
 
 /**
  * Tunable behaviour of a Crate. Everything a Crate owner can change lives
- * here so that {@link Crate} itself stays a stable identity record.
+ * here so that {@link Crate} itself stays a stable identity record. What
+ * each scoring category is worth is not a setting: members vote on it.
  */
 export interface CrateSettings {
-  readonly workoutDurationMinutes: number;
-  readonly goal: TrainingGoal;
-  readonly scoringRules: ScoringRules;
-  /** Hours after the end of an exercise day during which logs still count. */
+  /**
+   * Hours after a matchup week ends during which it stays open, so a
+   * Sunday-night workout submitted after midnight still counts.
+   */
   readonly loggingGraceHours: number;
-  /** Exercises the Crate has banned regardless of member capability. */
-  readonly excludedExerciseIds: readonly string[];
-  /** Joint-stress classes the Crate avoids (e.g. a knee-friendly Crate). */
-  readonly excludedJointStress: readonly JointStress[];
 }
 
 export const DEFAULT_CRATE_SETTINGS: CrateSettings = Object.freeze({
-  workoutDurationMinutes: 40,
-  goal: 'generalFitness',
-  scoringRules: STANDARD_SCORING_RULES,
   loggingGraceHours: 6,
-  excludedExerciseIds: [],
-  excludedJointStress: [],
 });
 
 export function crateSettings(overrides: Partial<CrateSettings> = {}): CrateSettings {
-  const merged = { ...DEFAULT_CRATE_SETTINGS, ...overrides };
-  // These are sets in meaning; keep them free of duplicates.
-  const s: CrateSettings = {
-    ...merged,
-    excludedExerciseIds: [...new Set(merged.excludedExerciseIds)],
-    excludedJointStress: [...new Set(merged.excludedJointStress)],
-  };
-  if (s.workoutDurationMinutes < 15 || s.workoutDurationMinutes > 120) {
-    throw new RangeError('workoutDurationMinutes is 15..120');
+  const s = { ...DEFAULT_CRATE_SETTINGS, ...overrides };
+  if (s.loggingGraceHours < 0 || s.loggingGraceHours > 48) {
+    throw new RangeError('loggingGraceHours is 0..48');
   }
-  if (s.loggingGraceHours < 0) throw new RangeError('loggingGraceHours must be >= 0');
   return s;
 }
 
 export function crateSettingsFromJson(json: JsonMap): CrateSettings {
-  const rules = mapFromJson(json['scoringRules']);
-  return {
-    workoutDurationMinutes: intFromJson(json['workoutDurationMinutes'], 40),
-    goal: enumFromJson(TRAINING_GOALS, json['goal'], 'generalFitness'),
-    scoringRules: rules ? scoringRulesFromJson(rules) : STANDARD_SCORING_RULES,
-    loggingGraceHours: intFromJson(json['loggingGraceHours'], 6),
-    excludedExerciseIds: [...new Set(stringListFromJson(json['excludedExerciseIds']))],
-    excludedJointStress: [
-      ...new Set(enumListFromJson(JOINT_STRESSES, json['excludedJointStress'])),
-    ],
-  };
+  return { loggingGraceHours: intFromJson(json['loggingGraceHours'], 6) };
 }
 
 export function crateSettingsToJson(s: CrateSettings): JsonMap {
-  return {
-    workoutDurationMinutes: s.workoutDurationMinutes,
-    goal: s.goal,
-    scoringRules: scoringRulesToJson(s.scoringRules),
-    loggingGraceHours: s.loggingGraceHours,
-    excludedExerciseIds: [...s.excludedExerciseIds].sort(),
-    excludedJointStress: [...s.excludedJointStress],
-  };
+  return { loggingGraceHours: s.loggingGraceHours };
 }
 
 /** A group of Peaches who train and compete together. */
@@ -92,7 +50,7 @@ export interface Crate {
   readonly ownerPeachId: string;
   /** Short shareable code other Peaches use to join. */
   readonly inviteCode: string;
-  /** IANA time zone in which exercise days begin and end. */
+  /** IANA time zone in which matchup weeks begin and end. */
   readonly timeZone: string;
   readonly settings: CrateSettings;
   readonly createdAt: Date;

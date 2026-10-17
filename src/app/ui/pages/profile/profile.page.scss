@@ -27,29 +27,6 @@
   }
 }
 
-.level {
-  --pch-card-padding: 16px 20px;
-}
-
-.level-value {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.number {
-  color: var(--mat-sys-primary);
-}
-
-mat-slider {
-  display: block;
-  margin-inline: 0;
-}
-
-.help {
-  margin: 0;
-}
-
 .icon {
   width: 40px;
   text-align: center;

@@ -32,11 +32,8 @@ describe('ProfilePage', () => {
     expect(el.querySelector('h1')?.textContent).toBe('Profile');
     expect(el.querySelector('pch-card h2')?.textContent).toBe('You');
     expect(el.textContent).toContain('2 Crates');
-    expect(el.textContent).toContain('Fit');
-    const able = (await backend.container.capabilities.forPeach(DEMO_PEACH_ID)).filter(
-      (c) => c.status === 'able',
-    ).length;
-    expect(el.textContent).toContain(`${able} exercises you can do`);
+    expect(el.textContent).toContain('440 exercises');
+    expect(el.textContent).toContain('Add favourites to your Crates’ libraries');
     expect(el.querySelector('a[href="/exercises"]')).not.toBeNull();
     expect(el.textContent).toContain(`Version ${APP_VERSION}`);
     // The demo cannot sign out, and the browser offered no install prompt.
@@ -44,7 +41,7 @@ describe('ProfilePage', () => {
     expect(el.textContent).not.toContain('Install app');
   });
 
-  it('switches units and saves the fitness level', async () => {
+  it('switches units', async () => {
     const { f, el } = await render();
     const imperial = Array.from(el.querySelectorAll<HTMLButtonElement>('[role=radio]')).find(
       (b) => b.textContent?.trim() === 'Imperial',
@@ -54,13 +51,6 @@ describe('ProfilePage', () => {
     await f.whenStable();
     expect(imperial.getAttribute('aria-checked')).toBe('true');
     expect((await backend.container.peaches.getById(DEMO_PEACH_ID))?.units).toBe('imperial');
-
-    const peach = (await backend.container.peaches.getById(DEMO_PEACH_ID))!;
-    await f.componentInstance.saveLevel(peach, 5);
-    await settle();
-    await f.whenStable();
-    expect((await backend.container.peaches.getById(DEMO_PEACH_ID))?.fitnessLevel).toBe(5);
-    expect(el.textContent).toContain('Advanced');
   });
 
   it('offers to install the app when the browser allows it', async () => {

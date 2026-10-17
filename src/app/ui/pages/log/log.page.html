@@ -1,0 +1,147 @@
+@if (loading()) {
+  <pch-page title="Workout" showBack backLink="/">
+    <div class="loading"><pch-loading-indicator /></div>
+  </pch-page>
+} @else if (logId() && !log()) {
+  <pch-page title="Workout" showBack backLink="/">
+    <pch-empty-state icon="search_off" title="Workout not found" />
+  </pch-page>
+} @else {
+  <pch-page [title]="title()" [subtitle]="subtitle()" showBack backLink="/">
+    @if (submitted() && mine() && hasCrates()) {
+      <button
+        pageActions
+        matIconButton
+        type="button"
+        aria-label="Share as a routine"
+        matTooltip="Share as a routine"
+        (click)="shareAsRoutine()"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">ios_share</span>
+      </button>
+    }
+
+    @if (totals().length > 0) {
+      <ul class="totals" [pchStagger]="0" aria-label="This workout adds up to">
+        @for (t of totals(); track t.category) {
+          <li class="total">
+            <span class="material-symbols-rounded" aria-hidden="true">{{ t.icon }}</span>
+            <span class="pch-title-medium">{{ t.amount }}</span>
+            <span class="pch-label-small muted">{{ t.label }}</span>
+          </li>
+        }
+      </ul>
+      @if (cratePoints().length > 0) {
+        <p class="points pch-body-medium" [pchStagger]="0">
+          @for (c of cratePoints(); track c.name; let last = $last) {
+            <span
+              ><strong>{{ c.points }} pts</strong> in {{ c.name }}{{ last ? '' : ' · ' }}</span
+            >
+          }
+        </p>
+      }
+    }
+
+    @if (planned().length > 0) {
+      <pch-section title="Up next" />
+      <pch-list-card [pchStagger]="1">
+        @for (item of planned(); track item.exerciseId) {
+          <div class="item">
+            <div class="text">
+              <span class="pch-title-medium">{{ item.exerciseName }}</span>
+              <span class="pch-body-medium muted"
+                >{{ item.sets }} ×
+                {{
+                  item.reps !== null
+                    ? item.reps + ' reps'
+                    : item.meters !== null
+                      ? item.meters + ' m'
+                      : item.seconds !== null
+                        ? item.seconds + ' s'
+                        : 'sets'
+                }}</span
+              >
+            </div>
+            <button
+              matIconButton
+              type="button"
+              class="action tonal"
+              matTooltip="Log sets"
+              [attr.aria-label]="'Log sets: ' + item.exerciseName"
+              (click)="logPlanned(item)"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">add</span>
+            </button>
+          </div>
+        }
+      </pch-list-card>
+    }
+
+    @if (entries().length > 0) {
+      <pch-section [title]="editable() ? 'Logged' : 'Exercises'" />
+      <pch-list-card [pchStagger]="2">
+        @for (v of entries(); track v.entry.exerciseId) {
+          <!-- The row is a larger mouse target; keyboard and screen readers use its buttons. -->
+          <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+          <div class="item" [class.clickable]="editable()" (click)="rowClick($event, v.entry)">
+            <div class="text">
+              <span class="pch-title-medium">{{ v.entry.exerciseName }}</span>
+              <span class="pch-body-medium muted">{{ v.summary }}</span>
+            </div>
+            @if (editable()) {
+              <button
+                matIconButton
+                type="button"
+                matTooltip="Remove"
+                [attr.aria-label]="'Remove ' + v.entry.exerciseName"
+                (click)="removeEntry(v.entry)"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+              </button>
+              <button
+                matIconButton
+                type="button"
+                class="action filled"
+                matTooltip="Edit sets"
+                [attr.aria-label]="'Edit sets: ' + v.entry.exerciseName"
+                (click)="editEntry(v.entry)"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+              </button>
+            }
+          </div>
+        }
+      </pch-list-card>
+    } @else if (editable() && planned().length === 0) {
+      <pch-card variant="outlined" class="start" [pchStagger]="1">
+        <span class="peach" aria-hidden="true">🍑</span>
+        <div>
+          <h2 class="pch-title-large">What did you do?</h2>
+          <p class="pch-body-medium muted">
+            Runs, rides, lifts, yoga: log anything. It scores in every Crate you’re in.
+          </p>
+        </div>
+      </pch-card>
+    }
+
+    @if (editable()) {
+      <button matButton="tonal" type="button" class="add" (click)="addExercise()">
+        <span class="material-symbols-rounded" aria-hidden="true">add</span>
+        Add exercise
+      </button>
+      @if (log() && entries().length > 0) {
+        <button
+          pageBottomBar
+          matButton="filled"
+          type="button"
+          class="submit"
+          [disabled]="busy()"
+          (click)="submit()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">check</span>
+          Finish workout
+        </button>
+      }
+    }
+  </pch-page>
+}

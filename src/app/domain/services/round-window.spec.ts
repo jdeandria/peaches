@@ -23,35 +23,39 @@ describe('RoundWindowService', () => {
     id: 'r',
     seasonId: 's',
     index: 0,
-    date: localDate(2026, 10, 10),
-    focus: 'fullBody',
+    weekStart: localDate(2026, 10, 12), // Monday
     status: 'scheduled',
   };
 
-  it('window spans the day plus the grace period', () => {
+  it('covers Monday to Sunday and stays open for the grace period', () => {
     const w = service.windowFor(round, crate);
-    expect(w.opensAt).toEqual(utc(2026, 10, 10));
-    expect(w.closesAt).toEqual(utc(2026, 10, 11, 3));
-    expect(w.isOpenAt(utc(2026, 10, 9, 23, 59))).toBe(false);
-    expect(w.isOpenAt(utc(2026, 10, 10))).toBe(true);
-    expect(w.isOpenAt(utc(2026, 10, 11, 2, 59))).toBe(true);
-    expect(w.isOpenAt(utc(2026, 10, 11, 3))).toBe(false);
-    expect(w.hasClosedBy(utc(2026, 10, 11, 3))).toBe(true);
-    expect(w.hasClosedBy(utc(2026, 10, 11, 2, 59))).toBe(false);
-    expect(w.remainingMsAt(utc(2026, 10, 11, 2))).toBe(60 * 60 * 1000);
-    expect(w.remainingMsAt(utc(2026, 10, 12))).toBe(0);
+    expect(w.opensAt).toEqual(utc(2026, 10, 12));
+    expect(w.endsAt).toEqual(utc(2026, 10, 19));
+    expect(w.closesAt).toEqual(utc(2026, 10, 19, 3));
+    expect(w.covers(utc(2026, 10, 11, 23, 59))).toBe(false);
+    expect(w.covers(utc(2026, 10, 12))).toBe(true);
+    expect(w.covers(utc(2026, 10, 18, 23, 59))).toBe(true);
+    // A log started after Sunday midnight belongs to the next week...
+    expect(w.covers(utc(2026, 10, 19, 1))).toBe(false);
+    // ...but the round is still open to finish submitting.
+    expect(w.isOpenAt(utc(2026, 10, 19, 2, 59))).toBe(true);
+    expect(w.isOpenAt(utc(2026, 10, 19, 3))).toBe(false);
+    expect(w.hasClosedBy(utc(2026, 10, 19, 3))).toBe(true);
+    expect(w.hasClosedBy(utc(2026, 10, 19, 2, 59))).toBe(false);
+    expect(w.remainingMsAt(utc(2026, 10, 19, 2))).toBe(60 * 60 * 1000);
+    expect(w.remainingMsAt(utc(2026, 10, 20))).toBe(0);
   });
 
-  it('a zero grace period closes at the next midnight', () => {
+  it('a zero grace period closes at the end of Sunday', () => {
     const w = service.windowFor(round, {
       ...crate,
       settings: crateSettings({ loggingGraceHours: 0 }),
     });
-    expect(w.closesAt).toEqual(utc(2026, 10, 11));
-    expect(w.isOpenAt(new Date(utc(2026, 10, 11).getTime() - 1))).toBe(true);
+    expect(w.closesAt).toEqual(utc(2026, 10, 19));
+    expect(w.isOpenAt(new Date(utc(2026, 10, 19).getTime() - 1))).toBe(true);
   });
 
-  it('uses the zone clock for both ends, so DST-length days stay exact', () => {
+  it('uses the zone clock for both ends, so DST-length weeks stay exact', () => {
     // A stub New York clock around the 2026 spring-forward (8 March):
     // midnight is 05:00Z before the change and 04:00Z after it.
     const ny: ZoneClock = {
@@ -65,19 +69,19 @@ describe('RoundWindowService', () => {
       },
     };
     const w = new RoundWindowService(ny).windowFor(
-      { ...round, date: localDate(2026, 3, 8) },
+      { ...round, weekStart: localDate(2026, 3, 2) },
       { ...crate, timeZone: 'America/New_York' },
     );
-    expect(w.opensAt).toEqual(utc(2026, 3, 8, 5));
-    // A 23-hour day plus 3 hours' grace.
-    expect(w.closesAt).toEqual(utc(2026, 3, 9, 7));
-    expect(w.closesAt.getTime() - w.opensAt.getTime()).toBe(26 * 3600_000);
+    expect(w.opensAt).toEqual(utc(2026, 3, 2, 5));
+    expect(w.endsAt).toEqual(utc(2026, 3, 9, 4));
+    // A 167-hour week plus 3 hours' grace.
+    expect(w.closesAt.getTime() - w.opensAt.getTime()).toBe(170 * 3600_000);
   });
 });
 
 describe('RoundWindow', () => {
   it('is half-open: [opensAt, closesAt)', () => {
-    const w = new RoundWindow(utc(2026, 1, 1), utc(2026, 1, 2));
+    const w = new RoundWindow(utc(2026, 1, 1), utc(2026, 1, 2), utc(2026, 1, 2));
     expect(w.isOpenAt(utc(2026, 1, 1))).toBe(true);
     expect(w.isOpenAt(utc(2026, 1, 2))).toBe(false);
     expect(w.remainingMsAt(utc(2025, 12, 31))).toBe(2 * 86_400_000);

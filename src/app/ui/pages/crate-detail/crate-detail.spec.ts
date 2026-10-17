@@ -3,12 +3,13 @@ import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
-import { LocalDate, weekday } from '../../../domain/core/local-date';
+import { LocalDate } from '../../../domain/core/local-date';
 import { Crate } from '../../../domain/models/crate';
+import { categoryWeights } from '../../../domain/models/scoring';
 import { matchup, Round } from '../../../domain/models/season';
-import { seededBackend, settle, TestBackend } from '../../../../testing/test-app';
+import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { CrateDetailPage, roundViews } from './crate-detail.page';
-import { NewSeasonDialog, seasonDays } from './new-season-dialog';
+import { NewSeasonDialog, startWeekOptions } from './new-season-dialog';
 
 @Component({ template: '' })
 class Blank {}
@@ -39,50 +40,65 @@ describe('CrateDetailPage', () => {
     return f.nativeElement as HTMLElement;
   }
 
-  it('shows the Season standings, rounds and members of a Crate I belong to', async () => {
+  it('shows the Season standings, weeks, activity, library and members', async () => {
     const crate = await myCrate(backend, 'Weekend Warriors');
     const el = await render(crate.id);
     expect(el.querySelector('h1')?.textContent).toBe('Weekend Warriors');
-    expect(el.textContent).toContain('Three days a week, forty minutes, no excuses.');
-    expect(el.textContent).toContain('General fitness');
+    expect(el.textContent).toContain('Every workout counts. Most points each week wins.');
+    expect(el.textContent).toContain('What counts · 3 of 5 voted');
+    expect(el.querySelector('a.chip')?.getAttribute('href')).toBe(`/crates/${crate.id}/vote`);
     expect(el.textContent).toContain(`Code ${crate.inviteCode}`);
 
     const headings = Array.from(el.querySelectorAll('h2')).map((h) => h.textContent?.trim());
-    expect(headings).toEqual(['Autumn Kick-off', 'Rounds', 'Peaches']);
+    expect(headings).toEqual(['Autumn Kick-off', 'Weeks', 'Recent workouts', 'Library', 'Peaches']);
     expect(el.textContent).toContain('Active');
     expect(el.querySelectorAll('pch-standings-table tbody tr')).toHaveLength(5);
     expect(el.querySelector('pch-standings-table [aria-current]')?.textContent).toContain('You');
 
-    const rounds = el.querySelectorAll('pch-list-card')[0].querySelectorAll('pch-list-row');
-    expect(rounds).toHaveLength(12);
-    // Not the owner: statuses, no Open/Close buttons, no Season FAB.
-    expect(el.querySelector('pch-list-row button')).toBeNull();
+    const weeks = el.querySelectorAll('.weeks pch-list-row');
+    expect(weeks).toHaveLength(6);
+    expect(weeks[2].textContent).toContain('Week 3 · Oct 12 – 18');
+    // Not a manager: statuses, no Open/Close buttons, no Season FAB.
+    expect(el.querySelector('.weeks button')).toBeNull();
     expect(el.querySelector('button[matFab]')).toBeNull();
-    // Today's round links to my matchup.
-    const link = el.querySelector<HTMLAnchorElement>('pch-list-row a.stretched');
-    expect(link?.getAttribute('href')).toMatch(/^\/matchups\//);
+    // Played and current weeks link to my matchups; later ones don't yet.
+    expect(el.querySelectorAll('.weeks a.stretched')).toHaveLength(3);
 
-    const members = el.querySelectorAll('pch-list-card')[1].querySelectorAll('pch-list-row');
+    const activity = el.querySelectorAll('.activity pch-list-row, .activity a[pch-list-row]');
+    expect(activity).toHaveLength(8);
+    expect(activity[0].textContent).toContain('Ada');
+
+    const library = el.querySelectorAll('pch-crate-library pch-list-row');
+    expect(library).toHaveLength(5);
+    expect(library[0].textContent).toContain('Saturday sweat');
+    const start = library[0].querySelector('a')!;
+    expect(start.getAttribute('href')).toMatch(/^\/log\?routine=/);
+    expect(el.textContent).toContain('Reservoir hill loop');
+    // I added none of it and don't manage the Crate: nothing to remove.
+    expect(el.querySelector('pch-crate-library button[aria-label^="Remove"]')).toBeNull();
+
+    const members = el.querySelectorAll('.members pch-list-row');
     expect(members).toHaveLength(5);
+    expect(members[0].textContent).toContain('Ada');
     expect(members[0].textContent).toContain('Owner');
-    expect(el.textContent).toMatch(/Level \d/);
   });
 
-  it('offers the owner a new Season', async () => {
-    const crate = await myCrate(backend, 'Lunch Break Lifters');
-    const el = await render(crate.id);
+  it('lets the owner start a Season once the last one is over', async () => {
+    const lifters = await myCrate(backend, 'Lunch Break Lifters');
+    let el = await render(lifters.id);
     expect(el.textContent).toContain('Strength Block 1');
-    expect(el.querySelector('button[matFab]')?.textContent).toContain('Season');
-  });
+    // One is already scheduled.
+    expect(el.querySelector('button[matFab]')).toBeNull();
 
-  it('says when a Crate has no Season', async () => {
     const crate = await backend.container.crateService.createCrate({
       ownerPeachId: DEMO_PEACH_ID,
       name: 'Garage Gym',
-      now: new Date(),
+      now: FIXED_NOW,
     });
-    const el = await render(crate.id);
-    expect(el.textContent).toContain('No Season yet. The owner can start one.');
+    el = await render(crate.id);
+    expect(el.textContent).toContain('No Season yet. Start one');
+    expect(el.querySelector('button[matFab]')?.textContent).toContain('Season');
+    expect(el.textContent).toContain('Nothing logged yet.');
   });
 
   it('says when a Crate does not exist', async () => {
@@ -92,64 +108,71 @@ describe('CrateDetailPage', () => {
 });
 
 describe('roundViews', () => {
-  const round = (index: number, date: string, status: Round['status']): Round => ({
+  const round = (index: number, weekStart: string, status: Round['status']): Round => ({
     id: `r${index}`,
     seasonId: 's',
     index,
-    date: date as LocalDate,
-    focus: 'fullBody',
+    weekStart: weekStart as LocalDate,
     status,
   });
   const rounds = [
-    round(0, '2026-10-09', 'closed'),
+    round(0, '2026-10-05', 'closed'),
     round(1, '2026-10-12', 'open'),
     round(2, '2026-10-12', 'scheduled'),
-    round(3, '2026-10-14', 'scheduled'),
+    round(3, '2026-10-19', 'scheduled'),
   ];
   const matchups = [
     matchup({ id: 'm0', seasonId: 's', roundId: 'r0', homePeachId: 'me' }),
-    matchup({
-      id: 'm1',
-      seasonId: 's',
-      roundId: 'r1',
-      homePeachId: 'me',
-      awayPeachId: 'ada',
-      workoutId: 'w1',
-    }),
-    matchup({ id: 'm3', seasonId: 's', roundId: 'r3', homePeachId: 'ada', awayPeachId: 'ben' }),
+    matchup({ id: 'm1', seasonId: 's', roundId: 'r1', homePeachId: 'me', awayPeachId: 'ada' }),
+    matchup({ id: 'm3', seasonId: 's', roundId: 'r3', homePeachId: 'me', awayPeachId: 'ben' }),
   ];
+  const today = '2026-10-14' as LocalDate;
 
-  it('gives the owner Open for due rounds and Close for open ones', () => {
-    const views = roundViews({ rounds, matchups, me: 'me', canManage: true, today: '2026-10-12' });
+  it('gives managers Open for started weeks and Close for open ones', () => {
+    const views = roundViews({ rounds, matchups, me: 'me', canManage: true, today });
     expect(views.map((v) => v.action)).toEqual([null, 'close', 'open', null]);
-    expect(views[1].title).toBe('Mon, Oct 12 · Full body');
+    expect(views[1].title).toBe('Week 2 · Oct 12 – 18');
   });
 
-  it('labels my matchups and links the opened one', () => {
-    const views = roundViews({ rounds, matchups, me: 'me', canManage: false, today: '2026-10-12' });
+  it('labels my matchups and links those that have started', () => {
+    const views = roundViews({ rounds, matchups, me: 'me', canManage: false, today });
     expect(views.map((v) => v.action)).toEqual([null, null, null, null]);
-    expect(views.map((v) => v.subtitle)).toEqual(['Bye', 'You have a matchup', null, null]);
-    expect(views.map((v) => v.matchupLink)).toEqual([null, ['/matchups', 'm1'], null, null]);
+    expect(views.map((v) => v.subtitle)).toEqual([
+      'Bye',
+      'You have a matchup',
+      null,
+      'You have a matchup',
+    ]);
+    expect(views.map((v) => v.matchupLink)).toEqual([
+      ['/matchups', 'm0'],
+      ['/matchups', 'm1'],
+      null,
+      null,
+    ]);
   });
 });
 
 describe('NewSeasonDialog', () => {
-  it('derives exercise days from tomorrow for the chosen weeks', () => {
-    const days = seasonDays('2026-10-12' as LocalDate, new Set([1, 3, 5]), 2);
-    expect(days).toEqual([
-      '2026-10-14',
-      '2026-10-16',
-      '2026-10-19',
-      '2026-10-21',
-      '2026-10-23',
-      '2026-10-26',
+  it('starts this week or next', () => {
+    expect(startWeekOptions('2026-10-14' as LocalDate)).toEqual([
+      { value: '2026-10-12', label: 'This week (Mon, Oct 12)' },
+      { value: '2026-10-19', label: 'Next week (Mon, Oct 19)' },
     ]);
-    expect(days.every((d) => [1, 3, 5].includes(weekday(d)))).toBe(true);
   });
 
-  it('starts a Season with the chosen name and days; needs a weekday', async () => {
+  it('starts a Season with the chosen name, start and length, freezing the vote', async () => {
     const backend = await seededBackend();
-    const crate = await myCrate(backend, 'Lunch Break Lifters');
+    const crate = await backend.container.crateService.createCrate({
+      ownerPeachId: DEMO_PEACH_ID,
+      name: 'Garage Gym',
+      now: FIXED_NOW,
+    });
+    await backend.container.votingService.castBallot(
+      crate.id,
+      DEMO_PEACH_ID,
+      categoryWeights({ ride: 100 }),
+      FIXED_NOW,
+    );
     const close = vi.fn();
     TestBed.configureTestingModule({
       providers: [
@@ -159,46 +182,28 @@ describe('NewSeasonDialog', () => {
       ],
     });
     const f = TestBed.createComponent(NewSeasonDialog);
+    await settle();
     await f.whenStable();
     const el: HTMLElement = f.nativeElement;
-    expect(el.textContent).toContain('Length: 4 weeks');
-    const chips = Array.from(el.querySelectorAll('[role=option]'));
-    expect(chips.map((c) => c.getAttribute('aria-label'))).toEqual([
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday',
-    ]);
-    expect(chips.map((c) => c.getAttribute('aria-selected'))).toEqual([
-      'true',
-      'false',
-      'true',
-      'false',
-      'true',
-      'false',
-      'false',
-    ]);
+    expect(el.textContent).toContain('Length: 6 weeks');
+    expect(el.textContent).toContain('Ride 100');
+    const options = Array.from(el.querySelectorAll('[role=radio]')).map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(options).toEqual(['This week (Mon, Oct 12)', 'Next week (Mon, Oct 19)']);
 
     const dialog = f.componentInstance;
-    for (const d of [1, 3, 5]) dialog.toggleDay(d, false);
-    await f.whenStable();
-    const start = Array.from(el.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Start',
-    )!;
-    expect(start.disabled).toBe(true);
-
-    dialog.toggleDay(2, true);
     dialog.name.set('Block 2');
+    dialog.startWeek.set('2026-10-12' as LocalDate);
     dialog.weeks.set(3);
     await dialog.start();
     const season = close.mock.calls[0][0];
     expect(season.name).toBe('Block 2');
-    expect(season.exerciseDays).toHaveLength(3);
-    expect(season.exerciseDays.every((d: LocalDate) => weekday(d) === 2)).toBe(true);
-    const seasons = await backend.container.seasons.forCrate(crate.id);
-    expect(seasons.map((s) => s.name)).toContain('Block 2');
+    expect(season.startWeek).toBe('2026-10-12');
+    expect(season.weeks).toBe(3);
+    expect(season.weights).toEqual(categoryWeights({ ride: 100 }));
+    // Starting this week opens its round straight away.
+    const [first] = await backend.container.seasons.roundsOf(season.id);
+    expect(first.status).toBe('open');
   });
 });

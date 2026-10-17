@@ -1,0 +1,155 @@
+<div class="handle" aria-hidden="true"></div>
+
+<h2 class="pch-headline-small">{{ exercise.name }}</h2>
+@if (targetLine) {
+  <p class="target pch-body-medium">{{ targetLine }}</p>
+}
+@if (exercise.cues) {
+  <p class="target pch-body-small">{{ exercise.cues }}</p>
+}
+@if (lastTime(); as last) {
+  <p class="last-time pch-label-medium">
+    <span class="material-symbols-rounded" aria-hidden="true">history</span>{{ last }}
+  </p>
+}
+
+<ol class="sets">
+  @for (s of sets(); track $index; let i = $index) {
+    <li class="set" [class.weighted]="weighted" [class.travel]="track === 'distance'">
+      <span class="set-label pch-title-small">{{ setLabel(i) }}</span>
+      @if (track === 'distance') {
+        <div class="pair">
+          <label class="field boxed">
+            <input
+              class="pch-title-large"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0"
+              [value]="s.distance"
+              [attr.aria-label]="setLabel(i) + ' distance in ' + distanceUnit"
+              (input)="setDistance(i, $any($event.target).value)"
+            />
+            <span class="unit pch-label-small" aria-hidden="true">{{ distanceUnit }}</span>
+          </label>
+          <label class="field boxed">
+            <input
+              class="pch-title-large"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0"
+              [value]="s.minutes"
+              [attr.aria-label]="setLabel(i) + ' time in minutes'"
+              (input)="setMinutes(i, $any($event.target).value)"
+            />
+            <span class="unit pch-label-small" aria-hidden="true">min</span>
+          </label>
+        </div>
+      } @else {
+        <div class="steppers">
+          <div class="stepper">
+            <button
+              matIconButton
+              class="outlined"
+              type="button"
+              [matTooltip]="'Fewer ' + unit"
+              [attr.aria-label]="'Fewer ' + unit + ': ' + setLabel(i)"
+              (click)="nudgeValue(i, -1)"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">remove</span>
+            </button>
+            <label class="field">
+              <input
+                class="pch-title-large"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="0"
+                [value]="s.value"
+                [attr.aria-label]="setLabel(i) + ' ' + unit"
+                (input)="setValue(i, $any($event.target).value)"
+              />
+              <span class="unit pch-label-small" aria-hidden="true">{{ unit }}</span>
+            </label>
+            <button
+              matIconButton
+              class="tonal"
+              type="button"
+              [matTooltip]="'More ' + unit"
+              [attr.aria-label]="'More ' + unit + ': ' + setLabel(i)"
+              (click)="nudgeValue(i, 1)"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">add</span>
+            </button>
+          </div>
+          @if (weighted) {
+            <div class="divider" aria-hidden="true"></div>
+            <div class="stepper">
+              <button
+                matIconButton
+                class="outlined"
+                type="button"
+                matTooltip="Lighter"
+                [attr.aria-label]="'Lighter: ' + setLabel(i)"
+                (click)="nudgeLoad(i, -1)"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">remove</span>
+              </button>
+              <label class="field">
+                <input
+                  class="pch-title-large weight"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  placeholder="–"
+                  [value]="s.load"
+                  [attr.aria-label]="setLabel(i) + ' weight in ' + weightUnit"
+                  (input)="setLoad(i, $any($event.target).value)"
+                  (blur)="commitLoad(i, $any($event.target).value.trim())"
+                  (keydown.enter)="commitLoad(i, $any($event.target).value.trim())"
+                />
+                <span class="unit pch-label-small" aria-hidden="true">{{ weightUnit }}</span>
+              </label>
+              <button
+                matIconButton
+                class="tonal"
+                type="button"
+                matTooltip="Heavier"
+                [attr.aria-label]="'Heavier: ' + setLabel(i)"
+                (click)="nudgeLoad(i, 1)"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">add</span>
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </li>
+  }
+</ol>
+
+<div class="set-count">
+  <button matButton type="button" [disabled]="!canRemove()" (click)="removeSet()">
+    <span class="material-symbols-rounded" aria-hidden="true">remove</span>
+    Remove set
+  </button>
+  <button matButton="tonal" type="button" [disabled]="!canAdd()" (click)="addSet()">
+    <span class="material-symbols-rounded" aria-hidden="true">add</span>
+    Add set
+  </button>
+</div>
+
+<h3 id="pch-rpe-label" class="pch-title-small">How hard was it? (RPE)</h3>
+<pch-button-group
+  aria-labelledby="pch-rpe-label"
+  [options]="rpeOptions"
+  [(selected)]="rpe"
+  allowDeselect
+/>
+
+<div class="actions">
+  @if (targetLine) {
+    <button matButton="outlined" type="button" (click)="useTarget()">
+      <span class="material-symbols-rounded" aria-hidden="true">restart_alt</span>
+      Use target
+    </button>
+  }
+  <button matButton="filled" type="button" class="save" (click)="save()">Save</button>
+</div>

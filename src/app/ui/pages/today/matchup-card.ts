@@ -12,13 +12,12 @@ import { MatButton } from '@angular/material/button';
 
 import { AppContainer } from '../../../application/app-container';
 import { isBye, Matchup, opponentOf, Round, winnerId } from '../../../domain/models/season';
-import { scoredItems } from '../../../domain/models/workout';
-import { entryForItem, isSubmitted } from '../../../domain/models/workout-log';
 import { RoundWindow } from '../../../domain/services/round-window';
 import { AppState } from '../../../state/app-state';
 import { ShapedAvatar } from '../../expressive/shaped-avatar';
 import { WavyProgress } from '../../expressive/wavy-progress';
 import { Fmt } from '../../format';
+import { AnimatedNumber } from '../../layout/animated-number';
 import { DateBadge } from '../../layout/date-badge';
 import { ListRow } from '../../layout/list-row';
 
@@ -52,7 +51,7 @@ export async function loadMatchupInfo(
   };
 }
 
-/** Shared lookups for the hero card and list row (port of `_MatchupView`). */
+/** Shared lookups for the hero card and list row. */
 @Directive()
 abstract class MatchupView {
   protected readonly state = inject(AppState);
@@ -81,21 +80,21 @@ abstract class MatchupView {
 }
 
 /**
- * The matchup that needs doing, as an M3 hero card on the primary
- * container with a clear primary action and logging progress (port of
- * `MatchupHeroCard`). The call to action is a link; clicking anywhere else
- * on the card follows it too (pointer convenience only).
+ * This week's matchup, as an M3 hero card on the primary container: who
+ * you're up against, the live score from everything both of you have logged
+ * this week, and how long is left. The call to action is a link; clicking
+ * anywhere else on the card follows it too (pointer convenience only).
  */
 @Component({
   selector: 'pch-matchup-hero-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatButton, ShapedAvatar, WavyProgress],
+  imports: [RouterLink, MatButton, ShapedAvatar, WavyProgress, AnimatedNumber],
   template: `
     <!-- The card is a larger mouse target; keyboard and screen readers use its link. -->
     <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
     <div class="card" (click)="open($event)">
       <div class="top">
-        <span class="meta pch-label-large">{{ roundLine() }}</span>
+        <span class="meta pch-label-large">{{ weekLine() }}</span>
         @if (closesIn(); as closes) {
           <span class="pill pch-label-medium">
             <span class="material-symbols-rounded" aria-hidden="true">schedule</span>{{ closes }}
@@ -117,25 +116,30 @@ abstract class MatchupView {
           }
         </div>
       </div>
-      @if (total() > 0) {
-        <div class="progress-row pch-label-large">
-          <span>{{
-            submitted() ? 'Submitted' : done() + ' of ' + total() + ' exercises logged'
-          }}</span>
-          @if (workout(); as w) {
-            <span class="meta">~{{ w.estimatedMinutes }} min</span>
-          }
+      @if (score(); as s) {
+        <div class="score-row" role="status">
+          <span class="pch-label-large">You</span>
+          <span class="pch-display-small points">
+            <pch-animated-number [value]="s.mine" [format]="formatPoints" />
+            @if (!bye()) {
+              <span class="dash" aria-hidden="true">–</span>
+              <pch-animated-number [value]="s.theirs" [format]="formatPoints" />
+            }
+          </span>
+          <span class="pch-label-large">{{ bye() ? 'pts' : (s.leading ?? 'Tied') }}</span>
         </div>
-        <pch-wavy-progress
-          [value]="progress()"
-          [flowing]="!submitted() && done() > 0"
-          color="primary"
-          trackColor="color-mix(in srgb, var(--mat-sys-surface-container-lowest) 70%, transparent)"
-        />
+        @if (!bye()) {
+          <pch-wavy-progress
+            [value]="s.share"
+            [flowing]="s.mine > 0"
+            color="primary"
+            trackColor="color-mix(in srgb, var(--mat-sys-surface-container-lowest) 70%, transparent)"
+          />
+        }
       }
       <a matButton="filled" class="cta" [routerLink]="link()">
-        <span class="material-symbols-rounded" aria-hidden="true">{{ cta().icon }}</span>
-        {{ cta().label }}
+        <span class="material-symbols-rounded" aria-hidden="true">scoreboard</span>
+        View matchup
       </a>
     </div>
   `,
@@ -157,7 +161,7 @@ abstract class MatchupView {
     }
     .top,
     .who,
-    .progress-row {
+    .score-row {
       display: flex;
       align-items: center;
       gap: 16px;
@@ -186,9 +190,17 @@ abstract class MatchupView {
     p {
       margin: 0;
     }
-    .progress-row {
+    .score-row {
       justify-content: space-between;
       margin: 20px 0 8px;
+    }
+    .points {
+      display: inline-flex;
+      gap: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .dash {
+      opacity: 0.6;
     }
     .cta {
       margin-top: 20px;
@@ -203,47 +215,40 @@ abstract class MatchupView {
 export class MatchupHeroCard extends MatchupView {
   private readonly router = inject(Router);
 
-  protected readonly workout = this.state.query(
-    () => this.matchup().workoutId ?? undefined,
-    (id, app) => app.workouts.getById(id),
+  /** Both sides' logs this week, scored with the Season's weights. */
+  private readonly board = this.state.query(
+    () => this.matchup().id,
+    (id, app) => app.seasonService.board(id),
   ).value;
-  protected readonly log = computed(
-    () => this.state.myLogs.value()?.find((l) => l.matchupId === this.matchup().id) ?? null,
-  );
-  protected readonly total = computed(() => {
-    const w = this.workout();
-    return w ? scoredItems(w).length : 0;
+
+  protected readonly formatPoints = (v: number) => Fmt.points(v);
+
+  protected readonly score = computed(() => {
+    const board = this.board();
+    const me = this.me();
+    if (!board || me === null) return null;
+    const home = board.home.peachId === me;
+    const mine = (home ? board.home : board.away)?.score.total ?? 0;
+    const theirs = (home ? board.away : board.home)?.score.total ?? 0;
+    const total = mine + theirs;
+    return {
+      mine,
+      theirs,
+      share: total === 0 ? 0.5 : mine / total,
+      leading: mine > theirs ? 'Leading' : mine < theirs ? 'Trailing' : null,
+    };
   });
-  protected readonly done = computed(() => {
-    const w = this.workout();
-    const log = this.log();
-    if (!w || !log) return 0;
-    return scoredItems(w).filter((i) => entryForItem(log, i.id) !== undefined).length;
-  });
-  protected readonly submitted = computed(() => {
-    const log = this.log();
-    return log !== null && isSubmitted(log);
-  });
-  protected readonly progress = computed(() =>
-    this.submitted() ? 1 : this.total() === 0 ? 0 : this.done() / this.total(),
-  );
-  protected readonly roundLine = computed(() => {
+
+  protected readonly weekLine = computed(() => {
     const r = this.round();
-    return r ? `Round ${r.index + 1} · ${Fmt.focus(r.focus)}` : '';
+    return r ? `Week ${r.index + 1} · ${Fmt.week(r.weekStart)}` : '';
   });
   protected readonly closesIn = computed(() => {
     const window = this.info.value()?.window;
-    if (!window || this.submitted()) return null;
+    if (!window) return null;
     return Fmt.closesIn(window.remainingMsAt(this.state.nowTick()));
   });
   protected readonly link = computed(() => ['/matchups', this.matchup().id]);
-  protected readonly cta = computed(() =>
-    this.submitted()
-      ? { icon: 'visibility', label: 'View workout' }
-      : this.done() > 0
-        ? { icon: 'play_arrow', label: 'Continue workout' }
-        : { icon: 'bolt', label: 'Start workout' },
-  );
 
   protected open(event: MouseEvent): void {
     // The link handles its own clicks; text selection is not a click.
@@ -254,9 +259,9 @@ export class MatchupHeroCard extends MatchupView {
 }
 
 /**
- * A matchup as a list row: opponent, crate and focus, with a calendar
- * badge for the date or the result once played (port of `MatchupListRow`).
- * With `link` set the row opens the matchup.
+ * A matchup as a list row: opponent, crate and week, with a calendar badge
+ * for the week's Monday or the result once played. With `link` set the row
+ * opens the matchup.
  */
 @Component({
   selector: 'pch-matchup-row',
@@ -270,7 +275,7 @@ export class MatchupHeroCard extends MatchupView {
           <span class="pch-label-small outcome">{{ r.outcome }}</span>
         </span>
       } @else if (round(); as round) {
-        <pch-date-badge [date]="round.date" />
+        <pch-date-badge [date]="round.weekStart" />
       }
     </ng-template>
     @if (link()) {
@@ -321,7 +326,9 @@ export class MatchupListRow extends MatchupView {
 
   protected readonly subtitle = computed(() => {
     const r = this.round();
-    return [this.crateName(), r ? Fmt.focus(r.focus) : null].filter((s) => s !== null).join(' · ');
+    return [this.crateName(), r ? Fmt.week(r.weekStart) : null]
+      .filter((s) => s !== null)
+      .join(' · ');
   });
 
   protected readonly result = computed(() => {

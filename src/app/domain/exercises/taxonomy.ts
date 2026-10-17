@@ -1,10 +1,9 @@
 /**
  * The exercise taxonomy used to describe and sample exercises.
  *
- * Every exercise in the catalog is classified along these axes. The workout
- * generator reasons about *patterns*, *muscles*, *modality* and *equipment*
- * rather than about specific exercises, which is what lets it build a
- * balanced session from whatever subset of exercises two Peaches share.
+ * Every exercise in the catalog is classified along these axes, which drive
+ * browsing (grouping by pattern), logging (what a set records) and scoring
+ * (which distance category locomotion counts toward).
  *
  * Each axis is a string union backed by an ordered `as const` list; the
  * strings are the stored names, so data written by any client round-trips.

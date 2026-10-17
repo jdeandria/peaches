@@ -1,6 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { MatButton } from '@angular/material/button';
-import { MatChipListbox, MatChipOption } from '@angular/material/chips';
 import {
   MAT_DIALOG_DATA,
   MatDialogActions,
@@ -13,40 +12,34 @@ import { MatFormField, MatLabel } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 import { MatSlider, MatSliderThumb } from '@angular/material/slider';
 
-import { addDays, LocalDate } from '../../../domain/core/local-date';
+import { addDays, LocalDate, startOfWeek } from '../../../domain/core/local-date';
 import { Crate } from '../../../domain/models/crate';
-import { ExerciseDayPlanner } from '../../../domain/services/round-robin-scheduler';
+import { SCORING_CATEGORIES } from '../../../domain/models/scoring';
+import { MAX_SEASON_WEEKS } from '../../../domain/models/season';
 import { AppState } from '../../../state/app-state';
+import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
+import { Fmt } from '../../format';
 
-/** ISO weekdays (Monday = 1) with their chip letter and accessible name. */
-const WEEKDAYS = [
-  { day: 1, short: 'M', long: 'Monday' },
-  { day: 2, short: 'T', long: 'Tuesday' },
-  { day: 3, short: 'W', long: 'Wednesday' },
-  { day: 4, short: 'T', long: 'Thursday' },
-  { day: 5, short: 'F', long: 'Friday' },
-  { day: 6, short: 'S', long: 'Saturday' },
-  { day: 7, short: 'S', long: 'Sunday' },
-] as const;
-
-/** Exercise days for a Season starting tomorrow and running `weeks` weeks. */
-export function seasonDays(
-  today: LocalDate,
-  weekdays: ReadonlySet<number>,
-  weeks: number,
-): LocalDate[] {
-  const start = addDays(today, 1);
-  return new ExerciseDayPlanner().weekdaysBetween(start, addDays(start, weeks * 7 - 1), weekdays);
+/** The Mondays a Season can start on: this week's and next week's. */
+export function startWeekOptions(today: LocalDate): ButtonGroupOption<LocalDate>[] {
+  const thisWeek = startOfWeek(today);
+  const nextWeek = addDays(thisWeek, 7);
+  return [
+    { value: thisWeek, label: `This week (${Fmt.day(thisWeek)})` },
+    { value: nextWeek, label: `Next week (${Fmt.day(nextWeek)})` },
+  ];
 }
 
-/** Picks weekdays and a length; exercise days are derived ahead of time. */
+/**
+ * Starts a Season: a name, which Monday it starts and how many weeks it
+ * runs. Scoring uses the Crate's vote as it stands now, frozen for the Season.
+ */
 @Component({
   selector: 'pch-new-season-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    ButtonGroup,
     MatButton,
-    MatChipListbox,
-    MatChipOption,
     MatDialogActions,
     MatDialogClose,
     MatDialogContent,
@@ -63,19 +56,16 @@ export function seasonDays(
         <mat-label>Name</mat-label>
         <input matInput autocomplete="off" [value]="name()" (input)="onName($event)" />
       </mat-form-field>
-      <p class="pch-body-large label" id="season-days-label">Exercise days</p>
-      <mat-chip-listbox multiple aria-labelledby="season-days-label" class="days">
-        @for (w of weekdayOptions; track w.day) {
-          <mat-chip-option
-            [aria-label]="w.long"
-            [selected]="weekdays().has(w.day)"
-            (selectionChange)="$event.isUserInput && toggleDay(w.day, $event.selected)"
-            >{{ w.short }}</mat-chip-option
-          >
-        }
-      </mat-chip-listbox>
-      <p class="pch-body-large label" id="season-length-label">Length: {{ weeks() }} weeks</p>
-      <mat-slider min="1" max="12" step="1" discrete>
+      <p class="pch-body-large label" id="season-start-label">Starts</p>
+      <pch-button-group
+        aria-labelledby="season-start-label"
+        [options]="startOptions"
+        [(selected)]="startWeek"
+      />
+      <p class="pch-body-large label length" id="season-length-label">
+        Length: {{ weeks() }} {{ weeks() === 1 ? 'week' : 'weeks' }}
+      </p>
+      <mat-slider min="1" [max]="maxWeeks" step="1" discrete>
         <input
           matSliderThumb
           aria-labelledby="season-length-label"
@@ -83,13 +73,17 @@ export function seasonDays(
           (valueChange)="weeks.set($event)"
         />
       </mat-slider>
+      <p class="pch-body-medium muted">
+        One matchup a week; everything you log counts. Points per category, from the Crate’s vote:
+        {{ weightsLine() }}.
+      </p>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button matButton type="button" mat-dialog-close [disabled]="busy()">Cancel</button>
       <button
         matButton="filled"
         type="button"
-        [disabled]="busy() || weekdays().size === 0"
+        [disabled]="busy() || !startWeek()"
         (click)="start()"
       >
         Start
@@ -107,11 +101,15 @@ export function seasonDays(
     .label {
       margin: 0 0 8px;
     }
-    .days {
-      margin-bottom: 16px;
+    .length {
+      margin-top: 16px;
     }
     mat-slider {
       margin-inline: 0;
+    }
+    .muted {
+      margin: 8px 0 0;
+      color: var(--mat-sys-on-surface-variant);
     }
   `,
 })
@@ -120,38 +118,47 @@ export class NewSeasonDialog {
   private readonly ref = inject(MatDialogRef<NewSeasonDialog>);
   private readonly crate = inject<Crate>(MAT_DIALOG_DATA);
 
-  protected readonly weekdayOptions = WEEKDAYS;
+  protected readonly startOptions = startWeekOptions(this.state.today());
+  protected readonly maxWeeks = MAX_SEASON_WEEKS;
 
   readonly name = signal('New Season');
-  readonly weekdays = signal<ReadonlySet<number>>(new Set([1, 3, 5]));
-  readonly weeks = signal(4);
+  readonly startWeek = signal<LocalDate | null>(this.startOptions[1].value);
+  readonly weeks = signal(6);
   readonly busy = signal(false);
+
+  private readonly weights = this.state.query(
+    () => this.crate.id,
+    (id, app) => app.votingService.currentWeights(id),
+  ).value;
+
+  protected readonly weightsLine = computed(() => {
+    const w = this.weights();
+    if (!w) return '…';
+    return SCORING_CATEGORIES.filter((c) => w[c] > 0)
+      .sort((a, b) => w[b] - w[a])
+      .map((c) => `${Fmt.category(c)} ${w[c]}`)
+      .join(', ');
+  });
 
   protected onName(event: Event): void {
     this.name.set((event.target as HTMLInputElement).value);
   }
 
-  toggleDay(day: number, on: boolean): void {
-    this.weekdays.update((current) => {
-      const next = new Set(current);
-      if (on) next.add(day);
-      else next.delete(day);
-      return next;
-    });
-  }
-
   async start(): Promise<void> {
-    if (this.busy() || this.weekdays().size === 0) return;
+    const startWeek = this.startWeek();
+    if (this.busy() || !startWeek) return;
     this.busy.set(true);
-    const exerciseDays = seasonDays(this.state.today(), this.weekdays(), this.weeks());
     const season = await this.state.run((app) =>
       app.seasonService.createSeason({
         crate: this.crate,
         name: this.name(),
-        exerciseDays,
+        startWeek,
+        weeks: this.weeks(),
         now: this.state.now(),
       }),
     );
+    // Open this week's round straight away when starting mid-week.
+    if (season) await this.state.syncSeasons();
     this.busy.set(false);
     if (season) this.ref.close(season);
   }
