@@ -245,8 +245,8 @@ export class MatchupPage {
       line('Workouts', (side) => side.score.workouts.total),
       ...(this.usesLineups()
         ? [
-            line('Pledges hit', (side) => sum(side.score.pledges)),
-            line('Battles won', (side) => sum(side.score.battles)),
+            line('Pledge bonus', (side) => sum(side.score.pledges)),
+            line('Battle prizes', (side) => sum(side.score.battles)),
           ]
         : []),
     ];

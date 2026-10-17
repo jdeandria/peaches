@@ -219,6 +219,19 @@ outlined "No standings yet." card. `formatPoints(n)` = `Fmt.points`.
 <pch-standings-table [rows]="standingRows()" [highlightPeachId]="me()" />
 ```
 
+### `confirmDialog(dialog, data)` — `ConfirmDialog`
+
+Asks before something that can't be undone (prefer acting at once with an
+Undo toast, `AppState.toast(message, undo)`, when it can be). `data`:
+`{ title, message, action }` (`action` labels the filled button, a verb).
+Resolves `true` only when confirmed.
+
+```ts
+if (await confirmDialog(this.dialog, { title: 'Dispute Run?', message: '…', action: 'Dispute' })) {
+  …
+}
+```
+
 ## Expressive
 
 ### `pch-shaped-avatar` — `ShapedAvatar`

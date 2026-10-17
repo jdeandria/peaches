@@ -81,15 +81,25 @@ describe('Crates', () => {
       expect(TestBed.inject(Router).url).toBe(`/crates/${crate.id}`);
     });
 
-    it('stays open and shows the error without a name', async () => {
+    it('can’t be submitted without a name', async () => {
       await setUp();
       const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
       const f = TestBed.createComponent(CreateCrateDialog);
       await f.whenStable();
-      await f.componentInstance.create();
+      const el: HTMLElement = f.nativeElement;
+      const submit = el.querySelector<HTMLButtonElement>('button[type=submit]')!;
+      expect(submit.disabled).toBe(true);
+
+      // Blank names don't count, and Enter does nothing either.
+      const name = el.querySelector<HTMLInputElement>('input[matInput]')!;
+      name.value = '   ';
+      name.dispatchEvent(new Event('input'));
+      f.detectChanges();
+      expect(submit.disabled).toBe(true);
+      name.form!.requestSubmit();
+      await settle();
       expect(close).not.toHaveBeenCalled();
-      expect(toast).toHaveBeenCalledWith('Give your Crate a name.');
-      expect(f.componentInstance.busy()).toBe(false);
+      expect(toast).not.toHaveBeenCalled();
     });
   });
 
@@ -103,11 +113,22 @@ describe('Crates', () => {
       input.value = 'nope';
       input.dispatchEvent(new Event('input'));
       expect(f.componentInstance.code()).toBe('NOPE');
-      // Enter submits the form.
+      // Enter submits the form; the error shows under the field, not as a toast.
       input.form!.requestSubmit();
       await settle();
-      expect(toast).toHaveBeenCalledWith('No Crate matches that invite code.');
+      f.detectChanges();
+      expect(f.componentInstance.error()).toBe('No Crate matches that invite code.');
+      expect(input.closest('mat-form-field')!.textContent).toContain(
+        'No Crate matches that invite code.',
+      );
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      expect(toast).not.toHaveBeenCalled();
       expect(close).not.toHaveBeenCalled();
+
+      // Typing again clears it.
+      input.value = 'nope2';
+      input.dispatchEvent(new Event('input'));
+      expect(f.componentInstance.error()).toBe('');
     });
 
     it('joins with a good code and opens the Crate', async () => {

@@ -20,13 +20,15 @@ import { AppState } from '../../../state/app-state';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { Fmt } from '../../format';
 
-/** The Mondays a Season can start on: this week's and next week's. */
+/**
+ * The Mondays a Season can start on: this week's and next week's. Labels
+ * stay short to fit side by side on a phone; the dialog spells out the dates.
+ */
 export function startWeekOptions(today: LocalDate): ButtonGroupOption<LocalDate>[] {
   const thisWeek = startOfWeek(today);
-  const nextWeek = addDays(thisWeek, 7);
   return [
-    { value: thisWeek, label: `This week (${Fmt.day(thisWeek)})` },
-    { value: nextWeek, label: `Next week (${Fmt.day(nextWeek)})` },
+    { value: thisWeek, label: 'This week' },
+    { value: addDays(thisWeek, 7), label: 'Next week' },
   ];
 }
 
@@ -65,6 +67,7 @@ export function startWeekOptions(today: LocalDate): ButtonGroupOption<LocalDate>
       <p class="pch-body-large label length" id="season-length-label">
         Length: {{ weeks() }} {{ weeks() === 1 ? 'week' : 'weeks' }}
       </p>
+      <p class="pch-body-medium muted dates">{{ dates() }}</p>
       <mat-slider min="1" [max]="maxWeeks" step="1" discrete>
         <input
           matSliderThumb
@@ -73,6 +76,12 @@ export function startWeekOptions(today: LocalDate): ButtonGroupOption<LocalDate>
           (valueChange)="weeks.set($event)"
         />
       </mat-slider>
+      @if (alone()) {
+        <p class="pch-body-medium alone" role="note">
+          You’re the only Peach here, so every week would be a bye. Share invite code
+          {{ crate.inviteCode }} first: who plays is fixed when the Season is scheduled.
+        </p>
+      }
       <p class="pch-body-medium muted">
         One matchup a week; everything you log counts. From the Crate’s vote, frozen for the Season:
         {{ rulesLine() }}.
@@ -111,12 +120,22 @@ export function startWeekOptions(today: LocalDate): ButtonGroupOption<LocalDate>
       margin: 8px 0 0;
       color: var(--mat-sys-on-surface-variant);
     }
+    .dates {
+      margin: 0;
+    }
+    .alone {
+      margin: 8px 0 0;
+      padding: 12px 16px;
+      border-radius: var(--pch-radius-medium);
+      background: var(--mat-sys-tertiary-container);
+      color: var(--mat-sys-on-tertiary-container);
+    }
   `,
 })
 export class NewSeasonDialog {
   private readonly state = inject(AppState);
   private readonly ref = inject(MatDialogRef<NewSeasonDialog>);
-  private readonly crate = inject<Crate>(MAT_DIALOG_DATA);
+  protected readonly crate = inject<Crate>(MAT_DIALOG_DATA);
 
   protected readonly startOptions = startWeekOptions(this.state.today());
   protected readonly maxWeeks = MAX_SEASON_WEEKS;
@@ -130,6 +149,20 @@ export class NewSeasonDialog {
     () => this.crate.id,
     (id, app) => app.votingService.currentRules(id),
   ).value;
+
+  /** Whether nobody else would play: a Season of byes (participants freeze when scheduled). */
+  protected readonly alone = computed(() => this.memberCount() === 1);
+  private readonly memberCount = this.state.query(
+    () => this.crate.id,
+    async (id, app) => (await app.crateService.activeMembers(id)).length,
+  ).value;
+
+  /** "Mon, Oct 19 – Sun, Nov 29": the days the Season will run. */
+  protected readonly dates = computed(() => {
+    const start = this.startWeek();
+    if (!start) return '';
+    return `${Fmt.day(start)} – ${Fmt.day(addDays(start, this.weeks() * 7 - 1))}`;
+  });
 
   protected readonly rulesLine = computed(() => {
     const r = this.rules();

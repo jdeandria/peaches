@@ -156,12 +156,13 @@ export class AppState {
 
   /**
    * Runs a mutation: on success bumps the revision (and shows `success` if
-   * given) and returns the result; on failure shows the error and returns
-   * undefined.
+   * given) and returns the result; on failure shows the error (or hands it
+   * to `onError`, for forms that show it inline) and returns undefined.
    */
   async run<T>(
     action: (app: AppContainer) => Promise<T>,
     success?: string,
+    onError: (message: string) => void = (message) => this.toast(message),
   ): Promise<T | undefined> {
     try {
       const result = await action(this.app);
@@ -169,13 +170,18 @@ export class AppState {
       if (success) this.toast(success);
       return result;
     } catch (e) {
-      this.toast(errorMessage(e));
+      onError(errorMessage(e));
       return undefined;
     }
   }
 
-  toast(message: string): void {
-    this.snackBar.open(message, undefined, { duration: 4000 });
+  /** Shows a message; with `undo`, offers an Undo button (for a little longer) that runs it. */
+  toast(message: string, undo?: () => void): void {
+    if (!undo) {
+      this.snackBar.open(message, undefined, { duration: 4000 });
+      return;
+    }
+    this.snackBar.open(message, 'Undo', { duration: 6000 }).onAction().subscribe(undo);
   }
 
   /**

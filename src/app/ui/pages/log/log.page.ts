@@ -320,10 +320,17 @@ export class LogPage {
     await this.logExercise(loggableFromEntry(entry, cues));
   }
 
+  /** Removes at once (it's one tap from the row), with Undo to put the sets back. */
   protected async removeEntry(entry: ExerciseLogEntry): Promise<void> {
     const log = this.log();
     if (!log || !this.mine()) return;
-    await this.state.run((app) => app.loggingService.removeEntry(log.id, entry.exerciseId));
+    const removed = await this.state.run((app) =>
+      app.loggingService.removeEntry(log.id, entry.exerciseId),
+    );
+    if (!removed) return;
+    this.state.toast(`Removed ${entry.exerciseName}.`, () => {
+      void this.state.run((app) => app.loggingService.recordEntry(log.id, entry));
+    });
   }
 
   private async logExercise(exercise: LoggableExercise): Promise<void> {

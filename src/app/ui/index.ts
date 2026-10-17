@@ -19,4 +19,5 @@ export * from './layout/date-badge';
 export * from './layout/animated-number';
 export * from './layout/stagger';
 export * from './layout/standings-table';
+export * from './layout/confirm-dialog';
 export * from './shell/shell';

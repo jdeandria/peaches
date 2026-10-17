@@ -166,8 +166,8 @@ describe('roundViews', () => {
 describe('NewSeasonDialog', () => {
   it('starts this week or next', () => {
     expect(startWeekOptions('2026-10-14' as LocalDate)).toEqual([
-      { value: '2026-10-12', label: 'This week (Mon, Oct 12)' },
-      { value: '2026-10-19', label: 'Next week (Mon, Oct 19)' },
+      { value: '2026-10-12', label: 'This week' },
+      { value: '2026-10-19', label: 'Next week' },
     ]);
   });
 
@@ -197,11 +197,15 @@ describe('NewSeasonDialog', () => {
     await f.whenStable();
     const el: HTMLElement = f.nativeElement;
     expect(el.textContent).toContain('Length: 6 weeks');
+    expect(el.textContent).toContain('Mon, Oct 19 – Sun, Nov 29');
+    // Only its owner so far: every week would be a bye, so say so (with the code).
+    expect(el.textContent).toContain('You’re the only Peach here');
+    expect(el.textContent).toContain(crate.inviteCode);
     expect(el.textContent).toContain('Ride 100; lineups of 3');
     const options = Array.from(el.querySelectorAll('[role=radio]')).map((b) =>
       b.textContent?.trim(),
     );
-    expect(options).toEqual(['This week (Mon, Oct 12)', 'Next week (Mon, Oct 19)']);
+    expect(options).toEqual(['This week', 'Next week']);
 
     const dialog = f.componentInstance;
     dialog.name.set('Block 2');

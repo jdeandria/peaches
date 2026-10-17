@@ -8,12 +8,12 @@ import {
   MatDialogRef,
   MatDialogTitle,
 } from '@angular/material/dialog';
-import { MatFormField, MatLabel } from '@angular/material/form-field';
+import { MatFormField, MatHint, MatLabel } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 
 import { AppState } from '../../../state/app-state';
 
-/** "Join a Crate" with an invite code. Stays open (with a toast) on a bad code. */
+/** "Join a Crate" with an invite code. Stays open, saying why, on a bad code. */
 @Component({
   selector: 'pch-join-crate-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -24,6 +24,7 @@ import { AppState } from '../../../state/app-state';
     MatDialogContent,
     MatDialogTitle,
     MatFormField,
+    MatHint,
     MatInput,
     MatLabel,
   ],
@@ -39,14 +40,17 @@ import { AppState } from '../../../state/app-state';
             spellcheck="false"
             maxlength="12"
             enterkeyhint="go"
+            aria-describedby="join-error"
+            [attr.aria-invalid]="error() ? true : null"
             [value]="code()"
             (input)="onInput($event)"
           />
+          <mat-hint id="join-error" class="error" role="alert">{{ error() }}</mat-hint>
         </mat-form-field>
       </mat-dialog-content>
       <mat-dialog-actions align="end">
         <button matButton type="button" mat-dialog-close [disabled]="busy()">Cancel</button>
-        <button matButton="filled" type="submit" [disabled]="busy()">Join</button>
+        <button matButton="filled" type="submit" [disabled]="busy() || !code().trim()">Join</button>
       </mat-dialog-actions>
     </form>`,
   styles: `
@@ -57,6 +61,9 @@ import { AppState } from '../../../state/app-state';
       text-transform: uppercase;
       letter-spacing: 0.1em;
     }
+    .error {
+      color: var(--mat-sys-error);
+    }
   `,
 })
 export class JoinCrateDialog {
@@ -66,17 +73,21 @@ export class JoinCrateDialog {
 
   readonly code = signal('');
   readonly busy = signal(false);
+  readonly error = signal('');
 
   protected onInput(event: Event): void {
     this.code.set((event.target as HTMLInputElement).value.toUpperCase());
+    this.error.set('');
   }
 
   async join(): Promise<void> {
     const me = this.state.peachId();
-    if (!me || this.busy()) return;
+    if (!me || this.busy() || !this.code().trim()) return;
     this.busy.set(true);
-    const crate = await this.state.run((app) =>
-      app.crateService.joinByInviteCode(this.code().trim(), me, this.state.now()),
+    const crate = await this.state.run(
+      (app) => app.crateService.joinByInviteCode(this.code().trim(), me, this.state.now()),
+      undefined,
+      (message) => this.error.set(message),
     );
     this.busy.set(false);
     if (!crate) return;

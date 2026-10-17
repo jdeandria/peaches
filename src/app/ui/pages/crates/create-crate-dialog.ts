@@ -32,37 +32,40 @@ import { AppState } from '../../../state/app-state';
     MatLabel,
   ],
   template: `<h2 mat-dialog-title>New Crate</h2>
-    <mat-dialog-content class="fields">
-      <mat-form-field appearance="outline">
-        <mat-label>Name</mat-label>
-        <input
-          matInput
-          autocomplete="off"
-          autocapitalize="words"
-          [value]="name()"
-          (input)="name.set(inputValue($event))"
-        />
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Description</mat-label>
-        <input
-          matInput
-          autocomplete="off"
-          [value]="description()"
-          (input)="description.set(inputValue($event))"
-        />
-      </mat-form-field>
-      <p class="pch-body-medium hint">
-        Every workout members log earns points here. Once your Crate is set up, members vote on what
-        each kind of training is worth.
-      </p>
-    </mat-dialog-content>
-    <mat-dialog-actions align="end">
-      <button matButton type="button" mat-dialog-close [disabled]="busy()">Cancel</button>
-      <button matButton="filled" type="button" [disabled]="busy()" (click)="create()">
-        Create
-      </button>
-    </mat-dialog-actions>`,
+    <form (submit)="$event.preventDefault(); create()">
+      <mat-dialog-content class="fields">
+        <mat-form-field appearance="outline">
+          <mat-label>Name</mat-label>
+          <input
+            matInput
+            autocomplete="off"
+            autocapitalize="words"
+            [value]="name()"
+            (input)="name.set(inputValue($event))"
+          />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Description</mat-label>
+          <input
+            matInput
+            autocomplete="off"
+            enterkeyhint="go"
+            [value]="description()"
+            (input)="description.set(inputValue($event))"
+          />
+        </mat-form-field>
+        <p class="pch-body-medium hint">
+          Every workout members log earns points here. Once your Crate is set up, members vote on
+          what each kind of training is worth.
+        </p>
+      </mat-dialog-content>
+      <mat-dialog-actions align="end">
+        <button matButton type="button" mat-dialog-close [disabled]="busy()">Cancel</button>
+        <button matButton="filled" type="submit" [disabled]="busy() || !name().trim()">
+          Create
+        </button>
+      </mat-dialog-actions>
+    </form>`,
   styles: `
     mat-dialog-content {
       display: flex;
@@ -93,7 +96,7 @@ export class CreateCrateDialog {
 
   async create(): Promise<void> {
     const me = this.state.peachId();
-    if (!me || this.busy()) return;
+    if (!me || this.busy() || !this.name().trim()) return;
     this.busy.set(true);
     const crate = await this.state.run((app) =>
       app.crateService.createCrate({

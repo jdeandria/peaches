@@ -74,7 +74,7 @@ describe('MatchupPage', () => {
       'Cho’s workouts',
     ]);
     // The whole score, line by line: Cho out-rode me (nobody else rode).
-    expect(breakdown(el)).toEqual(['Workouts 0 31.8', 'Pledges hit 0 0', 'Battles won 0 4']);
+    expect(breakdown(el)).toEqual(['Workouts 0 31.8', 'Pledge bonus 0 0', 'Battle prizes 0 4']);
     const choRide = Array.from(el.querySelectorAll('.sides > div')[1].querySelectorAll('.pledge'))
       .map(text)
       .find((t) => t?.includes('Ride'));
@@ -114,8 +114,8 @@ describe('MatchupPage', () => {
     // (+11.5), I out-ran Cho (+23) and tied Cho's 50 minutes (half of 25).
     expect(breakdown(el)).toEqual([
       'Workouts 73.8 31.8',
-      'Pledges hit 11.5 0',
-      'Battles won 35.5 4',
+      'Pledge bonus 11.5 0',
+      'Battle prizes 35.5 4',
     ]);
     expect(points(el)[0]).toBe('120.8');
     expect(text(el.querySelector('.verdict'))).toBe('Live · You lead');
@@ -134,8 +134,8 @@ describe('MatchupPage', () => {
     // for Ada) and battles won (weight and minutes for me, running for Ada).
     expect(breakdown(el)).toEqual([
       'Workouts 174.1 197.6',
-      'Pledges hit 36.5 67.8',
-      'Battles won 43 23',
+      'Pledge bonus 36.5 67.8',
+      'Battle prizes 43 23',
     ]);
     expect(text(el.querySelector('.verdict'))).toBe('Final · Ada won');
     expect(el.querySelector('.banner')).toBeNull();

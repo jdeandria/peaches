@@ -6,6 +6,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
+import { AppState } from '../../../state/app-state';
 import { isSubmitted } from '../../../domain/models/workout-log';
 import { seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { LogPage } from './log.page';
@@ -167,6 +168,26 @@ describe('LogPage', () => {
     button(overlay(), 'Save')!.click();
     await stable(f);
     expect((await backend.container.logs.getById(latest.id))!.durationSeconds).toBe(3000);
+  });
+
+  it('removes an exercise at once, with Undo to put it back', async () => {
+    const log = (await backend.container.logs.forPeach(DEMO_PEACH_ID)).find(
+      (l) => isSubmitted(l) && l.entries.length > 1,
+    )!;
+    const [first] = log.entries;
+    const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
+    const { f, el } = await render({ logId: log.id });
+
+    button(el, `Remove ${first.exerciseName}`)!.click();
+    await stable(f);
+    let saved = (await backend.container.logs.getById(log.id))!;
+    expect(saved.entries.map((e) => e.exerciseId)).not.toContain(first.exerciseId);
+    expect(toast).toHaveBeenCalledWith(`Removed ${first.exerciseName}.`, expect.any(Function));
+
+    toast.mock.calls[0][1]!();
+    await stable(f);
+    saved = (await backend.container.logs.getById(log.id))!;
+    expect(saved.entries.find((e) => e.exerciseId === first.exerciseId)).toEqual(first);
   });
 
   it('says when a workout does not exist', async () => {

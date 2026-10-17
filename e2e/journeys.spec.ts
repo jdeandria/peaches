@@ -52,7 +52,7 @@ test('core journey: log solo, see it score, vote on the rules', async ({ page })
   await expect(page.getByRole('heading', { name: 'You vs Cho' })).toBeVisible();
   await expect(page.getByText(/Live · You lead/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'How the score adds up' })).toBeVisible();
-  await expect(page.getByText('Battles won')).toBeVisible();
+  await expect(page.getByText('Battle prizes')).toBeVisible();
 
   // Vote on the Crate's rules.
   await nav(page, 'Crates').click();
@@ -111,6 +111,10 @@ test('dispute a crate-mate’s numbers and vote on them', async ({ page }) => {
   await expect(page.getByText('2 of 3 votes to strike')).toBeVisible();
   // And raise one of my own about the session time.
   await page.getByRole('button', { name: 'Dispute Session time' }).click();
+  // It can't be withdrawn, so it asks first.
+  const confirm = page.getByRole('dialog');
+  await expect(confirm.getByRole('heading', { name: 'Dispute Session time?' })).toBeVisible();
+  await confirm.getByRole('button', { name: 'Dispute' }).click();
   await expect(page.getByText('Disputed. Your crate-mates can now vote.')).toBeVisible();
 });
 

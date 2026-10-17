@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatIconButton } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 
 import { localDateOfLocal } from '../../../domain/core/local-date';
@@ -8,6 +9,7 @@ import { DisputeVote, SESSION_TIME } from '../../../domain/models/dispute';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { Fmt } from '../../format';
+import { confirmDialog } from '../../layout/confirm-dialog';
 import { EmptyState } from '../../layout/empty-state';
 import { ListCard } from '../../layout/list-card';
 import { Page } from '../../layout/page';
@@ -87,7 +89,7 @@ interface MetricRow {
                   [disabled]="m.disputed || busy()"
                   [matTooltip]="m.disputed ? 'Disputed' : 'Dispute'"
                   [attr.aria-label]="(m.disputed ? 'Disputed: ' : 'Dispute ') + m.name"
-                  (click)="dispute(m.target)"
+                  (click)="dispute(m)"
                 >
                   <span
                     class="material-symbols-rounded"
@@ -155,6 +157,7 @@ export class WorkoutPage {
   readonly logId = input.required<string>();
 
   private readonly state = inject(AppState);
+  private readonly dialog = inject(MatDialog);
   protected readonly me = this.state.peachId;
   protected readonly busy = signal(false);
 
@@ -227,16 +230,24 @@ export class WorkoutPage {
     ];
   });
 
-  protected async dispute(target: string): Promise<void> {
+  /** Asks first: a dispute can't be withdrawn, and the whole Crate sees it. */
+  protected async dispute(metric: MetricRow): Promise<void> {
     const me = this.me();
     if (!me || this.busy()) return;
+    const go = await confirmDialog(this.dialog, {
+      title: `Dispute ${metric.name}?`,
+      message:
+        'Your crate-mates will be asked to vote. If more than half the Crate votes to strike, it stops scoring here. A dispute can’t be withdrawn.',
+      action: 'Dispute',
+    });
+    if (!go) return;
     this.busy.set(true);
     await this.state.run(
       (app) =>
         app.disputeService.open({
           crateId: this.crateId(),
           logId: this.logId(),
-          target,
+          target: metric.target,
           peachId: me,
           now: this.state.now(),
         }),
