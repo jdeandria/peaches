@@ -1,6 +1,6 @@
 # Peaches
 
-A social fitness app. Every user is a **Peach**. Peaches log any workout
+A social fitness app! Every user is a **Peach**. Peaches log any workout
 they do, solo, and belong to **Crates** (groups). Each Crate runs a
 fantasy-football style **Season**: every week Peaches are paired in
 head-to-head **Matchups**, and whoever's workouts that week earn more points
