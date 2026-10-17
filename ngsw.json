@@ -1,0 +1,147 @@
+{
+  "configVersion": 1,
+  "timestamp": 1792259548523,
+  "index": "/peaches/index.html",
+  "assetGroups": [
+    {
+      "name": "app",
+      "installMode": "prefetch",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [
+        "/peaches/chunk-2wNOH0nk.js",
+        "/peaches/chunk-59WQfOuQ.js",
+        "/peaches/chunk-8v97YaGY.js",
+        "/peaches/chunk-B60JwVqm.js",
+        "/peaches/chunk-B6uzORF9.js",
+        "/peaches/chunk-BG67ZG0E.js",
+        "/peaches/chunk-BKLfNu-k.js",
+        "/peaches/chunk-BKXchwR4.js",
+        "/peaches/chunk-BaLUs-aQ.js",
+        "/peaches/chunk-BqNY69n1.js",
+        "/peaches/chunk-CA0vAkcr.js",
+        "/peaches/chunk-CGxozsOL.js",
+        "/peaches/chunk-CIL_HYCs.js",
+        "/peaches/chunk-COdvbNJF.js",
+        "/peaches/chunk-CP5KJORi.js",
+        "/peaches/chunk-CUlXvLL7.js",
+        "/peaches/chunk-Cb7r2KaJ.js",
+        "/peaches/chunk-CbG9xvF4.js",
+        "/peaches/chunk-Cc_LPC7w.js",
+        "/peaches/chunk-ChG_RF9_.js",
+        "/peaches/chunk-Cr-umS5R.js",
+        "/peaches/chunk-D2JcWIaX.js",
+        "/peaches/chunk-D6jsToT0.js",
+        "/peaches/chunk-D95pScj4.js",
+        "/peaches/chunk-DBiolJTH.js",
+        "/peaches/chunk-DtwLH_19.js",
+        "/peaches/chunk-DvuVMtoR.js",
+        "/peaches/chunk-DwM0B0BS.js",
+        "/peaches/chunk-Dz4HVEFH.js",
+        "/peaches/chunk-j5qLBGji.js",
+        "/peaches/chunk-omHYs0X-.js",
+        "/peaches/chunk-pa1hN3Fb.js",
+        "/peaches/favicon.png",
+        "/peaches/index.html",
+        "/peaches/main-A5I7CLZE.js",
+        "/peaches/manifest.webmanifest",
+        "/peaches/media/material-symbols-rounded-EXJ6UUKW.woff2",
+        "/peaches/media/roboto-flex-latin-opsz-normal-YLLDSJJI.woff2",
+        "/peaches/styles-DRSJWW2T.css"
+      ],
+      "patterns": []
+    },
+    {
+      "name": "assets",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [
+        "/peaches/icons/Icon-192.png",
+        "/peaches/icons/Icon-512.png",
+        "/peaches/icons/Icon-maskable-192.png",
+        "/peaches/icons/Icon-maskable-512.png",
+        "/peaches/media/roboto-flex-cyrillic-ext-opsz-normal-3PEQRZJO.woff2",
+        "/peaches/media/roboto-flex-cyrillic-opsz-normal-2KPO276Q.woff2",
+        "/peaches/media/roboto-flex-greek-opsz-normal-GLRV7WXH.woff2",
+        "/peaches/media/roboto-flex-latin-ext-opsz-normal-AK6MRGYW.woff2",
+        "/peaches/media/roboto-flex-vietnamese-opsz-normal-YNCD3REJ.woff2"
+      ],
+      "patterns": []
+    }
+  ],
+  "dataGroups": [],
+  "hashTable": {
+    "/peaches/chunk-2wNOH0nk.js": "281a7e35399fca1d6fad11fedb34214ed6bcb7d7",
+    "/peaches/chunk-59WQfOuQ.js": "722bf2562b654c336a99105f48d141de6c31b4c5",
+    "/peaches/chunk-8v97YaGY.js": "08ede9fa0500e3d415cfe88d8e27ed4252ed8f27",
+    "/peaches/chunk-B60JwVqm.js": "741f82fca0d2917e0a559c2d1d75626d8661d10c",
+    "/peaches/chunk-B6uzORF9.js": "2bc72bafee96e226683852d7f49eb6e09e61e953",
+    "/peaches/chunk-BG67ZG0E.js": "4242f8a053c0a93b94ea88a10636790f1bcc62a5",
+    "/peaches/chunk-BKLfNu-k.js": "2090cdfe4bb5fa0c1bdf02e07780534a71f756e8",
+    "/peaches/chunk-BKXchwR4.js": "5084b696aa1b9c094c07c3ca9a0e00c17cbff399",
+    "/peaches/chunk-BaLUs-aQ.js": "05bcf3d64d5c7cf94f3b4ecfed7abdef7225d2b5",
+    "/peaches/chunk-BqNY69n1.js": "a4e82d4a1522cfd8309324a649bdd6a5a60034cb",
+    "/peaches/chunk-CA0vAkcr.js": "054f6da6d54c25b2a4388a8c9890a0f9d79534c0",
+    "/peaches/chunk-CGxozsOL.js": "1900095451c084d382f7dc355a92ffbbfc3a90c5",
+    "/peaches/chunk-CIL_HYCs.js": "c9672bf0210d798af47f9b2ea4897932b83149c0",
+    "/peaches/chunk-COdvbNJF.js": "156abccc2935dd29bb84dcc56aece65799f1974b",
+    "/peaches/chunk-CP5KJORi.js": "73e9e0deaab17d90e1880ea502d0524ca6c9f0c8",
+    "/peaches/chunk-CUlXvLL7.js": "9eabad95a06605e1b6abead86826144e1bff914d",
+    "/peaches/chunk-Cb7r2KaJ.js": "abb73b83d697ba8c171f21da1792bb443c016acd",
+    "/peaches/chunk-CbG9xvF4.js": "e90b3abd502cc072b4c9849010721f06cb7dbdbc",
+    "/peaches/chunk-Cc_LPC7w.js": "945d187dd1ec3a146f904e76db45cf2263b61641",
+    "/peaches/chunk-ChG_RF9_.js": "3f0e0fe66a424f17eb82119033caaa3bf1f47c94",
+    "/peaches/chunk-Cr-umS5R.js": "a3a9bfa90df434a769a2019ac287bfefc0d90c0c",
+    "/peaches/chunk-D2JcWIaX.js": "4b415353865fc1020868ad12627a7bfa225bea39",
+    "/peaches/chunk-D6jsToT0.js": "54ca78e5f8e90b71fb56957d999ce899f00a221c",
+    "/peaches/chunk-D95pScj4.js": "fee6547e4e814a7d9f6a3ab7945a583445f98d43",
+    "/peaches/chunk-DBiolJTH.js": "48c188ae4a35c36bb2789c47f3acabe4548c3fa2",
+    "/peaches/chunk-DtwLH_19.js": "bf79c3839d5335ee6b417b75d75633fced2ff79f",
+    "/peaches/chunk-DvuVMtoR.js": "2658bba649c1dd28334d15e0ca2b73e911345746",
+    "/peaches/chunk-DwM0B0BS.js": "dec22fb02b5abe90ce7b5491526f26a0afaf1494",
+    "/peaches/chunk-Dz4HVEFH.js": "1fed95a3d010328ef4fc9724d0d120ee5e21da92",
+    "/peaches/chunk-j5qLBGji.js": "617d605272c86904740e81bb46baf1626a9097e5",
+    "/peaches/chunk-omHYs0X-.js": "62d3da26d1c2ee2458cc3de0f2371c782cad9726",
+    "/peaches/chunk-pa1hN3Fb.js": "88e67094c2cddff337d5848b8006c266c274ba2f",
+    "/peaches/favicon.png": "01923df47061c31ea7fe233290ae110809268d28",
+    "/peaches/icons/Icon-192.png": "73b1137646d76f4b475a99eedbf5b61efb12bd69",
+    "/peaches/icons/Icon-512.png": "76500181e3a287ecb7cfcbc24d8bd902d59aa072",
+    "/peaches/icons/Icon-maskable-192.png": "eae9959480eb5413ab81dcc4dfa93000911bbc02",
+    "/peaches/icons/Icon-maskable-512.png": "07c154d1976cd9758accb0949383652bbf7f5ba3",
+    "/peaches/index.html": "ca554c60908fd3517aec8f488815f28cd1c43cb4",
+    "/peaches/main-A5I7CLZE.js": "c6513a0d028ded2228069ee35a46666e6afdea04",
+    "/peaches/manifest.webmanifest": "3be5e9f459fa7478330c3cfdde0aa6c72e212bab",
+    "/peaches/media/material-symbols-rounded-EXJ6UUKW.woff2": "9d754453d4028004298aa8f28fdbd0ca8560ad38",
+    "/peaches/media/roboto-flex-cyrillic-ext-opsz-normal-3PEQRZJO.woff2": "090853f354f155ed6e81fede1c1a97332500dc0b",
+    "/peaches/media/roboto-flex-cyrillic-opsz-normal-2KPO276Q.woff2": "d25e7bf8ecaf4070abd543ad612e6737f7f4de20",
+    "/peaches/media/roboto-flex-greek-opsz-normal-GLRV7WXH.woff2": "ffa454009dcf39a8f002dfee9bfd1cb157df11f8",
+    "/peaches/media/roboto-flex-latin-ext-opsz-normal-AK6MRGYW.woff2": "fbe84ee5ee781083e2dfd8030138ac186a4cd59c",
+    "/peaches/media/roboto-flex-latin-opsz-normal-YLLDSJJI.woff2": "1f596e008cba8ced5dcb71a91ccf92d697c8620d",
+    "/peaches/media/roboto-flex-vietnamese-opsz-normal-YNCD3REJ.woff2": "0934f9b0444bb93615e5f55321e0e1957c9f0201",
+    "/peaches/styles-DRSJWW2T.css": "3087af6671cae8f76b0f755b52c3a3fea274d7ce"
+  },
+  "navigationUrls": [
+    {
+      "positive": true,
+      "regex": "^\\/.*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*\\.[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*__[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*__[^/]*\\/.*$"
+    }
+  ],
+  "navigationRequestStrategy": "freshness"
+}

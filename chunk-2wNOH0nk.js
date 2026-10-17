@@ -1,0 +1,1 @@
+import{n as p,r,t as o}from"./chunk-B60JwVqm.js";export{o as PLACEHOLDER_PROJECT_ID,r as firebaseConfig,p as isFirebaseConfigured};

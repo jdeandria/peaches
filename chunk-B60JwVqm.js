@@ -1,0 +1,1 @@
+var o=`peaches-not-configured`;var r={apiKey:`placeholder`,appId:`1:0:web:placeholder`,messagingSenderId:`0`,projectId:o,authDomain:`peaches-not-configured.firebaseapp.com`,storageBucket:`peaches-not-configured.appspot.com`};function p(e){return!!e.projectId&&e.projectId!==`peaches-not-configured`}export{p as n,r,o as t};
