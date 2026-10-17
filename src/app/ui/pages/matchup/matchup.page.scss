@@ -34,7 +34,8 @@
 }
 
 .vs {
-  opacity: 0.7;
+  // Any fainter falls below 4.5:1 on primary-container, light or dark.
+  opacity: 0.85;
 }
 
 .verdict {

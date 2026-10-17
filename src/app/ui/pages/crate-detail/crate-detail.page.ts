@@ -77,6 +77,9 @@ export function roundViews(args: {
  * and weeks, what members have been logging (and every exercise they've
  * logged, tagged with who), members, and manager actions.
  */
+/** Exercises listed before "Show all": the most recently logged first. */
+const EXERCISES_SHOWN = 6;
+
 @Component({
   selector: 'pch-crate-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -211,6 +214,8 @@ export class CrateDetailPage {
     () => this.crateId(),
     (id, app) => app.logs.exercisesSharedWith(id),
   );
+  protected readonly exercisesShown = EXERCISES_SHOWN;
+  protected readonly showAllExercises = signal(false);
   protected readonly exercises = computed(() => {
     const names = this.names();
     const byExercise = new Map<string, { name: string; from: Set<string>; last: number }>();

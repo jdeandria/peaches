@@ -81,10 +81,19 @@ describe('CrateDetailPage', () => {
     expect(activity[0].textContent).toContain('Ada');
     expect(activity[0].getAttribute('href')).toMatch(new RegExp(`^/crates/${crate.id}/logs/`));
 
-    // Every exercise members logged, tagged with who.
-    const exercises = Array.from(el.querySelectorAll('.exercises pch-list-row')).map((r) =>
-      r.textContent?.replace(/\s+/g, ' ').trim(),
-    );
+    // Every exercise members logged, tagged with who: the latest six, then the rest on request.
+    const exerciseRows = () =>
+      Array.from(el.querySelectorAll('.exercises pch-list-row')).map((r) =>
+        r.textContent?.replace(/\s+/g, ' ').trim(),
+      );
+    expect(exerciseRows()).toHaveLength(6);
+    const showAll = el.querySelector<HTMLButtonElement>('button.show-all')!;
+    expect(showAll.textContent?.trim()).toMatch(/^Show all \d+$/);
+    showAll.click();
+    TestBed.tick();
+    const exercises = exerciseRows();
+    expect(exercises.length).toBeGreaterThan(6);
+    expect(showAll.getAttribute('aria-expanded')).toBe('true');
     expect(exercises).toContain('Reservoir hill loop From Ada');
     expect(exercises.some((e) => e?.includes('From you'))).toBe(true);
 

@@ -34,11 +34,11 @@ describe('TodayPage', () => {
     const el: HTMLElement = f.nativeElement;
     expect(text(el.querySelector('h1'))).toBe('Today');
     expect(text(el.querySelector('.subtitle'))).toBe('Monday, October 12');
-    const sections = Array.from(el.querySelectorAll('h2')).map(text);
+    const sections = Array.from(el.querySelectorAll('pch-section h2')).map(text);
     expect(sections).toEqual(['This week', 'Coming up', 'Your workouts']);
 
     const log = el.querySelector('pch-card.log')!;
-    expect(text(log.querySelector('h3'))).toBe('Log a workout');
+    expect(text(log.querySelector('h2'))).toBe('Log a workout');
     expect(log.querySelector('a')?.getAttribute('href')).toBe('/log');
     expect(text(log.querySelector('a'))).toBe('play_arrow Start');
 
@@ -60,7 +60,7 @@ describe('TodayPage', () => {
 
     // Lineups for next week are open and I haven't set mine.
     const lineup = el.querySelector('pch-card.lineup')!;
-    expect(text(lineup.querySelector('h3'))).toBe('Set your lineup');
+    expect(text(lineup.querySelector('h2'))).toBe('Set your lineup');
     expect(lineup.querySelector('a')?.getAttribute('href')).toMatch(/^\/matchups\/.+\/lineup$/);
   });
 
@@ -111,7 +111,7 @@ describe('TodayPage', () => {
     );
     await stable(f);
     const card = f.nativeElement.querySelector('pch-card.log');
-    expect(text(card.querySelector('h3'))).toBe('Workout in progress');
+    expect(text(card.querySelector('h2'))).toBe('Workout in progress');
     expect(text(card)).toContain('1 exercise logged so far.');
     expect(text(card.querySelector('a'))).toContain('Continue');
     // The draft is listed, linking back to the log page.
@@ -123,9 +123,9 @@ describe('TodayPage', () => {
   it('invites a new Peach to log, with empty history', async () => {
     const f = await render({ seed: false });
     const el: HTMLElement = f.nativeElement;
-    expect(text(el.querySelector('pch-card.log h3'))).toBe('Log a workout');
+    expect(text(el.querySelector('pch-card.log h2'))).toBe('Log a workout');
     expect(text(el)).toContain('Nothing logged yet.');
-    expect(Array.from(el.querySelectorAll('h2')).map(text)).toEqual(['Your workouts']);
+    expect(Array.from(el.querySelectorAll('pch-section h2')).map(text)).toEqual(['Your workouts']);
     expect(Array.from(el.querySelectorAll('.stat .value')).map(text)).toEqual(['0', '0', '0-0']);
   });
 });

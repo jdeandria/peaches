@@ -155,13 +155,24 @@
           >
         } @else {
           <pch-list-card [pchStagger]="4" class="exercises">
-            @for (e of list; track e.id) {
+            @for (e of showAllExercises() ? list : list.slice(0, exercisesShown); track e.id) {
               <pch-list-row>
                 {{ e.name }}
                 <span rowSubtitle class="one-line">{{ e.from }}</span>
               </pch-list-row>
             }
           </pch-list-card>
+          @if (list.length > exercisesShown) {
+            <button
+              matButton
+              type="button"
+              class="show-all"
+              [attr.aria-expanded]="showAllExercises()"
+              (click)="showAllExercises.set(!showAllExercises())"
+            >
+              {{ showAllExercises() ? 'Show fewer' : 'Show all ' + list.length }}
+            </button>
+          }
         }
 
         <pch-section title="Peaches" />
