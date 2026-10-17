@@ -1,13 +1,20 @@
 # CI / CD
 
 All pipelines live in `.github/workflows/` and use the Node version in
-`.nvmrc` (24).
+`.nvmrc` (24). Credentials live in repository secrets.
 
-## ci.yml (every push to `main`, every PR)
+| Workflow | Runs on | What it does |
+| --- | --- | --- |
+| `ci.yml` | every push except `main` (and fork PRs) | Format, lint, type-check, unit tests, Firestore emulator tests, builds, end-to-end journeys |
+| `deploy.yml` | push to `main`, manual run | Runs CI, then deploys the Firebase build to Hosting plus Firestore rules and indexes |
+| `preview.yml` | pull requests | Deploys a 7-day Hosting preview channel and comments its URL on the PR |
+| `pages.yml` | push to `main` or `feat/**` | Publishes the in-browser demo to GitHub Pages |
+
+## ci.yml
 
 1. `quality`: Prettier check, ESLint (`ng lint`), TypeScript type-check of
-   app and specs, unit tests with coverage (`ng test`, Vitest). Coverage is
-   uploaded as an artifact.
+   app and specs, unit tests with coverage (`npm run test:ci`, Vitest).
+   Coverage is uploaded as an artifact.
 2. `firestore`: starts the Firestore emulator (`firebase emulators:exec`,
    Java 21) and runs the repository contract tests and the application
    lifecycle suite against it (`npm run test:firestore`).
@@ -16,7 +23,83 @@ All pipelines live in `.github/workflows/` and use the Node version in
 4. `e2e`: Playwright journeys (phone and desktop viewports) against the
    production build served with an SPA fallback and the service worker on.
 
-No secrets are needed for CI.
+Branches in this repository are verified by their pushes, so a pull request
+from one does not run CI twice; pull requests from forks run it on the
+`pull_request` event. `main` is verified by `deploy.yml`, which calls this
+workflow before it deploys. No secrets are needed for CI.
+
+## Continuous deployment (deploy.yml, preview.yml)
+
+* Push to `main` → CI → `npm run firebase:config` → `npm run build:firebase`
+  → `firebase deploy --only hosting,firestore`. Deploys run one at a time
+  in a GitHub environment named `production`; add required reviewers there
+  to approve each deploy.
+* Pull request from this repository → Firebase build → preview channel
+  (7-day expiry), URL commented on the PR. Skipped until
+  `FIREBASE_SERVICE_ACCOUNT` is set.
+
+### One-time setup
+
+Add two **repository secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+| --- | --- |
+| `FIREBASE_SERVICE_ACCOUNT` | JSON key of a service account that can deploy (roles below) |
+| `FIREBASE_WEB_CONFIG` | The web app config as JSON, e.g. `{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}` |
+
+The fastest way is the setup script. It needs `gcloud`, `gh` and `node`,
+all signed in:
+
+```bash
+scripts/setup-ci.sh <firebase-project-id>
+```
+
+It creates a `github-deploy` service account with only these roles, then
+saves both secrets:
+
+* Firebase Hosting Admin
+* Firebase Rules Admin
+* Cloud Datastore Index Admin
+* Service Usage Consumer
+* API Keys Viewer
+
+To do it by hand instead:
+
+1. In Google Cloud console → IAM → Service accounts, create an account with
+   those roles.
+2. Create a JSON key for it and paste the whole file into
+   `FIREBASE_SERVICE_ACCOUNT`.
+3. Copy the `firebaseConfig` object from Firebase console → Project
+   settings → Your apps into `FIREBASE_WEB_CONFIG`, quoting the keys so it
+   is valid JSON.
+
+`npm run firebase:config` writes `FIREBASE_WEB_CONFIG` into the
+`firebaseConfig` object in `src/app/data/firebase/firebase-config.ts` at
+build time and reads the project id from it, so `.firebaserc` doesn't need
+editing for CI. The secret is optional if you commit your real config to
+that file instead; without either, the deploy fails rather than shipping a
+build that cannot start. The values are public by design; access is
+enforced by `firestore.rules`.
+
+Notes:
+
+* **Sign-in on previews:** sign-in only works on authorized domains. Add a
+  preview's domain (`<project>--pr-…web.app`) under Authentication →
+  Settings → Authorized domains to sign in there.
+* **Keyless option:** if your organization blocks service account keys, use
+  [Workload Identity Federation](https://github.com/google-github-actions/auth)
+  instead and drop the key secret.
+
+### Hosting
+
+`firebase.json` serves `dist/peaches/browser` as a single-page app. Hashed
+JS, CSS and font files are cached for a year; `index.html`, the service
+worker scripts, `ngsw.json` and the manifest are always revalidated so a
+deploy reaches installed apps on their next launch. Every response also
+carries `X-Content-Type-Options: nosniff`, a
+`strict-origin-when-cross-origin` referrer policy and
+`Cross-Origin-Opener-Policy: same-origin-allow-popups` (which keeps popup
+sign-in working).
 
 ## pages.yml (GitHub Pages demo)
 
@@ -24,23 +107,6 @@ Every push to `main` or `feat/**` builds the demo with the repository's
 base href and force-pushes it to the `gh-pages` branch, with `404.html`
 copied from `index.html` so deep links reach the Angular router. Enable it
 once under Settings → Pages → Deploy from a branch → `gh-pages`, root.
-
-## deploy-web.yml (Firebase Hosting)
-
-* Push to `main` → production build → live channel, then Firestore rules
-  and indexes are deployed.
-* Pull request from this repo → preview channel (7-day expiry), URL
-  commented on the PR.
-
-| Secret | Value |
-| --- | --- |
-| `FIREBASE_SERVICE_ACCOUNT` | JSON key for a service account with **Firebase Hosting Admin**, **Firebase Rules Admin** and **Cloud Datastore Index Admin** (the Firebase CLI `firebase init hosting:github` creates one with the first) |
-| `FIREBASE_PROJECT_ID` | e.g. `peaches-prod` |
-
-`firebase.json` serves `dist/peaches/browser` as a single-page app. Hashed
-JS, CSS and font files are cached for a year; `index.html`, the service
-worker scripts, `ngsw.json` and the manifest are always revalidated so a
-deploy reaches installed apps on their next launch.
 
 ## Releasing a version
 
@@ -55,19 +121,20 @@ One-time setup, in order:
 
 1. Create the Firebase project and enable **Authentication** providers:
    Google, Apple, Email/Password. Enable **Firestore**.
-2. Register a **Web app** (Project settings → Your apps) and copy its
-   config object into `src/app/data/firebase/firebase-config.ts` (the API
-   key is not a secret; it ships to browsers). The placeholder values there
-   make the app refuse to start the Firebase backend until replaced.
+2. Register a **Web app** (Project settings → Your apps). CI injects its
+   config from the `FIREBASE_WEB_CONFIG` secret; for local Firebase builds,
+   copy it into `src/app/data/firebase/firebase-config.ts` (the API key is
+   not a secret; it ships to browsers). The placeholder values there make
+   the app refuse to start the Firebase backend until replaced.
 3. Add your Hosting domains (and `localhost` for development) under
    Authentication → Settings → Authorized domains.
 4. Deploy rules and indexes: `npx firebase deploy --only firestore`.
-   `deploy-web.yml` also does this on every push to `main`.
+   `deploy.yml` also does this on every push to `main`.
 5. Apple sign-in: configure the Services ID, key and return URL in the
    Apple developer portal and in the Firebase console's Apple provider.
-6. Set the `PEACHES_BACKEND` repository variable to `firebase` so
-   `deploy-web.yml` builds against Firebase instead of the demo. Locally:
-   `npm run build:firebase`.
+6. Set up continuous deployment (above). Locally, `npm run build:firebase`
+   builds against Firebase and `npm run deploy` builds and deploys
+   (set your project id in `.firebaserc` first).
 
 Sign-in uses popups, falling back to a full-page redirect where popups are
 blocked (common in installed iOS PWAs).

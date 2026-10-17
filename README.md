@@ -27,7 +27,7 @@ Android, iOS and desktop, and updates itself in the background.
 | Persistence | In-memory demo backend and Firestore repositories (contract- and rules-tested on the Firestore emulator) |
 | Auth | Firebase Auth (Google, Apple, email) behind an `AuthService`; demo mode auto-signs in |
 | CI (format, lint, type-check, unit, emulator, e2e, builds) | Done |
-| CD (Firebase Hosting, GitHub Pages demo) | Workflows done; Hosting needs secrets |
+| CD (Firebase Hosting with PR previews, GitHub Pages demo) | Workflows done; Hosting needs two secrets (`scripts/setup-ci.sh`) |
 
 ## Live demo
 

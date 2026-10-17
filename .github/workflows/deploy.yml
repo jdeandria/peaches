@@ -1,0 +1,72 @@
+# Continuous deployment: every push to main is verified, then the Firebase build is deployed
+# (Hosting plus Firestore rules and indexes).
+#
+# Repository secrets (see docs/RELEASING.md → Continuous deployment, or run scripts/setup-ci.sh):
+#   FIREBASE_SERVICE_ACCOUNT  service account key JSON with deploy permissions
+#   FIREBASE_WEB_CONFIG       the web app config JSON (optional if committed to the repo)
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never run two deploys at once, and never cancel one halfway.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://${{ steps.config.outputs.project_id }}.web.app
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Configure Firebase web app
+        id: config
+        run: npm run firebase:config
+        env:
+          FIREBASE_WEB_CONFIG: ${{ secrets.FIREBASE_WEB_CONFIG }}
+
+      - name: Build
+        run: npm run build:firebase
+
+      - name: Authenticate to Google Cloud
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Add the FIREBASE_SERVICE_ACCOUNT repository secret (see docs/RELEASING.md → Continuous deployment)."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/service-account.json" >> "$GITHUB_ENV"
+
+      - name: Deploy to Firebase
+        env:
+          PROJECT_ID: ${{ steps.config.outputs.project_id }}
+        run: >-
+          npx firebase deploy --only hosting,firestore --project "$PROJECT_ID"
+          --non-interactive --message "GitHub Actions ${GITHUB_SHA::7}"
+
+      - name: Remove credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/service-account.json"
