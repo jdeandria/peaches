@@ -33,8 +33,7 @@ service cloud.firestore {
       allow delete: if false;
 
       match /memberships/{peachId} {
-        allow read: if signedIn();
-        // Join yourself as a plain member, or manage others as owner/admin.
+        // Read through the collection-group rule below. Join yourself as a plain member, or manage others as owner/admin.
         allow create: if isSelf(peachId) && request.resource.data.role == 'member'
                       || canManage(crateId);
         allow update: if isSelf(peachId) && request.resource.data.role == resource.data.role
@@ -113,7 +112,6 @@ service cloud.firestore {
       allow delete: if false;
 
       match /rounds/{roundId} {
-        allow read: if signedIn() && isMember(seasonCrate(seasonId));
         allow create: if canManage(seasonCrate(seasonId));
         allow update: if isMember(seasonCrate(seasonId))
                       && request.resource.data.weekStart == resource.data.weekStart
@@ -121,7 +119,6 @@ service cloud.firestore {
         allow delete: if false;
       }
       match /matchups/{matchupId} {
-        allow read: if signedIn() && isMember(seasonCrate(seasonId));
         allow create: if canManage(seasonCrate(seasonId));
         allow update: if isMember(seasonCrate(seasonId))
                       && request.resource.data.homePeachId == resource.data.homePeachId
@@ -153,6 +150,21 @@ service cloud.firestore {
                       && request.time.toMillis() < resource.data.locksAt;
         allow delete: if false;
       }
+    }
+
+    // The app finds a Peach's memberships across Crates, and rounds and
+    // matchups across Seasons, with collection-group queries, which only
+    // `{path=**}` rules can allow; such rules can't tell which Crate a
+    // document is under. So memberships, rounds and matchups are readable by
+    // any signed-in Peach: who belongs where, who plays whom and the scores.
+    match /{path=**}/memberships/{peachId} {
+      allow read: if signedIn();
+    }
+    match /{path=**}/rounds/{roundId} {
+      allow read: if signedIn();
+    }
+    match /{path=**}/matchups/{matchupId} {
+      allow read: if signedIn();
     }
 
     // A Peach's own logs, drafts included, are private: Crates see the

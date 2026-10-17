@@ -35,7 +35,12 @@ import {
   workoutLog,
   workoutLogToJson,
 } from '../../domain/models/workout-log';
-import { COLLECTIONS } from './firestore-repositories';
+import {
+  COLLECTIONS,
+  FirestoreCrateRepository,
+  FirestoreSeasonRepository,
+  FirestoreWorkoutLogRepository,
+} from './firestore-repositories';
 
 const PROJECT_ID = 'demo-peaches';
 const EMULATOR_HOST = process.env['FIRESTORE_EMULATOR_HOST'];
@@ -132,6 +137,56 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     );
   const sharedRef = (db: Firestore, id = 'l1') =>
     doc(db, COLLECTIONS.crates, 'c1', COLLECTIONS.sharedLogs, id);
+
+  it('the collection-group queries the app runs are allowed for signed-in Peaches', async () => {
+    // Seasons, rounds and matchups are found across Crates by collection-group
+    // queries, which only rules matching `{path=**}` can allow.
+    await seed(async (db) => {
+      await setDoc(doc(db, COLLECTIONS.seasons, 's1'), {
+        id: 's1',
+        crateId: 'c1',
+        name: 'S',
+        startWeek: '2026-10-12',
+        weeks: 1,
+        participantIds: ['a', 'b'],
+        status: 'active',
+        createdAt: now.toISOString(),
+      });
+      await setDoc(doc(db, COLLECTIONS.seasons, 's1', COLLECTIONS.rounds, 'r1'), {
+        id: 'r1',
+        seasonId: 's1',
+        index: 0,
+        weekStart: '2026-10-12',
+        status: 'open',
+      });
+      await setDoc(doc(db, COLLECTIONS.seasons, 's1', COLLECTIONS.matchups, 'm1'), {
+        id: 'm1',
+        seasonId: 's1',
+        roundId: 'r1',
+        homePeachId: 'a',
+        awayPeachId: 'b',
+        peachIds: ['a', 'b'],
+        weekStart: '2026-10-12',
+        status: 'inProgress',
+        result: null,
+      });
+    });
+    const crates = new FirestoreCrateRepository(client('b'));
+    expect((await crates.membershipsFor('b')).map((m) => m.crateId)).toEqual(['c1']);
+    expect(await crates.membershipsFor('c')).toEqual([]);
+    const seasons = new FirestoreSeasonRepository(client('b'));
+    expect((await seasons.matchupsFor('b')).map((m) => m.id)).toEqual(['m1']);
+    expect((await seasons.getMatchup('m1'))?.homePeachId).toBe('a');
+    expect((await seasons.matchupsInRound('r1')).map((m) => m.id)).toEqual(['m1']);
+    expect((await seasons.getRound('r1'))?.weekStart).toBe('2026-10-12');
+    // The other queries a session starts with: Seasons by Crate (members
+    // only) and the Peach's own logs.
+    expect((await seasons.forCrate('c1')).map((x) => x.id)).toEqual(['s1']);
+    await expect(new FirestoreSeasonRepository(client('c')).forCrate('c1')).rejects.toThrow();
+    expect(await new FirestoreWorkoutLogRepository(client('b')).forPeach('b')).toEqual([]);
+    // Signed out, nothing.
+    await expect(new FirestoreCrateRepository(client(null)).membershipsFor('b')).rejects.toThrow();
+  });
 
   it('a Peach’s own logs, drafts included, are private', async () => {
     await seed((db) => setDoc(doc(db, COLLECTIONS.workoutLogs, 'l1'), submitted('b')));

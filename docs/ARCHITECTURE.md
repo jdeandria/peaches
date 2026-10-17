@@ -124,7 +124,9 @@ shared with and each Crate's `exercises` in one batch, and Crate members
 read those copies to score matchups, show activity and dispute.
 `firestore.rules` follows membership: a Peach reads a Crate's Seasons,
 shared logs, exercises, ballots and disputes only while their membership is
-active; shared copies and exercises are written only by their Peach, and
+active (memberships, rounds and matchups are found by collection-group
+queries, which rules can't tie to a Crate, so any signed-in Peach can read
+those); shared copies and exercises are written only by their Peach, and
 only once submitted; a member writes only their own ballot; a dispute is
 opened by a member other than the log's owner, and afterwards each member
 but the owner may change only their own vote; a lineup is written by its
