@@ -43,16 +43,28 @@ service cloud.firestore {
       }
 
       // Copies of submitted logs, written by their Peach in the same batch
-      // as the log itself. Members read them to score matchups; they never
-      // change, like the submitted log they copy.
+      // as the log itself, and again whenever they edit it. Members read
+      // them to score matchups.
       match /logs/{logId} {
         allow read: if isMember(crateId);
-        allow create: if isSelf(request.resource.data.peachId)
-                      && isMember(crateId)
-                      && request.resource.data.id == logId
-                      && request.resource.data.status == 'submitted'
-                      && crateId in request.resource.data.sharedWith;
-        allow update, delete: if false;
+        allow create, update: if isSelf(request.resource.data.peachId)
+                              && (resource == null || resource.data.peachId == request.auth.uid)
+                              && isMember(crateId)
+                              && request.resource.data.id == logId
+                              && request.resource.data.status == 'submitted'
+                              && crateId in request.resource.data.sharedWith;
+        allow delete: if false;
+      }
+
+      // The exercises each member has logged, shared in the same batch as
+      // their logs: one per exercise per member, keyed "<exerciseId>__<peachId>".
+      match /exercises/{key} {
+        allow read: if isMember(crateId);
+        allow create, update: if isSelf(request.resource.data.peachId)
+                              && isMember(crateId)
+                              && request.resource.data.crateId == crateId
+                              && key == request.resource.data.exerciseId + '__' + request.auth.uid;
+        allow delete: if false;
       }
 
       // One ballot per member, keyed by Peach id; only its owner writes it.
@@ -65,37 +77,24 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // The Crate's library: any member adds; whoever added an item, or an
-      // owner or admin, removes it.
-      match /library/{exerciseId} {
+      // A member questions a crate-mate's numbers, voting to strike them;
+      // after that each member (but the workout's owner) only sets their
+      // own vote.
+      match /disputes/{disputeId} {
         allow read: if isMember(crateId);
         allow create: if isMember(crateId)
-                      && request.resource.data.addedBy == request.auth.uid
+                      && request.resource.data.id == disputeId
                       && request.resource.data.crateId == crateId
-                      && request.resource.data.exerciseId == exerciseId;
-        allow update: if false;
-        allow delete: if isMember(crateId)
-                      && (resource.data.addedBy == request.auth.uid || canManage(crateId));
-      }
-      match /customExercises/{exerciseId} {
-        allow read: if isMember(crateId);
-        allow create: if isMember(crateId)
-                      && request.resource.data.createdBy == request.auth.uid
-                      && request.resource.data.crateId == crateId
-                      && request.resource.data.id == exerciseId;
-        allow update: if false;
-        allow delete: if isMember(crateId)
-                      && (resource.data.createdBy == request.auth.uid || canManage(crateId));
-      }
-      match /routines/{routineId} {
-        allow read: if isMember(crateId);
-        allow create: if isMember(crateId)
-                      && request.resource.data.createdBy == request.auth.uid
-                      && request.resource.data.crateId == crateId
-                      && request.resource.data.id == routineId;
-        allow update: if false;
-        allow delete: if isMember(crateId)
-                      && (resource.data.createdBy == request.auth.uid || canManage(crateId));
+                      && request.resource.data.openedBy == request.auth.uid
+                      && request.resource.data.peachId != request.auth.uid
+                      && request.resource.data.votes == { (request.auth.uid): 'strike' };
+        allow update: if isMember(crateId)
+                      && request.auth.uid != resource.data.peachId
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes'])
+                      && request.resource.data.votes.diff(resource.data.votes).affectedKeys()
+                           .hasOnly([request.auth.uid])
+                      && request.resource.data.votes[request.auth.uid] in ['strike', 'keep'];
+        allow delete: if false;
       }
     }
 
@@ -103,14 +102,14 @@ service cloud.firestore {
     // started opens its round, and once its grace period ends closes it
     // (scoring the logs shared with the Crate). So schedules are created by
     // owners/admins, but any active member may advance round, matchup and
-    // season state. Weights and participants are frozen at scheduling.
+    // season state. Rules and participants are frozen at scheduling.
     match /seasons/{seasonId} {
       allow read: if signedIn() && isMember(resource.data.crateId);
       allow create: if signedIn() && canManage(request.resource.data.crateId);
       allow update: if isMember(resource.data.crateId)
                     && request.resource.data.crateId == resource.data.crateId
                     && request.resource.data.participantIds == resource.data.participantIds
-                    && request.resource.data.weights == resource.data.weights;
+                    && request.resource.data.rules == resource.data.rules;
       allow delete: if false;
 
       match /rounds/{roundId} {
@@ -129,16 +128,39 @@ service cloud.firestore {
                       && request.resource.data.awayPeachId == resource.data.awayPeachId;
         allow delete: if false;
       }
+
+      // A Peach's lineup for a week, keyed "<roundId>_<peachId>". Secret from
+      // crate-mates until it locks when the week starts (`locksAt`, epoch
+      // ms), and only changeable before then. A new lineup can lock at most
+      // a week (and a day of clock skew) ahead.
+      match /lineups/{lineupId} {
+        allow get: if resource == null && isMember(seasonCrate(seasonId))
+                   || isSelf(resource.data.peachId)
+                   || isMember(seasonCrate(seasonId))
+                      && request.time.toMillis() >= resource.data.locksAt;
+        allow list: if isSelf(resource.data.peachId);
+        allow create: if isSelf(request.resource.data.peachId)
+                      && isMember(seasonCrate(seasonId))
+                      && request.resource.data.seasonId == seasonId
+                      && lineupId == request.resource.data.roundId + '_' + request.auth.uid
+                      && request.time.toMillis() < request.resource.data.locksAt
+                      && request.resource.data.locksAt < request.time.toMillis() + 8 * 86400000;
+        allow update: if isSelf(resource.data.peachId)
+                      && isMember(seasonCrate(seasonId))
+                      && request.resource.data.peachId == resource.data.peachId
+                      && request.resource.data.roundId == resource.data.roundId
+                      && request.resource.data.locksAt == resource.data.locksAt
+                      && request.time.toMillis() < resource.data.locksAt;
+        allow delete: if false;
+      }
     }
 
     // A Peach's own logs, drafts included, are private: Crates see the
-    // copies shared with them on submit.
+    // copies shared with them on submit. Only their Peach edits them.
     match /workoutLogs/{logId} {
       allow read: if isSelf(resource.data.peachId);
       allow create: if isSelf(request.resource.data.peachId);
-      // Owners edit until submitted; a submitted log is frozen.
       allow update: if isSelf(resource.data.peachId)
-                    && resource.data.status != 'submitted'
                     && request.resource.data.peachId == resource.data.peachId;
       allow delete: if false;
     }

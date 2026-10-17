@@ -1,16 +1,22 @@
 import { combineLatest, distinctUntilChanged, map, Observable } from 'rxjs';
 
 import { Repositories } from '../../application/app-container';
-import { RateBallot } from '../../domain/models/ballot';
+import { Ballot } from '../../domain/models/ballot';
 import { Crate, CrateMembership, isActiveMembership } from '../../domain/models/crate';
-import { CustomExercise, LibraryEntry, Routine } from '../../domain/models/library';
+import {
+  SharedExercise,
+  sharedExerciseKey,
+  sharedExercisesOf,
+} from '../../domain/models/crate-exercise';
+import { Dispute, DisputeVote } from '../../domain/models/dispute';
+import { Lineup, lineupKey } from '../../domain/models/lineup';
 import { Peach } from '../../domain/models/peach';
 import { involves, Matchup, Round, Season } from '../../domain/models/season';
 import { isSubmitted, WorkoutLog } from '../../domain/models/workout-log';
 import {
   BallotRepository,
   CrateRepository,
-  LibraryRepository,
+  DisputeRepository,
   PeachRepository,
   SeasonRepository,
   WorkoutLogRepository,
@@ -96,6 +102,7 @@ export class InMemorySeasonRepository implements SeasonRepository {
   private readonly seasons = new InMemoryStore<Season>((s) => s.id);
   private readonly rounds = new InMemoryStore<Round>((r) => r.id);
   private readonly matchups = new InMemoryStore<Matchup>((m) => m.id);
+  private readonly lineups = new InMemoryStore<Lineup>((l) => lineupKey(l.roundId, l.peachId));
 
   async getById(id: string): Promise<Season | null> {
     return this.seasons.get(id);
@@ -155,10 +162,22 @@ export class InMemorySeasonRepository implements SeasonRepository {
   watchMatchupsFor(peachId: string): Observable<Matchup[]> {
     return this.matchups.watch((all) => all.filter((m) => involves(m, peachId)));
   }
+
+  /** Nothing is secret in memory: the app only asks for lineups it may see. */
+  async getLineup(_seasonId: string, roundId: string, peachId: string): Promise<Lineup | null> {
+    return this.lineups.get(lineupKey(roundId, peachId));
+  }
+
+  async saveLineup(lineup: Lineup): Promise<void> {
+    this.lineups.put(lineup);
+  }
 }
 
 export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
   private readonly store = new InMemoryStore<WorkoutLog>((l) => l.id);
+  private readonly exercises = new InMemoryStore<SharedExercise>(
+    (e) => `${e.crateId}:${sharedExerciseKey(e.exercise.id, e.peachId)}`,
+  );
 
   async getById(id: string): Promise<WorkoutLog | null> {
     return this.store.get(id);
@@ -172,9 +191,15 @@ export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
     this.store.put(log);
   }
 
-  /** The shared copies are the log itself: it is immutable once submitted. */
+  /** The shared copies are the log itself. */
   async saveSubmitted(log: WorkoutLog): Promise<void> {
     this.store.put(log);
+    this.exercises.putAll(sharedExercisesOf(log));
+  }
+
+  async getShared(crateId: string, logId: string): Promise<WorkoutLog | null> {
+    const log = this.store.get(logId);
+    return log && this.isShared(log, crateId) ? log : null;
   }
 
   async sharedWith(crateId: string, from: Date, to: Date): Promise<WorkoutLog[]> {
@@ -188,6 +213,10 @@ export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
       .where((l) => this.isShared(l, crateId))
       .sort(newestLogFirst)
       .slice(0, limit);
+  }
+
+  async exercisesSharedWith(crateId: string): Promise<SharedExercise[]> {
+    return this.exercises.where((e) => e.crateId === crateId);
   }
 
   watch(id: string): Observable<WorkoutLog | null> {
@@ -204,62 +233,43 @@ export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
 }
 
 export class InMemoryBallotRepository implements BallotRepository {
-  private readonly store = new InMemoryStore<RateBallot>((b) => `${b.crateId}:${b.peachId}`);
+  private readonly store = new InMemoryStore<Ballot>((b) => `${b.crateId}:${b.peachId}`);
 
-  async forCrate(crateId: string): Promise<RateBallot[]> {
+  async forCrate(crateId: string): Promise<Ballot[]> {
     return this.store.where((b) => b.crateId === crateId);
   }
 
-  async save(ballot: RateBallot): Promise<void> {
+  async save(ballot: Ballot): Promise<void> {
     this.store.put(ballot);
   }
 }
 
-export class InMemoryLibraryRepository implements LibraryRepository {
-  private readonly entryStore = new InMemoryStore<LibraryEntry>(
-    (e) => `${e.crateId}:${e.exerciseId}`,
-  );
-  private readonly customStore = new InMemoryStore<CustomExercise>((e) => `${e.crateId}:${e.id}`);
-  private readonly routineStore = new InMemoryStore<Routine>((r) => `${r.crateId}:${r.id}`);
+export class InMemoryDisputeRepository implements DisputeRepository {
+  private readonly store = new InMemoryStore<Dispute>((d) => `${d.crateId}:${d.id}`);
 
-  async entries(crateId: string): Promise<LibraryEntry[]> {
-    return this.entryStore.where((e) => e.crateId === crateId);
+  async get(crateId: string, id: string): Promise<Dispute | null> {
+    return this.store.get(`${crateId}:${id}`);
   }
 
-  async saveEntry(entry: LibraryEntry): Promise<void> {
-    this.entryStore.put(entry);
+  async forLogs(crateId: string, logIds: Iterable<string>): Promise<Dispute[]> {
+    const ids = new Set(logIds);
+    return this.store.where((d) => d.crateId === crateId && ids.has(d.logId));
   }
 
-  async removeEntry(crateId: string, exerciseId: string): Promise<void> {
-    this.entryStore.remove(`${crateId}:${exerciseId}`);
+  async openedSince(crateId: string, since: Date): Promise<Dispute[]> {
+    return this.store
+      .where((d) => d.crateId === crateId && d.openedAt >= since)
+      .sort((a, b) => b.openedAt.getTime() - a.openedAt.getTime());
   }
 
-  async customExercises(crateId: string): Promise<CustomExercise[]> {
-    return this.customStore.where((e) => e.crateId === crateId);
+  async create(dispute: Dispute): Promise<void> {
+    if (await this.get(dispute.crateId, dispute.id)) throw new Error('Dispute already exists');
+    this.store.put(dispute);
   }
 
-  async saveCustomExercise(exercise: CustomExercise): Promise<void> {
-    this.customStore.put(exercise);
-  }
-
-  async removeCustomExercise(crateId: string, id: string): Promise<void> {
-    this.customStore.remove(`${crateId}:${id}`);
-  }
-
-  async routines(crateId: string): Promise<Routine[]> {
-    return this.routineStore.where((r) => r.crateId === crateId);
-  }
-
-  async getRoutine(crateId: string, id: string): Promise<Routine | null> {
-    return this.routineStore.get(`${crateId}:${id}`);
-  }
-
-  async saveRoutine(routine: Routine): Promise<void> {
-    this.routineStore.put(routine);
-  }
-
-  async removeRoutine(crateId: string, id: string): Promise<void> {
-    this.routineStore.remove(`${crateId}:${id}`);
+  async vote(crateId: string, id: string, peachId: string, vote: DisputeVote): Promise<void> {
+    const dispute = await this.get(crateId, id);
+    if (dispute) this.store.put({ ...dispute, votes: { ...dispute.votes, [peachId]: vote } });
   }
 }
 
@@ -271,6 +281,6 @@ export function inMemoryRepositories(): Repositories {
     seasons: new InMemorySeasonRepository(),
     logs: new InMemoryWorkoutLogRepository(),
     ballots: new InMemoryBallotRepository(),
-    library: new InMemoryLibraryRepository(),
+    disputes: new InMemoryDisputeRepository(),
   };
 }

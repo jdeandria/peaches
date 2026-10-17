@@ -22,11 +22,13 @@ import {
   query,
   setDoc,
   terminate,
+  updateDoc,
   where,
 } from 'firebase/firestore';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { categoryWeights, DEFAULT_WEIGHTS, weightsToJson } from '../../domain/models/scoring';
+import { sharedExercisesOf, sharedExerciseToJson } from '../../domain/models/crate-exercise';
+import { categoryWeights, DEFAULT_RULES, rulesToJson } from '../../domain/models/scoring';
 import {
   exerciseLogEntry,
   setLog,
@@ -157,10 +159,12 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     );
     expect(week.size).toBe(1);
 
-    // Shared copies never change.
+    // Only their Peach edits shared copies, and nobody deletes them.
+    await setDoc(sharedRef(client('b')), { ...submitted('b'), notes: 'edited' });
     await expect(
-      setDoc(sharedRef(client('b')), { ...submitted('b'), notes: 'edited' }),
+      setDoc(sharedRef(client('a')), { ...submitted('b'), notes: 'hacked' }),
     ).rejects.toThrow();
+    await expect(setDoc(sharedRef(client('a')), submitted('a'))).rejects.toThrow();
     await expect(deleteDoc(sharedRef(client('b')))).rejects.toThrow();
     // Nobody shares in someone else's name, a draft, or into a Crate they're not in.
     await expect(setDoc(sharedRef(client('a'), 'l2'), submitted('b', 'l2'))).rejects.toThrow();
@@ -174,7 +178,7 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     const ballot = (peachId: string) => ({
       crateId: 'c1',
       peachId,
-      weights: weightsToJson(DEFAULT_WEIGHTS),
+      rules: rulesToJson(DEFAULT_RULES),
       updatedAt: now.toISOString(),
     });
     const ref = (db: Firestore, peachId: string) =>
@@ -182,48 +186,126 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     await setDoc(ref(client('b'), 'b'), ballot('b'));
     await setDoc(ref(client('b'), 'b'), {
       ...ballot('b'),
-      weights: weightsToJson(categoryWeights({ reps: 100 })),
+      rules: rulesToJson({ ...DEFAULT_RULES, weights: categoryWeights({ reps: 100 }) }),
     });
-    expect((await getDoc(ref(client('a'), 'b'))).data()?.['weights']['reps']).toBe(100);
+    expect((await getDoc(ref(client('a'), 'b'))).data()?.['rules']['weights']['reps']).toBe(100);
     await expect(setDoc(ref(client('a'), 'b'), ballot('b'))).rejects.toThrow();
     await expect(setDoc(ref(client('c'), 'c'), ballot('c'))).rejects.toThrow();
     await expect(getDoc(ref(client('c'), 'b'))).rejects.toThrow();
   });
 
-  it('members add to the library; whoever added it, or the owner, removes it', async () => {
-    const ref = (db: Firestore, id: string) =>
-      doc(db, COLLECTIONS.crates, 'c1', COLLECTIONS.library, id);
-    const entry = (exerciseId: string, addedBy: string) => ({
-      crateId: 'c1',
-      exerciseId,
-      addedBy,
-      addedAt: now.toISOString(),
+  it('members share their exercises in their own name only', async () => {
+    const log = workoutLog({
+      id: 'l1',
+      peachId: 'b',
+      startedAt: now,
+      status: 'submitted',
+      sharedWith: ['c1'],
+      entries: [exerciseLogEntry({ exerciseId: 'bw-run', sets: [setLog({ meters: 5000 })] })],
     });
-    await setDoc(ref(client('b'), 'kb-swing'), entry('kb-swing', 'b'));
-    await setDoc(ref(client('b'), 'bw-burpee'), entry('bw-burpee', 'b'));
-    // Not in someone else's name, and not by outsiders.
-    await expect(setDoc(ref(client('b'), 'bw-run'), entry('bw-run', 'a'))).rejects.toThrow();
-    await expect(setDoc(ref(client('c'), 'bw-run'), entry('bw-run', 'c'))).rejects.toThrow();
-    await expect(getDoc(ref(client('c'), 'kb-swing'))).rejects.toThrow();
-
-    await deleteDoc(ref(client('b'), 'kb-swing'));
-    await deleteDoc(ref(client('a'), 'bw-burpee'));
-    await setDoc(ref(client('a'), 'bw-run'), entry('bw-run', 'a'));
-    await expect(deleteDoc(ref(client('b'), 'bw-run'))).rejects.toThrow();
-
-    const routine = doc(client('b'), COLLECTIONS.crates, 'c1', COLLECTIONS.routines, 'rt1');
-    await setDoc(routine, {
-      id: 'rt1',
-      crateId: 'c1',
-      name: 'Sweat',
-      items: [],
-      createdBy: 'b',
-      createdAt: now.toISOString(),
-    });
-    await expect(setDoc(routine, { name: 'Renamed' }, { merge: true })).rejects.toThrow();
+    const [shared] = sharedExercisesOf(log);
+    const ref = (db: Firestore, key: string) =>
+      doc(db, COLLECTIONS.crates, 'c1', COLLECTIONS.sharedExercises, key);
+    await setDoc(ref(client('b'), 'bw-run__b'), sharedExerciseToJson(shared));
+    // Again (an edited log) is fine.
+    await setDoc(ref(client('b'), 'bw-run__b'), sharedExerciseToJson(shared));
+    expect((await getDoc(ref(client('a'), 'bw-run__b'))).exists()).toBe(true);
+    await expect(getDoc(ref(client('c'), 'bw-run__b'))).rejects.toThrow();
+    // Not under someone else's key or name, and not by outsiders.
+    await expect(
+      setDoc(ref(client('a'), 'bw-run__b'), sharedExerciseToJson(shared)),
+    ).rejects.toThrow();
+    await expect(
+      setDoc(ref(client('a'), 'bw-run__a'), sharedExerciseToJson(shared)),
+    ).rejects.toThrow();
+    await expect(
+      setDoc(ref(client('c'), 'bw-run__c'), sharedExerciseToJson({ ...shared, peachId: 'c' })),
+    ).rejects.toThrow();
+    await expect(deleteDoc(ref(client('b'), 'bw-run__b'))).rejects.toThrow();
   });
 
-  it('a Season’s frozen weights cannot change', async () => {
+  it('members dispute others’ workouts, and each sets only their own vote', async () => {
+    const dispute = (openedBy: string, peachId: string) => ({
+      id: 'd1',
+      crateId: 'c1',
+      logId: 'l1',
+      peachId,
+      target: 'bw-run',
+      label: 'Run',
+      snapshot: 'bw-run~x',
+      openedBy,
+      openedAt: now.toISOString(),
+      votes: { [openedBy]: 'strike' },
+    });
+    const ref = (db: Firestore) => doc(db, COLLECTIONS.crates, 'c1', COLLECTIONS.disputes, 'd1');
+    // Not your own workout, not with a vote to keep, not by outsiders.
+    await expect(setDoc(ref(client('b')), dispute('b', 'b'))).rejects.toThrow();
+    await expect(
+      setDoc(ref(client('a')), { ...dispute('a', 'b'), votes: { a: 'keep', b: 'strike' } }),
+    ).rejects.toThrow();
+    await expect(setDoc(ref(client('c')), dispute('c', 'b'))).rejects.toThrow();
+    await setDoc(ref(client('a')), dispute('a', 'b'));
+    expect((await getDoc(ref(client('b')))).exists()).toBe(true);
+    await expect(getDoc(ref(client('c')))).rejects.toThrow();
+
+    // The opener changes their vote; the owner can't vote; nobody touches
+    // another's vote or anything else.
+    await updateDoc(ref(client('a')), { 'votes.a': 'keep' });
+    await expect(updateDoc(ref(client('b')), { 'votes.b': 'keep' })).rejects.toThrow();
+    await expect(updateDoc(ref(client('a')), { 'votes.b': 'strike' })).rejects.toThrow();
+    await expect(updateDoc(ref(client('a')), { 'votes.a': 'maybe' })).rejects.toThrow();
+    await expect(updateDoc(ref(client('a')), { label: 'Walk' })).rejects.toThrow();
+    await expect(deleteDoc(ref(client('a')))).rejects.toThrow();
+  });
+
+  it('lineups are secret until they lock, and frozen after', async () => {
+    const hour = 3_600_000;
+    const lineup = (peachId: string, locksAt: number) => ({
+      seasonId: 's1',
+      roundId: 'r1',
+      peachId,
+      pledges: [{ category: 'runWalk', target: 10 }],
+      locksAt,
+      updatedAt: now.toISOString(),
+    });
+    const ref = (db: Firestore, peachId: string, roundId = 'r1') =>
+      doc(db, COLLECTIONS.seasons, 's1', COLLECTIONS.lineups, `${roundId}_${peachId}`);
+    const future = Date.now() + 48 * hour;
+    await seed(async (db) => {
+      await setDoc(doc(db, COLLECTIONS.seasons, 's1'), { id: 's1', crateId: 'c1' });
+      await setDoc(ref(db, 'a', 'r0'), { ...lineup('a', Date.now() - hour), roundId: 'r0' });
+    });
+
+    // b sets and changes a lineup for next week; a can't see it yet.
+    await setDoc(ref(client('b'), 'b'), lineup('b', future));
+    await setDoc(ref(client('b'), 'b'), { ...lineup('b', future), pledges: [] });
+    expect((await getDoc(ref(client('b'), 'b'))).exists()).toBe(true);
+    await expect(getDoc(ref(client('a'), 'b'))).rejects.toThrow();
+    // A lineup that doesn't exist reads as missing, not as a refusal.
+    expect((await getDoc(ref(client('a'), 'z'))).exists()).toBe(false);
+    // A locked one is readable by members, not outsiders, and can't change.
+    expect((await getDoc(ref(client('b'), 'a', 'r0'))).exists()).toBe(true);
+    await expect(getDoc(ref(client('c'), 'a', 'r0'))).rejects.toThrow();
+    await expect(
+      setDoc(ref(client('a'), 'a', 'r0'), {
+        ...lineup('a', Date.now() - hour),
+        roundId: 'r0',
+        pledges: [],
+      }),
+    ).rejects.toThrow();
+
+    // Nobody sets a lineup for someone else, past its lock, moves the lock,
+    // or locks it more than a week away.
+    await expect(setDoc(ref(client('a'), 'b'), lineup('b', future))).rejects.toThrow();
+    await expect(setDoc(ref(client('a'), 'a'), lineup('a', Date.now() - hour))).rejects.toThrow();
+    await expect(setDoc(ref(client('b'), 'b'), lineup('b', future + hour))).rejects.toThrow();
+    await expect(
+      setDoc(ref(client('a'), 'a'), lineup('a', Date.now() + 9 * 24 * hour)),
+    ).rejects.toThrow();
+    await expect(setDoc(ref(client('c'), 'c'), lineup('c', future))).rejects.toThrow();
+  });
+
+  it('a Season’s frozen rules cannot change', async () => {
     const season = {
       id: 's1',
       crateId: 'c1',
@@ -231,18 +313,18 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
       startWeek: '2026-10-12',
       weeks: 2,
       participantIds: ['a', 'b'],
-      weights: weightsToJson(DEFAULT_WEIGHTS),
+      rules: rulesToJson(DEFAULT_RULES),
       status: 'scheduled',
       createdAt: now.toISOString(),
     };
     await setDoc(doc(client('a'), COLLECTIONS.seasons, 's1'), season);
     // Any member advances the status...
     await setDoc(doc(client('b'), COLLECTIONS.seasons, 's1'), { ...season, status: 'active' });
-    // ...but nobody rewrites the weights.
+    // ...but nobody rewrites the rules.
     await expect(
       setDoc(doc(client('a'), COLLECTIONS.seasons, 's1'), {
         ...season,
-        weights: weightsToJson(categoryWeights({ ride: 100 })),
+        rules: rulesToJson({ ...DEFAULT_RULES, weights: categoryWeights({ ride: 100 }) }),
       }),
     ).rejects.toThrow();
   });

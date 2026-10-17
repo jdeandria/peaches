@@ -14,7 +14,10 @@ import { canManage } from '../../../domain/models/crate';
 import {
   CATEGORY_INFO,
   CategoryWeights,
-  DEFAULT_WEIGHTS,
+  DEFAULT_RULES,
+  LINEUP_RULE_KEYS,
+  LINEUP_RULE_LIMITS,
+  LineupRules,
   SCORING_CATEGORIES,
   ScoringCategory,
   WEIGHT_BUDGET,
@@ -35,6 +38,43 @@ import { Stagger } from '../../layout/stagger';
 /** How far one tap moves a category. */
 const STEP = 5;
 
+/** How each lineup rule is shown and stepped. */
+const LINEUP_RULES: Readonly<
+  Record<keyof LineupRules, { label: string; step: number; describe: (n: number) => string }>
+> = {
+  slots: {
+    label: 'Lineup slots',
+    step: 1,
+    describe: (n) =>
+      n === 0 ? 'No lineups: every workout just counts' : `Pledge up to ${n} categories a week`,
+  },
+  pledgeBonus: {
+    label: 'Pledge bonus',
+    step: 10,
+    describe: (n) => `A pledge you hit earns ${n}% of its points again`,
+  },
+  battlePars: {
+    label: 'Battle prize',
+    step: 1,
+    describe: (n) =>
+      n === 0
+        ? 'No battles'
+        : `Out-doing your opponent in a pledged category earns ${n === 1 ? 'one par' : `${n} pars`} of it`,
+  },
+};
+
+interface RuleView {
+  readonly key: keyof LineupRules;
+  readonly label: string;
+  readonly mine: number;
+  readonly unit: string;
+  readonly describe: string;
+  readonly crate: number;
+  readonly season: number | null;
+  readonly min: number;
+  readonly max: number;
+}
+
 interface CategoryView {
   readonly category: ScoringCategory;
   readonly label: string;
@@ -47,10 +87,11 @@ interface CategoryView {
 }
 
 /**
- * Members vote on what counts: each splits 100 points across the scoring
- * categories, and the Crate's weights are the average. A Season freezes the
- * weights when it starts, so a vote changes the next Season, not this one.
- * Owners also set the grace period here.
+ * Members vote on the Crate's rules: each splits 100 points across the
+ * scoring categories (the Crate's weights are the average) and picks the
+ * lineup rules (the middle vote wins). A Season freezes the rules when it
+ * starts, so a vote changes the next Season, not this one. Owners also set
+ * the grace period here.
  */
 @Component({
   selector: 'pch-vote-page',
@@ -87,14 +128,14 @@ export class VotePage {
       const [crate, ballots, tally, seasons, members] = await Promise.all([
         app.crates.getById(crateId),
         app.votingService.ballotsOf(crateId),
-        app.votingService.currentWeights(crateId),
+        app.votingService.currentRules(crateId),
         app.seasons.forCrate(crateId),
         app.crateService.activeMembers(crateId),
       ]);
       const membership = members.find((m) => m.peachId === me) ?? null;
       return {
         crate,
-        mine: ballots.find((b) => b.peachId === me)?.weights ?? null,
+        mine: ballots.find((b) => b.peachId === me)?.rules ?? null,
         votes: ballots.length,
         memberCount: members.length,
         tally,
@@ -108,7 +149,8 @@ export class VotePage {
   protected readonly loaded = computed(() => this.data.value());
 
   /** My ballot as I edit it; starts from my vote, else the Crate's tally. */
-  protected readonly draft = signal<CategoryWeights>(DEFAULT_WEIGHTS);
+  protected readonly draft = signal<CategoryWeights>(DEFAULT_RULES.weights);
+  protected readonly lineupDraft = signal<LineupRules>(DEFAULT_RULES.lineup);
   private readonly touched = signal(false);
   protected readonly grace = signal<number | null>(null);
 
@@ -117,7 +159,9 @@ export class VotePage {
     effect(() => {
       const d = this.data.value();
       if (!d || this.touched()) return;
-      this.draft.set(d.mine ?? d.tally);
+      const start = d.mine ?? d.tally;
+      this.draft.set(start.weights);
+      this.lineupDraft.set(start.lineup);
       this.grace.set(d.crate?.settings.loggingGraceHours ?? null);
     });
   }
@@ -135,10 +179,35 @@ export class VotePage {
       icon: Fmt.categoryIcon(c),
       per: Fmt.per(c, CATEGORY_INFO[c].par, units),
       mine: draft[c],
-      crate: d?.tally[c] ?? 0,
-      season: d?.season ? d.season.weights[c] : null,
+      crate: d?.tally.weights[c] ?? 0,
+      season: d?.season ? d.season.rules.weights[c] : null,
     }));
   });
+
+  protected readonly lineupRules = computed<RuleView[]>(() => {
+    const d = this.data.value();
+    const draft = this.lineupDraft();
+    return LINEUP_RULE_KEYS.map((key) => ({
+      key,
+      label: LINEUP_RULES[key].label,
+      mine: draft[key],
+      unit: key === 'pledgeBonus' ? '%' : '',
+      describe: LINEUP_RULES[key].describe(draft[key]),
+      crate: d?.tally.lineup[key] ?? 0,
+      season: d?.season ? d.season.rules.lineup[key] : null,
+      min: LINEUP_RULE_LIMITS[key][0],
+      max: LINEUP_RULE_LIMITS[key][1],
+    }));
+  });
+
+  protected nudgeRule(key: keyof LineupRules, direction: 1 | -1): void {
+    const [min, max] = LINEUP_RULE_LIMITS[key];
+    this.touched.set(true);
+    this.lineupDraft.update((r) => ({
+      ...r,
+      [key]: Math.min(max, Math.max(min, r[key] + direction * LINEUP_RULES[key].step)),
+    }));
+  }
 
   protected readonly status = computed(() => {
     const left = this.left();
@@ -180,7 +249,13 @@ export class VotePage {
     if (!me || this.busy() || this.left() !== 0) return;
     this.busy.set(true);
     const saved = await this.state.run(
-      (app) => app.votingService.castBallot(this.crateId(), me, this.draft(), this.state.now()),
+      (app) =>
+        app.votingService.castBallot(
+          this.crateId(),
+          me,
+          { weights: this.draft(), lineup: this.lineupDraft() },
+          this.state.now(),
+        ),
       'Vote saved. It counts from the next Season.',
     );
     if (saved) this.touched.set(false);

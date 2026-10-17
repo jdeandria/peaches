@@ -42,6 +42,17 @@
 
     <pch-two-pane>
       <div primaryPane>
+        @if (disputes().length > 0) {
+          <pch-section title="Your vote needed" [top]="8" />
+          <div class="disputes" [pchStagger]="0">
+            @for (d of disputes(); track d.view.dispute.id) {
+              <a class="dispute-link" [routerLink]="d.link">
+                <pch-dispute-card [view]="d.view" [owner]="d.owner" [openedBy]="d.openedBy" />
+              </a>
+            }
+          </div>
+        }
+
         @let s = season();
         @if (s === undefined) {
           <pch-loading-indicator class="loading" [size]="40" />
@@ -122,26 +133,33 @@
         } @else {
           <pch-list-card [pchStagger]="3" class="activity">
             @for (a of feed; track a.id) {
-              @if (a.link) {
-                <a pch-list-row [routerLink]="a.link">
-                  <pch-shaped-avatar rowLeading [shapeId]="a.peachId" [name]="a.name" />
-                  {{ a.name }} · {{ a.day }}
-                  <span rowSubtitle class="one-line">{{ a.summary }}</span>
-                </a>
-              } @else {
-                <pch-list-row>
-                  <pch-shaped-avatar rowLeading [shapeId]="a.peachId" [name]="a.name" />
-                  {{ a.name }} · {{ a.day }}
-                  <span rowSubtitle class="one-line">{{ a.summary }}</span>
-                </pch-list-row>
-              }
+              <a pch-list-row [routerLink]="a.link">
+                <pch-shaped-avatar rowLeading [shapeId]="a.peachId" [name]="a.name" />
+                {{ a.name }} · {{ a.day }}
+                <span rowSubtitle class="one-line">{{ a.summary }}</span>
+              </a>
             }
           </pch-list-card>
         }
       </div>
 
       <div secondaryPane>
-        <pch-crate-library [crateId]="c.id" [canManage]="canManage()" [names]="names()" />
+        <pch-section title="Exercises" [top]="8" />
+        @let list = exercises();
+        @if (list.length === 0) {
+          <pch-card variant="outlined" [pchStagger]="4"
+            >Every exercise members log shows up here, so you can log it too.</pch-card
+          >
+        } @else {
+          <pch-list-card [pchStagger]="4" class="exercises">
+            @for (e of list; track e.id) {
+              <pch-list-row>
+                {{ e.name }}
+                <span rowSubtitle class="one-line">{{ e.from }}</span>
+              </pch-list-row>
+            }
+          </pch-list-card>
+        }
 
         <pch-section title="Peaches" />
         @let people = members.value();

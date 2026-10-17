@@ -63,3 +63,36 @@ export function loggableFromCatalog(e: Exercise): LoggableExercise {
     cues: e.cues,
   };
 }
+
+/** Custom exercise ids carry a prefix so they can never collide with catalog slugs. */
+export const CUSTOM_EXERCISE_PREFIX = 'custom-';
+
+/** Longest name a made-up exercise can have. */
+export const MAX_CUSTOM_NAME = 60;
+
+/**
+ * An exercise a Peach made up while logging ("Rucking", "Reservoir hill
+ * loop"). How it is logged decides how it scores, exactly like a catalog
+ * exercise: only reps take a load, and only distance has a distance kind.
+ */
+export function customExercise(args: {
+  id: string;
+  name: string;
+  track: LogTrack;
+  takesLoad?: boolean;
+  distanceKind?: DistanceKind | null;
+}): LoggableExercise {
+  const name = args.name.trim();
+  if (!name) throw new RangeError('Give the exercise a name.');
+  if (name.length > MAX_CUSTOM_NAME) {
+    throw new RangeError(`Keep the name under ${MAX_CUSTOM_NAME} characters.`);
+  }
+  return {
+    id: `${CUSTOM_EXERCISE_PREFIX}${args.id}`,
+    name,
+    track: args.track,
+    takesLoad: args.track === 'reps' && (args.takesLoad ?? false),
+    distanceKind: args.track === 'distance' ? (args.distanceKind ?? null) : null,
+    cues: null,
+  };
+}

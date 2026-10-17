@@ -1,0 +1,107 @@
+@let d = data.value();
+@if (d === undefined) {
+  <pch-page title="Lineup" showBack backLink="/">
+    <div class="loading"><pch-loading-indicator /></div>
+  </pch-page>
+} @else if (d === null) {
+  <pch-page title="Lineup" showBack backLink="/">
+    <pch-empty-state icon="search_off" title="Matchup not found" />
+  </pch-page>
+} @else {
+  <pch-page
+    [title]="title()"
+    [subtitle]="subtitle()"
+    showBack
+    [backLink]="'/matchups/' + matchupId()"
+  >
+    @if (slots() === 0) {
+      <pch-card variant="outlined"
+        >This Season doesn’t use lineups: every workout just counts.</pch-card
+      >
+    } @else {
+      <p class="intro pch-body-large" [pchStagger]="0">{{ explainer() }}</p>
+      @if (locked()) {
+        <pch-card variant="filled" class="note" [pchStagger]="0">
+          <span class="material-symbols-rounded" aria-hidden="true">lock</span>
+          The week has started, so this lineup is locked.
+        </pch-card>
+      } @else if (notYet()) {
+        <pch-card variant="filled" class="note" [pchStagger]="0">
+          <span class="material-symbols-rounded" aria-hidden="true">event_upcoming</span>
+          Lineups open a week before the week starts.
+        </pch-card>
+      }
+
+      <pch-list-card [pchStagger]="1">
+        @for (r of rows(); track r.category) {
+          <div class="category" [class.picked]="r.shown !== null">
+            <mat-checkbox
+              [checked]="r.shown !== null"
+              [disabled]="locked() || notYet() || (r.shown === null && full())"
+              [aria-label]="'Pledge ' + r.label"
+              (change)="toggle(r.category, $event.checked)"
+            />
+            <span class="material-symbols-rounded icon" aria-hidden="true">{{ r.icon }}</span>
+            <div class="what">
+              <span class="pch-title-medium">{{ r.label }}</span>
+              <span class="pch-body-small muted">{{ r.value }}</span>
+              <span class="pch-body-small muted">{{ r.form }}</span>
+              @if (r.payoff) {
+                <span class="pch-label-medium payoff">{{ r.payoff }}</span>
+              }
+            </div>
+            @if (r.shown !== null) {
+              <div class="stepper">
+                <button
+                  matIconButton
+                  class="outlined"
+                  type="button"
+                  [disabled]="locked()"
+                  [attr.aria-label]="'Less ' + r.label"
+                  (click)="nudge(r.category, -1)"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">remove</span>
+                </button>
+                <label class="field">
+                  <input
+                    class="pch-title-medium"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    [value]="r.shown"
+                    [disabled]="locked()"
+                    [attr.aria-label]="r.label + ' pledge in ' + r.unit"
+                    (change)="setShown(r.category, $any($event.target).value)"
+                  />
+                  <span class="pch-label-small unit" aria-hidden="true">{{ r.unit }}</span>
+                </label>
+                <button
+                  matIconButton
+                  class="tonal"
+                  type="button"
+                  [disabled]="locked()"
+                  [attr.aria-label]="'More ' + r.label"
+                  (click)="nudge(r.category, 1)"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">add</span>
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </pch-list-card>
+
+      @if (!locked() && !notYet()) {
+        <button
+          pageBottomBar
+          matButton="filled"
+          type="button"
+          class="save"
+          [disabled]="busy()"
+          (click)="save()"
+        >
+          Set lineup · {{ draft().size }} of {{ slots() }}
+        </button>
+      }
+    }
+  </pch-page>
+}

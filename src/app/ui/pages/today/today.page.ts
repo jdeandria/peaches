@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { MatButton } from '@angular/material/button';
 
 import { localDateOfLocal, startOfWeek } from '../../../domain/core/local-date';
+import { isLocked, LINEUP_OPENS_MS } from '../../../domain/models/lineup';
 import { isBye, Matchup, Round, winnerId } from '../../../domain/models/season';
 import {
   isSubmitted,
@@ -91,6 +92,31 @@ export class TodayPage {
       .slice(0, 4);
   });
 
+  /** Upcoming matchups I haven't set a lineup for, once their lineups open. */
+  private readonly lineupsDue = this.state.query(
+    () => {
+      const me = this.state.peachId();
+      const upcoming = this.upcoming();
+      return me && upcoming.length > 0 ? { me, upcoming } : undefined;
+    },
+    async ({ me, upcoming }, app) => {
+      const now = this.state.now();
+      const due: Matchup[] = [];
+      for (const m of upcoming) {
+        const [season, window] = await Promise.all([
+          app.seasons.getById(m.seasonId),
+          app.seasonService.windowFor(m.roundId),
+        ]);
+        if (!season || !window || season.rules.lineup.slots === 0) continue;
+        if (isLocked({ locksAt: window.opensAt }, now)) continue;
+        if (window.opensAt.getTime() - now.getTime() > LINEUP_OPENS_MS) continue;
+        if (!(await app.seasons.getLineup(m.seasonId, m.roundId, me))) due.push(m);
+      }
+      return due;
+    },
+  );
+  protected readonly lineupDue = computed(() => this.lineupsDue.value()?.[0] ?? null);
+
   protected readonly logs = this.state.myLogs.value;
 
   /** The workout the Peach has going, if any. */
@@ -102,14 +128,14 @@ export class TodayPage {
     if (draft && draft.entries.length > 0) {
       return {
         title: 'Workout in progress',
-        text: `${Fmt.count(draft.entries.length, 'exercise')} logged so far.`,
+        text: `${Fmt.count(draft.entries.length, 'exercise')} logged so far. The clock picks up where it left off.`,
         action: 'Continue',
         icon: 'play_arrow',
       };
     }
     return {
       title: 'Log a workout',
-      text: 'A run, a lift, a class: everything you log scores in your Crates.',
+      text: 'Open it when you start: it times your session while you log.',
       action: 'Log a workout',
       icon: 'add',
     };

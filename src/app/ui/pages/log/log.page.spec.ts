@@ -31,10 +31,9 @@ describe('LogPage', () => {
     TestBed.inject(MatDialog).closeAll();
   });
 
-  async function render(inputs: { logId?: string; routine?: string } = {}) {
+  async function render(inputs: { logId?: string } = {}) {
     const f = TestBed.createComponent(LogPage);
     if (inputs.logId) f.componentRef.setInput('logId', inputs.logId);
-    if (inputs.routine) f.componentRef.setInput('routine', inputs.routine);
     await stable(f);
     return { f, el: f.nativeElement as HTMLElement };
   }
@@ -58,25 +57,34 @@ describe('LogPage', () => {
     input.dispatchEvent(new Event('input'));
   };
 
-  it('logs a run solo and shows what it is worth in each Crate', async () => {
+  const pick = async (f: ComponentFixture<unknown>, el: HTMLElement, search: string) => {
+    button(el, 'Add exercise')!.click();
+    await stable(f);
+    type(overlay().querySelector<HTMLInputElement>('input[type=search]')!, search);
+    await stable(f);
+  };
+  const rows = () => Array.from(overlay().querySelectorAll<HTMLButtonElement>('button.row'));
+
+  it('times the session, logs a run and finishes in one tap', async () => {
     const { f, el } = await render();
     expect(text(el.querySelector('h1'))).toBe('Log a workout');
     expect(text(el.querySelector('.subtitle'))).toBe('Counts in 2 Crates');
-    expect(text(el)).toContain('What did you do?');
-    expect(button(el, 'Finish workout')).toBeUndefined();
+    expect(text(el.querySelector('.clock'))).toContain('0:00');
+    expect(text(el.querySelector('.clock'))).toContain('Runs while this screen is open');
+    expect(text(el)).toContain('What are you doing?');
+    expect(button(el, 'Finish · 0:00')).toBeUndefined();
+    // The clock started when the screen opened.
+    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    expect(draft.timerStartedAt).not.toBeNull();
 
     // Pick "Run" from the catalog.
-    button(el, 'Add exercise')!.click();
-    await stable(f);
-    type(overlay().querySelector<HTMLInputElement>('input[type=search]')!, 'run');
-    await stable(f);
-    const run = Array.from(overlay().querySelectorAll<HTMLButtonElement>('button.row')).find(
-      (b) => text(b.querySelector('.pch-body-large')) === 'Run',
-    )!;
-    run.click();
+    await pick(f, el, 'run');
+    rows()
+      .find((b) => text(b.querySelector('.pch-body-large')) === 'Run')!
+      .click();
     await stable(f);
 
-    // Five kilometres in 25 minutes.
+    // Last time's run is already filled in; make it five kilometres in 25 minutes.
     const [distance, minutes] = Array.from(
       overlay().querySelectorAll<HTMLInputElement>('input[inputmode=decimal]'),
     );
@@ -97,57 +105,68 @@ describe('LogPage', () => {
     ]);
     // Weekend Warriors' Season is under way: 5 km at 23 + 25 min at 25 per 45.
     expect(text(el.querySelector('.points'))).toBe('36.9 pts in Weekend Warriors');
+    // This week's pledges, counting the run.
+    expect(text(el.querySelector('.pledges'))).toContain('Run & walk');
 
-    // Finish: confirm the session length and submit.
-    button(el, 'Finish workout')!.click();
+    button(el, 'Finish · 0:00')!.click();
     await stable(f);
-    const session = overlay().querySelector<HTMLInputElement>('input[inputmode=numeric]')!;
-    type(session, '30');
-    await stable(f);
-    button(overlay(), 'Submit')!.click();
-    await stable(f);
-
-    const [log] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    const log = (await backend.container.logs.getById(draft.id))!;
     expect(isSubmitted(log)).toBe(true);
-    expect(log.durationMinutes).toBe(30);
+    expect(log.timerStartedAt).toBeNull();
     expect(log.sharedWith).toHaveLength(2);
-    expect(TestBed.inject(Router).url).toBe('/');
+    expect(TestBed.inject(Router).url).toBe(`/log/${draft.id}`);
   });
 
-  it('follows a Crate routine', async () => {
-    const crates = await backend.container.crates.membershipsFor(DEMO_PEACH_ID);
-    const routines = (
-      await Promise.all(crates.map((m) => backend.container.library.routines(m.crateId)))
-    ).flat();
-    const sweat = routines.find((r) => r.name === 'Saturday sweat')!;
-    const { f, el } = await render({ routine: sweat.id });
-    expect(text(el.querySelector('.subtitle'))).toBe('Following “Saturday sweat”');
-    const planned = () =>
-      Array.from(el.querySelectorAll('.item .pch-title-medium')).map((n) => text(n));
-    expect(planned()).toEqual(['Burpee', 'Push Up', 'Bodyweight Squat']);
-
-    button(el, 'Log sets: Burpee')!.click();
+  it('leads with recent exercises and crate-mates’ ones, tagged with who', async () => {
+    const { f, el } = await render();
+    button(el, 'Add exercise')!.click();
     await stable(f);
-    expect(text(overlay())).toContain('Target: 3 × 15 reps');
+    const groups = Array.from(overlay().querySelectorAll('h3.group')).map(text);
+    expect(groups).toEqual(['Recent', 'From your Crates', 'All exercises']);
+    expect(text(overlay())).toContain('Last time:');
+    expect(text(overlay())).toContain('From Ada');
+  });
+
+  it('makes up an exercise on the spot', async () => {
+    const { f, el } = await render();
+    await pick(f, el, 'Rucking');
+    rows()
+      .find((b) => text(b)?.includes('Create “Rucking”'))!
+      .click();
+    await stable(f);
+    rows()
+      .find((b) => text(b)?.endsWith('Reps with weight'))!
+      .click();
+    await stable(f);
     button(overlay(), 'Save')!.click();
     await stable(f);
-
-    const headings = Array.from(el.querySelectorAll('h2')).map(text);
-    expect(headings).toEqual(['Up next', 'Logged']);
-    expect(planned()).toEqual(['Push Up', 'Bodyweight Squat', 'Burpee']);
     const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    expect(draft.routineId).toBe(sweat.id);
-    expect(draft.entries[0].sets.map((s) => s.reps)).toEqual([15, 15, 15]);
+    expect(draft.entries[0]).toMatchObject({
+      exerciseName: 'Rucking',
+      track: 'reps',
+      takesLoad: true,
+    });
+    expect(draft.entries[0].exerciseId.startsWith('custom-')).toBe(true);
   });
 
-  it('shows a submitted workout read-only, with a way to share it as a routine', async () => {
+  it('a finished workout stays editable, time included', async () => {
     const [latest] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    const { el } = await render({ logId: latest.id });
+    const { f, el } = await render({ logId: latest.id });
     expect(text(el.querySelector('h1'))).toBe('Sun, Oct 11');
     expect(text(el)).toContain('Run');
-    expect(button(el, 'Add exercise')).toBeUndefined();
-    expect(button(el, 'Finish workout')).toBeUndefined();
-    expect(el.querySelector('button[aria-label="Share as a routine"]')).not.toBeNull();
+    expect(text(el.querySelector('.clock'))).toContain('Session time');
+    expect(button(el, 'Add exercise')).toBeDefined();
+    expect(
+      Array.from(el.querySelectorAll('button')).some((b) => text(b)?.startsWith('Finish')),
+    ).toBe(false);
+
+    button(el, 'Edit time')!.click();
+    await stable(f);
+    type(overlay().querySelector<HTMLInputElement>('input[inputmode=numeric]')!, '50');
+    await stable(f);
+    button(overlay(), 'Save')!.click();
+    await stable(f);
+    expect((await backend.container.logs.getById(latest.id))!.durationSeconds).toBe(3000);
   });
 
   it('says when a workout does not exist', async () => {

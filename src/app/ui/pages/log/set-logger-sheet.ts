@@ -10,19 +10,18 @@ import { firstValueFrom } from 'rxjs';
 
 import { DistanceUnits, WeightUnits } from '../../../domain/core/units';
 import { LoggableExercise } from '../../../domain/exercises/loggable';
-import { RoutineItem } from '../../../domain/models/library';
 import { UnitSystem } from '../../../domain/models/training';
-import { ExerciseLogEntry, exerciseLogEntry, SetLog } from '../../../domain/models/workout-log';
+import { entryOf, ExerciseLogEntry, SetLog } from '../../../domain/models/workout-log';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
+import { Fmt } from '../../format';
 
 export interface SetLoggerData {
   readonly exercise: LoggableExercise;
+  /** This session's entry, when editing it. */
   readonly existing?: ExerciseLogEntry | null;
-  /** A routine's target for this exercise, to start the sets from. */
-  readonly target?: RoutineItem | null;
+  /** The last time the Peach logged this exercise, to start from. */
+  readonly previous?: ExerciseLogEntry | null;
   readonly units?: UnitSystem;
-  /** What was lifted last time (kg per set), to start the weights from. */
-  readonly previousLoadsKg?: readonly number[] | null;
 }
 
 /**
@@ -66,8 +65,9 @@ interface SetDraft {
 /**
  * Records every set of one exercise, however it is measured: reps (with a
  * weight per set for exercises that take a load, in the Peach's units,
- * stored as kg), seconds, or distance and time. Sets can be added and
- * removed; an optional RPE rates the whole exercise.
+ * stored as kg), seconds, or distance and time. It starts from last time's
+ * sets, so repeating a workout is one tap. Sets can be added and removed;
+ * an optional RPE rates the whole exercise.
  */
 @Component({
   selector: 'pch-set-logger-sheet',
@@ -83,7 +83,6 @@ export class SetLoggerSheet {
 
   protected readonly exercise = this.data.exercise;
   private readonly units: UnitSystem = this.data.units ?? 'metric';
-  private readonly target = this.data.target ?? null;
   protected readonly track = this.exercise.track;
   protected readonly weighted = this.exercise.takesLoad && this.track === 'reps';
   protected readonly weightUnit = WeightUnits.label(this.units);
@@ -96,55 +95,37 @@ export class SetLoggerSheet {
   private readonly step = this.track === 'time' ? 5 : 1;
   protected readonly rpeOptions = RPE_OPTIONS;
 
-  protected readonly targetLine = this.target ? targetText(this.target) : null;
-
   protected readonly sets = signal<SetDraft[]>(this.initialSets());
   /** Last committed weight text per set, to carry edits forward. */
   private committed = this.sets().map((s) => s.load);
   protected readonly rpe = signal<number | null>(this.data.existing?.rpe ?? null);
 
-  protected readonly lastTime = computed(() => {
-    const previous = this.data.previousLoadsKg;
-    if (!this.weighted || !previous || previous.length === 0) return null;
-    const shown = previous.map((kg) => WeightUnits.format(WeightUnits.toDisplay(kg, this.units)));
-    return `Last time: ${shown.join(' · ')} ${this.weightUnit}`;
-  });
+  protected readonly lastTime = this.data.previous
+    ? `Last time: ${Fmt.entrySummary(this.data.previous, this.units)}`
+    : null;
 
   protected readonly canAdd = computed(() => this.sets().length < MAX_SETS);
   protected readonly canRemove = computed(() => this.sets().length > 1);
 
   private initialSets(): SetDraft[] {
-    const existing = this.data.existing?.sets ?? [];
-    if (existing.length > 0) return existing.map((s, i) => this.draftFrom(s, i));
-    const count = this.target?.sets ?? (this.track === 'distance' ? 1 : 3);
-    return Array.from({ length: Math.max(1, Math.min(MAX_SETS, count)) }, (_, i) =>
-      this.draftFrom(null, i),
-    );
+    const from = this.data.existing?.sets ?? this.data.previous?.sets ?? [];
+    if (from.length > 0) return from.map((s) => this.draftFrom(s));
+    const count = this.track === 'distance' ? 1 : 3;
+    return Array.from({ length: count }, () => this.draftFrom(null));
   }
 
-  private draftFrom(set: SetLog | null, i: number): SetDraft {
-    const t = this.target;
-    const value =
-      set?.reps ?? set?.seconds ?? t?.reps ?? t?.seconds ?? (this.track === 'time' ? 30 : 10);
-    const meters = set?.meters ?? t?.meters ?? null;
-    const seconds = this.track === 'distance' ? (set?.seconds ?? t?.seconds ?? null) : null;
+  private draftFrom(set: SetLog | null): SetDraft {
+    const value = set?.reps ?? set?.seconds ?? (this.track === 'time' ? 30 : 10);
+    const seconds = this.track === 'distance' ? (set?.seconds ?? null) : null;
     return {
       value: String(value),
-      load: this.initialLoad(set, i),
-      distance: meters === null ? '' : this.formatDistance(meters),
+      load:
+        this.weighted && set?.loadKg != null
+          ? WeightUnits.format(WeightUnits.toDisplay(set.loadKg, this.units))
+          : '',
+      distance: set?.meters == null ? '' : this.formatDistance(set.meters),
       minutes: seconds === null ? '' : String(Math.round((seconds / 60) * 100) / 100),
     };
-  }
-
-  private initialLoad(set: SetLog | null, i: number): string {
-    if (!this.weighted) return '';
-    // This session's entry first, then last time's weight for the same set
-    // (or its last set), else blank.
-    const previous = this.data.previousLoadsKg;
-    const kg =
-      set?.loadKg ??
-      (previous && previous.length > 0 ? previous[Math.min(i, previous.length - 1)] : null);
-    return kg === null ? '' : WeightUnits.format(WeightUnits.toDisplay(kg, this.units));
   }
 
   private formatDistance(meters: number): string {
@@ -219,26 +200,13 @@ export class SetLoggerSheet {
     this.committed = this.committed.slice(0, -1);
   }
 
-  /** Puts the routine's target back in every set. */
-  protected useTarget(): void {
-    this.sets.update((all) => all.map((s, i) => ({ ...this.draftFrom(null, i), load: s.load })));
-  }
-
   protected save(): void {
     const sets: SetLog[] = [];
     for (const draft of this.sets()) {
       const set = this.toSet(draft);
       if (set) sets.push(set);
     }
-    this.ref.dismiss(
-      exerciseLogEntry({
-        exerciseId: this.exercise.id,
-        exerciseName: this.exercise.name,
-        distanceKind: this.exercise.distanceKind,
-        sets,
-        rpe: this.rpe(),
-      }),
-    );
+    this.ref.dismiss(entryOf(this.exercise, { sets, rpe: this.rpe() }));
   }
 
   /** A typed set as stored, or null if nothing usable was entered. */
@@ -269,19 +237,6 @@ export class SetLoggerSheet {
       meters: null,
     };
   }
-}
-
-/** "Target: 3 × 15 reps", "Target: 1 × 4,000 m". */
-function targetText(t: RoutineItem): string {
-  const amount =
-    t.reps !== null
-      ? `${t.reps} reps`
-      : t.meters !== null
-        ? `${t.meters.toLocaleString('en-US')} m`
-        : t.seconds !== null
-          ? `${t.seconds} s`
-          : null;
-  return amount ? `Target: ${t.sets} × ${amount}` : `Target: ${t.sets} sets`;
 }
 
 /** Parses user input: null unless the whole (trimmed) text is a number. */

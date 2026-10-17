@@ -1,8 +1,8 @@
 import { addDays, LocalDate, monthOf, toUtcDate } from '../domain/core/local-date';
 import { DistanceUnits, WeightUnits } from '../domain/core/units';
-import { Equipment, MovementPattern } from '../domain/exercises/taxonomy';
-import { ScoringCategory } from '../domain/models/scoring';
-import { MatchupStatus, RoundStatus, SeasonStatus } from '../domain/models/season';
+import { MovementPattern } from '../domain/exercises/taxonomy';
+import { CATEGORY_INFO, ScoringCategory } from '../domain/models/scoring';
+import { RoundStatus, SeasonStatus } from '../domain/models/season';
 import { UnitSystem } from '../domain/models/training';
 import {
   ExerciseLogEntry,
@@ -18,13 +18,6 @@ const dayFormat = new Intl.DateTimeFormat(LOCALE, {
   weekday: 'short',
   month: 'short',
   day: 'numeric',
-  timeZone: 'UTC',
-});
-const longDayFormat = new Intl.DateTimeFormat(LOCALE, {
-  weekday: 'long',
-  month: 'long',
-  day: 'numeric',
-  year: 'numeric',
   timeZone: 'UTC',
 });
 const headerDayFormat = new Intl.DateTimeFormat(LOCALE, {
@@ -53,11 +46,6 @@ export const Fmt = {
   /** "Mon, Oct 12" */
   day(date: LocalDate): string {
     return dayFormat.format(toUtcDate(date));
-  },
-
-  /** "Monday, October 12, 2026" */
-  longDay(date: LocalDate): string {
-    return longDayFormat.format(toUtcDate(date));
   },
 
   /** "Monday, October 12" (page headers). */
@@ -127,12 +115,22 @@ export const Fmt = {
 
   /** A duration as "45 s", "25:00" or "1:05:00". */
   duration(seconds: number): string {
-    const s = Math.round(seconds);
-    if (s < 60) return `${s} s`;
+    return seconds < 59.5 ? `${Math.round(seconds)} s` : Fmt.clock(seconds);
+  },
+
+  /** A clock reading: "0:07", "25:00" or "1:05:00". */
+  clock(seconds: number): string {
+    const s = Math.max(0, Math.round(seconds));
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     const rest = String(s % 60).padStart(2, '0');
     return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${rest}` : `${m}:${rest}`;
+  },
+
+  /** "Ada", "Ada and Ben", "Ada, Ben and Cho". */
+  names(names: readonly string[]): string {
+    if (names.length <= 1) return names[0] ?? '';
+    return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
   },
 
   /**
@@ -196,6 +194,35 @@ export const Fmt = {
     }
   },
 
+  /** A category's display unit: "km", "mi", "m", "kg", "lb", "reps" or "min". */
+  unit(c: ScoringCategory, units: UnitSystem): string {
+    switch (c) {
+      case 'runWalk':
+      case 'ride':
+        return DistanceUnits.label(units);
+      case 'swimRow':
+        return 'm';
+      case 'weightMoved':
+        return WeightUnits.label(units);
+      default:
+        return CATEGORY_INFO[c].unit;
+    }
+  },
+
+  /** A category amount as a number in its display unit (for inputs). */
+  toDisplay(c: ScoringCategory, amount: number, units: UnitSystem): number {
+    if (c === 'runWalk' || c === 'ride') return DistanceUnits.toDisplay(amount * 1000, units);
+    if (c === 'weightMoved') return WeightUnits.toDisplay(amount, units);
+    return amount;
+  },
+
+  /** The inverse of {@link toDisplay}: a typed number back to the category's unit. */
+  fromDisplay(c: ScoringCategory, shown: number, units: UnitSystem): number {
+    if (c === 'runWalk' || c === 'ride') return DistanceUnits.toMeters(shown, units) / 1000;
+    if (c === 'weightMoved') return WeightUnits.toKg(shown, units);
+    return shown;
+  },
+
   /** What a category's par is, for explaining weights: "per 5 km", "per 3.1 mi". */
   per(c: ScoringCategory, par: number, units: UnitSystem): string {
     return `per ${Fmt.amount(c, par, units)}`;
@@ -203,14 +230,6 @@ export const Fmt = {
 
   pattern(p: MovementPattern): string {
     return PATTERN[p];
-  },
-
-  equipment(e: Equipment): string {
-    return EQUIPMENT[e];
-  },
-
-  matchupStatus(status: MatchupStatus): string {
-    return MATCHUP_STATUS[status];
   },
 
   seasonStatus(status: SeasonStatus): string {
@@ -254,45 +273,6 @@ const PATTERN: Record<MovementPattern, string> = {
   isolation: 'Isolation',
   mobility: 'Mobility',
   stretch: 'Stretch',
-};
-
-const EQUIPMENT: Record<Equipment, string> = {
-  dumbbell: 'Dumbbell',
-  barbell: 'Barbell',
-  kettlebell: 'Kettlebell',
-  resistanceBand: 'Band',
-  pullUpBar: 'Pull-up bar',
-  dipStation: 'Dip station',
-  bench: 'Bench',
-  box: 'Box',
-  medicineBall: 'Medicine ball',
-  slamBall: 'Slam ball',
-  jumpRope: 'Jump rope',
-  cableMachine: 'Cable machine',
-  weightMachine: 'Machine',
-  treadmill: 'Treadmill',
-  stationaryBike: 'Bike',
-  rowingMachine: 'Rower',
-  elliptical: 'Elliptical',
-  stairClimber: 'Stair climber',
-  suspensionTrainer: 'Suspension trainer',
-  abWheel: 'Ab wheel',
-  foamRoller: 'Foam roller',
-  wall: 'Wall',
-  chair: 'Chair',
-  stairs: 'Stairs',
-  pool: 'Pool',
-  bicycle: 'Bicycle',
-  sled: 'Sled',
-  battleRope: 'Battle rope',
-  sandbag: 'Sandbag',
-  plate: 'Plate',
-};
-
-const MATCHUP_STATUS: Record<MatchupStatus, string> = {
-  scheduled: 'Scheduled',
-  inProgress: 'Open',
-  complete: 'Final',
 };
 
 const SEASON_STATUS: Record<SeasonStatus, string> = {

@@ -32,7 +32,7 @@ export function startWeekOptions(today: LocalDate): ButtonGroupOption<LocalDate>
 
 /**
  * Starts a Season: a name, which Monday it starts and how many weeks it
- * runs. Scoring uses the Crate's vote as it stands now, frozen for the Season.
+ * runs. Scoring uses the Crate's rules as voted now, frozen for the Season.
  */
 @Component({
   selector: 'pch-new-season-dialog',
@@ -74,8 +74,8 @@ export function startWeekOptions(today: LocalDate): ButtonGroupOption<LocalDate>
         />
       </mat-slider>
       <p class="pch-body-medium muted">
-        One matchup a week; everything you log counts. Points per category, from the Crate’s vote:
-        {{ weightsLine() }}.
+        One matchup a week; everything you log counts. From the Crate’s vote, frozen for the Season:
+        {{ rulesLine() }}.
       </p>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -126,18 +126,25 @@ export class NewSeasonDialog {
   readonly weeks = signal(6);
   readonly busy = signal(false);
 
-  private readonly weights = this.state.query(
+  private readonly rules = this.state.query(
     () => this.crate.id,
-    (id, app) => app.votingService.currentWeights(id),
+    (id, app) => app.votingService.currentRules(id),
   ).value;
 
-  protected readonly weightsLine = computed(() => {
-    const w = this.weights();
-    if (!w) return '…';
-    return SCORING_CATEGORIES.filter((c) => w[c] > 0)
+  protected readonly rulesLine = computed(() => {
+    const r = this.rules();
+    if (!r) return '…';
+    const w = r.weights;
+    const weights = SCORING_CATEGORIES.filter((c) => w[c] > 0)
       .sort((a, b) => w[b] - w[a])
       .map((c) => `${Fmt.category(c)} ${w[c]}`)
       .join(', ');
+    const { slots, pledgeBonus, battlePars } = r.lineup;
+    const lineups =
+      slots === 0
+        ? 'no lineups'
+        : `lineups of ${slots} with +${pledgeBonus}% pledges and ${Fmt.count(battlePars, 'par')} per battle`;
+    return `${weights}; ${lineups}`;
   });
 
   protected onName(event: Event): void {

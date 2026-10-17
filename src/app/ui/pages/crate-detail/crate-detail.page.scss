@@ -133,3 +133,20 @@
 pch-two-pane {
   padding-bottom: 96px;
 }
+
+.disputes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dispute-link {
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--pch-radius-large);
+}
+
+.exercises {
+  max-height: 360px;
+  overflow-y: auto;
+}

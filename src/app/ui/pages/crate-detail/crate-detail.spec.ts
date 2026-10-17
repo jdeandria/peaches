@@ -5,7 +5,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { LocalDate } from '../../../domain/core/local-date';
 import { Crate } from '../../../domain/models/crate';
-import { categoryWeights } from '../../../domain/models/scoring';
+import { categoryWeights, DEFAULT_LINEUP_RULES } from '../../../domain/models/scoring';
 import { matchup, Round } from '../../../domain/models/season';
 import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { CrateDetailPage, roundViews } from './crate-detail.page';
@@ -40,17 +40,28 @@ describe('CrateDetailPage', () => {
     return f.nativeElement as HTMLElement;
   }
 
-  it('shows the Season standings, weeks, activity, library and members', async () => {
+  it('shows disputes to vote on, the Season, activity, shared exercises and members', async () => {
     const crate = await myCrate(backend, 'Weekend Warriors');
     const el = await render(crate.id);
     expect(el.querySelector('h1')?.textContent).toBe('Weekend Warriors');
     expect(el.textContent).toContain('Every workout counts. Most points each week wins.');
-    expect(el.textContent).toContain('What counts · 3 of 5 voted');
+    expect(el.textContent).toContain('Rules · 3 of 5 voted');
     expect(el.querySelector('a.chip')?.getAttribute('href')).toBe(`/crates/${crate.id}/vote`);
     expect(el.textContent).toContain(`Code ${crate.inviteCode}`);
 
     const headings = Array.from(el.querySelectorAll('h2')).map((h) => h.textContent?.trim());
-    expect(headings).toEqual(['Autumn Kick-off', 'Weeks', 'Recent workouts', 'Library', 'Peaches']);
+    expect(headings).toEqual([
+      'Your vote needed',
+      'Autumn Kick-off',
+      'Weeks',
+      'Recent workouts',
+      'Exercises',
+      'Peaches',
+    ]);
+    // Ben disputed one of Ada's workouts; it links to the workout.
+    const dispute = el.querySelector<HTMLAnchorElement>('a.dispute-link')!;
+    expect(dispute.textContent).toContain('Ben disputed it');
+    expect(dispute.getAttribute('href')).toMatch(new RegExp(`^/crates/${crate.id}/logs/`));
     expect(el.textContent).toContain('Active');
     expect(el.querySelectorAll('pch-standings-table tbody tr')).toHaveLength(5);
     expect(el.querySelector('pch-standings-table [aria-current]')?.textContent).toContain('You');
@@ -64,18 +75,18 @@ describe('CrateDetailPage', () => {
     // Played and current weeks link to my matchups; later ones don't yet.
     expect(el.querySelectorAll('.weeks a.stretched')).toHaveLength(3);
 
-    const activity = el.querySelectorAll('.activity pch-list-row, .activity a[pch-list-row]');
+    // Every workout opens: mine to edit, crate-mates' to view and dispute.
+    const activity = el.querySelectorAll<HTMLAnchorElement>('.activity a[pch-list-row]');
     expect(activity).toHaveLength(8);
     expect(activity[0].textContent).toContain('Ada');
+    expect(activity[0].getAttribute('href')).toMatch(new RegExp(`^/crates/${crate.id}/logs/`));
 
-    const library = el.querySelectorAll('pch-crate-library pch-list-row');
-    expect(library).toHaveLength(5);
-    expect(library[0].textContent).toContain('Saturday sweat');
-    const start = library[0].querySelector('a')!;
-    expect(start.getAttribute('href')).toMatch(/^\/log\?routine=/);
-    expect(el.textContent).toContain('Reservoir hill loop');
-    // I added none of it and don't manage the Crate: nothing to remove.
-    expect(el.querySelector('pch-crate-library button[aria-label^="Remove"]')).toBeNull();
+    // Every exercise members logged, tagged with who.
+    const exercises = Array.from(el.querySelectorAll('.exercises pch-list-row')).map((r) =>
+      r.textContent?.replace(/\s+/g, ' ').trim(),
+    );
+    expect(exercises).toContain('Reservoir hill loop From Ada');
+    expect(exercises.some((e) => e?.includes('From you'))).toBe(true);
 
     const members = el.querySelectorAll('.members pch-list-row');
     expect(members).toHaveLength(5);
@@ -170,7 +181,7 @@ describe('NewSeasonDialog', () => {
     await backend.container.votingService.castBallot(
       crate.id,
       DEMO_PEACH_ID,
-      categoryWeights({ ride: 100 }),
+      { weights: categoryWeights({ ride: 100 }), lineup: DEFAULT_LINEUP_RULES },
       FIXED_NOW,
     );
     const close = vi.fn();
@@ -186,7 +197,7 @@ describe('NewSeasonDialog', () => {
     await f.whenStable();
     const el: HTMLElement = f.nativeElement;
     expect(el.textContent).toContain('Length: 6 weeks');
-    expect(el.textContent).toContain('Ride 100');
+    expect(el.textContent).toContain('Ride 100; lineups of 3');
     const options = Array.from(el.querySelectorAll('[role=radio]')).map((b) =>
       b.textContent?.trim(),
     );
@@ -201,7 +212,7 @@ describe('NewSeasonDialog', () => {
     expect(season.name).toBe('Block 2');
     expect(season.startWeek).toBe('2026-10-12');
     expect(season.weeks).toBe(3);
-    expect(season.weights).toEqual(categoryWeights({ ride: 100 }));
+    expect(season.rules.weights).toEqual(categoryWeights({ ride: 100 }));
     // Starting this week opens its round straight away.
     const [first] = await backend.container.seasons.roundsOf(season.id);
     expect(first.status).toBe('open');

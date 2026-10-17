@@ -1,21 +1,40 @@
 import {
   CategoryWeights,
+  DEFAULT_RULES,
   DEFAULT_WEIGHTS,
+  LINEUP_RULE_KEYS,
+  LineupRules,
   SCORING_CATEGORIES,
   ScoringCategory,
+  ScoringRules,
   WEIGHT_BUDGET,
 } from '../models/scoring';
 
 /**
- * Combines members' budget ballots into a Crate's weights.
+ * Combines members' ballots into a Crate's rules.
  *
- * Each ballot spends the same 100 points, so the mean of the ballots spends
- * 100 too and no single voter can move a category by more than their share.
- * The mean is rounded to whole points with the largest-remainder method so
- * the result still adds up to exactly 100 (ties go to the earlier
- * category). With no ballots the defaults apply.
+ * Each lineup rule is the middle vote (the lower of the two middle votes
+ * when there is an even number), so one extreme ballot can't drag it
+ * anywhere. Weights are the mean of the budget ballots (see `tally`).
  */
 export const BallotTally = {
+  rules(ballots: readonly ScoringRules[]): ScoringRules {
+    if (ballots.length === 0) return DEFAULT_RULES;
+    const lineup = {} as Record<keyof LineupRules, number>;
+    for (const key of LINEUP_RULE_KEYS) {
+      const votes = ballots.map((b) => b.lineup[key]).sort((a, b) => a - b);
+      lineup[key] = votes[Math.floor((votes.length - 1) / 2)];
+    }
+    return { weights: BallotTally.tally(ballots.map((b) => b.weights)), lineup };
+  },
+
+  /**
+   * Each ballot spends the same 100 points, so the mean of the ballots
+   * spends 100 too and no single voter can move a category by more than
+   * their share. The mean is rounded to whole points with the
+   * largest-remainder method so the result still adds up to exactly 100
+   * (ties go to the earlier category). With no ballots the defaults apply.
+   */
   tally(ballots: readonly CategoryWeights[]): CategoryWeights {
     if (ballots.length === 0) return DEFAULT_WEIGHTS;
     const means = SCORING_CATEGORIES.map((c) => ({

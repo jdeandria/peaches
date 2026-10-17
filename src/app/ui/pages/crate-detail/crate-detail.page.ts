@@ -30,7 +30,7 @@ import { Stagger } from '../../layout/stagger';
 import { StandingsRow, StandingsTable } from '../../layout/standings-table';
 import { StatusLabel } from '../../layout/status-label';
 import { TwoPane } from '../../layout/two-pane';
-import { CrateLibraryPanel } from './crate-library';
+import { DisputeCard } from '../workout/dispute-card';
 import { NewSeasonDialog } from './new-season-dialog';
 
 /** A Season's week as shown in the Weeks list. */
@@ -73,15 +73,16 @@ export function roundViews(args: {
 }
 
 /**
- * A Crate: the current Season's standings and weeks, what members have been
- * logging, the library they've built, members, and manager actions.
+ * A Crate: disputes waiting for your vote, the current Season's standings
+ * and weeks, what members have been logging (and every exercise they've
+ * logged, tagged with who), members, and manager actions.
  */
 @Component({
   selector: 'pch-crate-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Card,
-    CrateLibraryPanel,
+    DisputeCard,
     EmptyState,
     ListCard,
     ListRow,
@@ -139,7 +140,7 @@ export class CrateDetailPage {
     () => new Map((this.members.value() ?? []).map((m) => [m.peach.id, m.peach.displayName])),
   );
 
-  /** Owners and admins run Seasons and can tidy the library. */
+  /** Owners and admins run Seasons. */
   protected readonly canManage = computed(() => {
     const mine = this.members.value()?.find((m) => m.peach.id === this.me());
     return !!mine && canManage(mine.membership);
@@ -175,7 +176,7 @@ export class CrateDetailPage {
     return data && data.seasonId === this.season()?.id ? data : undefined;
   });
 
-  /** Ballots cast, for the "What counts" chip. */
+  /** Ballots cast, for the "Rules" chip. */
   private readonly ballots = this.state.query(
     () => this.crateId(),
     (id, app) => app.votingService.ballotsOf(id),
@@ -183,8 +184,49 @@ export class CrateDetailPage {
   protected readonly voteLine = computed(() => {
     const votes = this.ballots.value()?.length;
     const members = this.members.value()?.length;
-    if (votes === undefined || members === undefined) return 'What counts';
-    return `What counts · ${votes} of ${members} voted`;
+    if (votes === undefined || members === undefined) return 'Rules';
+    return `Rules · ${votes} of ${members} voted`;
+  });
+
+  /** Disputes about crate-mates' workouts that are waiting for my vote. */
+  private readonly awaiting = this.state.query(
+    () => {
+      const me = this.me();
+      return me ? { crateId: this.crateId(), me } : undefined;
+    },
+    ({ crateId, me }, app) => app.disputeService.awaitingVote(crateId, me, this.state.now()),
+  );
+  protected readonly disputes = computed(() => {
+    const names = this.names();
+    return (this.awaiting.value() ?? []).map((view) => ({
+      view,
+      owner: names.get(view.dispute.peachId) ?? 'A Peach',
+      openedBy: names.get(view.dispute.openedBy) ?? 'A Peach',
+      link: ['/crates', this.crateId(), 'logs', view.dispute.logId],
+    }));
+  });
+
+  /** Every exercise members have logged here, tagged with who. */
+  private readonly shared = this.state.query(
+    () => this.crateId(),
+    (id, app) => app.logs.exercisesSharedWith(id),
+  );
+  protected readonly exercises = computed(() => {
+    const names = this.names();
+    const byExercise = new Map<string, { name: string; from: Set<string>; last: number }>();
+    for (const s of this.shared.value() ?? []) {
+      const row = byExercise.get(s.exercise.id) ?? {
+        name: s.exercise.name,
+        from: new Set<string>(),
+        last: 0,
+      };
+      row.from.add(s.peachId === this.me() ? 'you' : (names.get(s.peachId) ?? 'a Peach'));
+      row.last = Math.max(row.last, s.lastLoggedAt.getTime());
+      byExercise.set(s.exercise.id, row);
+    }
+    return [...byExercise.entries()]
+      .sort(([, a], [, b]) => b.last - a.last)
+      .map(([id, row]) => ({ id, name: row.name, from: `From ${Fmt.names([...row.from])}` }));
   });
 
   /** The latest workouts members shared with the Crate. */
@@ -204,7 +246,8 @@ export class CrateDetailPage {
         .slice(0, 2)
         .map((e) => `${e.exerciseName} ${Fmt.entryHeadline(e, units)}`)
         .join(', '),
-      link: log.peachId === this.me() ? ['/log', log.id] : null,
+      link:
+        log.peachId === this.me() ? ['/log', log.id] : ['/crates', this.crateId(), 'logs', log.id],
     }));
   });
 

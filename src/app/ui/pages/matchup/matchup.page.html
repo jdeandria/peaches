@@ -51,8 +51,71 @@
           Log a workout
         </a>
       }
+      @if (canSetLineup()) {
+        <a
+          matButton="filled"
+          class="log"
+          [routerLink]="['/matchups', matchupId(), 'lineup']"
+          [pchStagger]="1"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">checklist</span>
+          Set your lineup
+        </a>
+      }
 
-      <pch-section title="Where the points came from" />
+      <pch-section title="How the score adds up" />
+      <pch-list-card [pchStagger]="2">
+        <div class="category heading pch-label-medium muted" aria-hidden="true">
+          <span class="what"></span>
+          <span class="amount">{{ myName() }}</span>
+          @if (hasOpponent()) {
+            <span class="amount">{{ theirName() }}</span>
+          }
+        </div>
+        @for (line of breakdown(); track line.label) {
+          <div class="category">
+            <span class="what pch-title-small">{{ line.label }}</span>
+            <span class="amount pch-title-small">{{ line.mine }}</span>
+            @if (hasOpponent()) {
+              <span class="amount pch-title-small">{{ line.theirs }}</span>
+            }
+          </div>
+        }
+      </pch-list-card>
+      @if (editedSince()) {
+        <p class="pch-body-small muted note">
+          Workouts were edited after the week closed; the final score stands.
+        </p>
+      }
+
+      @if (usesLineups()) {
+        <div class="sides">
+          <div>
+            <pch-section [title]="myName() === 'You' ? 'Your lineup' : myName() + '’s lineup'" />
+            <ng-container
+              [ngTemplateOutlet]="pledgeList"
+              [ngTemplateOutletContext]="{ $implicit: myPledges(), index: 3 }"
+            />
+          </div>
+          @if (hasOpponent()) {
+            <div>
+              <pch-section [title]="theirName() + '’s lineup'" />
+              @if (theirPledges(); as rows) {
+                <ng-container
+                  [ngTemplateOutlet]="pledgeList"
+                  [ngTemplateOutletContext]="{ $implicit: rows, index: 4 }"
+                />
+              } @else {
+                <pch-card variant="outlined" [pchStagger]="4"
+                  >Secret until the week starts.</pch-card
+                >
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <pch-section title="Workout points by category" />
       <pch-list-card [pchStagger]="2">
         <div class="category heading pch-label-medium muted" aria-hidden="true">
           <span class="icon-space"></span>
@@ -83,6 +146,17 @@
         }
       </pch-list-card>
 
+      @if (disputes().length > 0) {
+        <pch-section title="Disputes" />
+        <div class="disputes">
+          @for (d of disputes(); track d.view.dispute.id) {
+            <a class="dispute-link" [routerLink]="d.link">
+              <pch-dispute-card [view]="d.view" [owner]="d.owner" [openedBy]="d.openedBy" />
+            </a>
+          }
+        </div>
+      }
+
       <div class="logs">
         <div>
           <pch-section [title]="myName() === 'You' ? 'Your workouts' : myName() + '’s workouts'" />
@@ -111,19 +185,40 @@
   } @else {
     <pch-list-card [pchStagger]="index">
       @for (r of rows; track r.id) {
-        @if (r.link) {
-          <a pch-list-row [routerLink]="r.link">
-            {{ r.day }}
-            <span rowSubtitle class="one-line">{{ r.names }}</span>
-            <span rowTrailing class="pch-label-large pts">{{ r.points }} pts</span>
-          </a>
-        } @else {
-          <pch-list-row>
-            {{ r.day }}
-            <span rowSubtitle class="one-line">{{ r.names }}</span>
-            <span rowTrailing class="pch-label-large pts">{{ r.points }} pts</span>
-          </pch-list-row>
-        }
+        <a pch-list-row [routerLink]="r.link">
+          {{ r.day }}
+          <span rowSubtitle class="one-line">{{ r.names }}</span>
+          <span rowTrailing class="pch-label-large pts">{{ r.points }} pts</span>
+        </a>
+      }
+    </pch-list-card>
+  }
+</ng-template>
+
+<ng-template #pledgeList let-rows let-index="index">
+  @if (rows.length === 0) {
+    <pch-card variant="outlined" [pchStagger]="index">No lineup: no pledges or battles.</pch-card>
+  } @else {
+    <pch-list-card [pchStagger]="index">
+      @for (p of rows; track p.category) {
+        <div class="pledge">
+          <span class="material-symbols-rounded icon" [class.hit]="p.hit" aria-hidden="true">{{
+            p.hit ? 'check_circle' : p.icon
+          }}</span>
+          <div class="what">
+            <span class="pch-title-small">{{ p.label }}</span>
+            <span class="pch-body-small muted">{{ p.progress }}</span>
+            @if (p.battle) {
+              <span class="pch-body-small muted">{{ p.battle }}</span>
+            }
+          </div>
+          <div class="amount">
+            <span class="pch-title-small" [class.lead]="p.hit">{{ p.pledgePoints }}</span>
+            @if (p.battle) {
+              <span class="pch-title-small" [class.lead]="p.battleWon">{{ p.battlePoints }}</span>
+            }
+          </div>
+        </div>
       }
     </pch-list-card>
   }

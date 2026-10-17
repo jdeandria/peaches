@@ -1,15 +1,12 @@
 <div class="handle" aria-hidden="true"></div>
 
 <h2 class="pch-headline-small">{{ exercise.name }}</h2>
-@if (targetLine) {
-  <p class="target pch-body-medium">{{ targetLine }}</p>
-}
 @if (exercise.cues) {
   <p class="target pch-body-small">{{ exercise.cues }}</p>
 }
-@if (lastTime(); as last) {
+@if (lastTime) {
   <p class="last-time pch-label-medium">
-    <span class="material-symbols-rounded" aria-hidden="true">history</span>{{ last }}
+    <span class="material-symbols-rounded" aria-hidden="true">history</span>{{ lastTime }}
   </p>
 }
 
@@ -145,11 +142,5 @@
 />
 
 <div class="actions">
-  @if (targetLine) {
-    <button matButton="outlined" type="button" (click)="useTarget()">
-      <span class="material-symbols-rounded" aria-hidden="true">restart_alt</span>
-      Use target
-    </button>
-  }
   <button matButton="filled" type="button" class="save" (click)="save()">Save</button>
 </div>

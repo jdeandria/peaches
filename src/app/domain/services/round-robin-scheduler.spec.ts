@@ -1,6 +1,6 @@
 import { SequentialIdGenerator } from '../core/ids';
 import { localDate, weekday } from '../core/local-date';
-import { DEFAULT_WEIGHTS } from '../models/scoring';
+import { DEFAULT_RULES } from '../models/scoring';
 import { isBye, matchupPeachIds, Season } from '../models/season';
 import { matchupsIn, RoundRobinScheduler } from './round-robin-scheduler';
 
@@ -12,7 +12,7 @@ function season(peaches: string[], weeks: number): Season {
     startWeek: localDate(2026, 11, 2), // a Monday
     weeks,
     participantIds: peaches,
-    weights: DEFAULT_WEIGHTS,
+    rules: DEFAULT_RULES,
     status: 'draft',
     createdAt: new Date(Date.UTC(2026, 0, 1)),
   };

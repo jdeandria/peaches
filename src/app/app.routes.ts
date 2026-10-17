@@ -42,9 +42,19 @@ export const routes: Routes = [
         loadComponent: () => import('./ui/pages/vote/vote.page').then((m) => m.VotePage),
       },
       {
+        path: 'crates/:crateId/logs/:logId',
+        title: 'Workout',
+        loadComponent: () => import('./ui/pages/workout/workout.page').then((m) => m.WorkoutPage),
+      },
+      {
         path: 'matchups/:matchupId',
         title: 'Matchup',
         loadComponent: () => import('./ui/pages/matchup/matchup.page').then((m) => m.MatchupPage),
+      },
+      {
+        path: 'matchups/:matchupId/lineup',
+        title: 'Lineup',
+        loadComponent: () => import('./ui/pages/lineup/lineup.page').then((m) => m.LineupPage),
       },
       {
         path: 'log',
@@ -55,12 +65,6 @@ export const routes: Routes = [
         path: 'log/:logId',
         title: 'Workout',
         loadComponent: () => import('./ui/pages/log/log.page').then((m) => m.LogPage),
-      },
-      {
-        path: 'exercises',
-        title: 'Exercises',
-        loadComponent: () =>
-          import('./ui/pages/exercises/exercises.page').then((m) => m.ExercisesPage),
       },
       {
         path: 'profile',

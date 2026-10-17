@@ -10,7 +10,6 @@ import {
   collection,
   collectionGroup,
   CollectionReference,
-  deleteDoc,
   doc,
   DocumentReference,
   DocumentSnapshot,
@@ -25,6 +24,7 @@ import {
   Query,
   QuerySnapshot,
   setDoc,
+  updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
@@ -32,7 +32,7 @@ import { Observable, from, map, switchMap } from 'rxjs';
 
 import { Repositories } from '../../application/app-container';
 import { dateTimeToJson, JsonMap } from '../../domain/core/json';
-import { ballotFromJson, ballotToJson, RateBallot } from '../../domain/models/ballot';
+import { Ballot, ballotFromJson, ballotToJson } from '../../domain/models/ballot';
 import {
   Crate,
   crateFromJson,
@@ -43,16 +43,14 @@ import {
   membershipToJson,
 } from '../../domain/models/crate';
 import {
-  CustomExercise,
-  customExerciseFromJson,
-  customExerciseToJson,
-  LibraryEntry,
-  libraryEntryFromJson,
-  libraryEntryToJson,
-  Routine,
-  routineFromJson,
-  routineToJson,
-} from '../../domain/models/library';
+  SharedExercise,
+  sharedExerciseFromJson,
+  sharedExerciseKey,
+  sharedExercisesOf,
+  sharedExerciseToJson,
+} from '../../domain/models/crate-exercise';
+import { Dispute, disputeFromJson, disputeToJson, DisputeVote } from '../../domain/models/dispute';
+import { Lineup, lineupFromJson, lineupKey, lineupToJson } from '../../domain/models/lineup';
 import { Peach, peachFromJson, peachToJson } from '../../domain/models/peach';
 import {
   Matchup,
@@ -70,7 +68,7 @@ import { WorkoutLog, workoutLogFromJson, workoutLogToJson } from '../../domain/m
 import {
   BallotRepository,
   CrateRepository,
-  LibraryRepository,
+  DisputeRepository,
   PeachRepository,
   SeasonRepository,
   WorkoutLogRepository,
@@ -87,12 +85,13 @@ export const COLLECTIONS = {
   /** Copies of submitted logs, under each Crate they were shared with. */
   sharedLogs: 'logs',
   ballots: 'ballots',
-  library: 'library',
-  customExercises: 'customExercises',
-  routines: 'routines',
+  /** Exercises members have logged, shared with each of their Crates. */
+  sharedExercises: 'exercises',
+  disputes: 'disputes',
   seasons: 'seasons',
   rounds: 'rounds',
   matchups: 'matchups',
+  lineups: 'lineups',
   workoutLogs: 'workoutLogs',
 } as const;
 
@@ -289,6 +288,10 @@ export class FirestoreSeasonRepository implements SeasonRepository {
     return collection(this.seasons, seasonId, COLLECTIONS.matchups);
   }
 
+  private lineups(seasonId: string): CollectionReference {
+    return collection(this.seasons, seasonId, COLLECTIONS.lineups);
+  }
+
   private crateQuery(crateId: string): Query {
     return query(this.seasons, where('crateId', '==', crateId));
   }
@@ -400,6 +403,27 @@ export class FirestoreSeasonRepository implements SeasonRepository {
   watchMatchupsFor(peachId: string): Observable<Matchup[]> {
     return watchQuery(this.peachMatchupsQuery(peachId), (snap) => decodeAll(snap, matchupFromJson));
   }
+
+  /**
+   * The rules refuse a crate-mate's lineup until it locks, which is exactly
+   * "no lineup you can see", so a refusal reads as null.
+   */
+  async getLineup(seasonId: string, roundId: string, peachId: string): Promise<Lineup | null> {
+    try {
+      const snap = await getDoc(doc(this.lineups(seasonId), lineupKey(roundId, peachId)));
+      return decodeDoc(snap, lineupFromJson);
+    } catch (e) {
+      if ((e as { code?: string }).code === 'permission-denied') return null;
+      throw e;
+    }
+  }
+
+  saveLineup(lineup: Lineup): Promise<void> {
+    return setDoc(
+      doc(this.lineups(lineup.seasonId), lineupKey(lineup.roundId, lineup.peachId)),
+      lineupToJson(lineup),
+    );
+  }
 }
 
 export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
@@ -411,6 +435,10 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
 
   private shared(crateId: string): CollectionReference {
     return collection(this.db, COLLECTIONS.crates, crateId, COLLECTIONS.sharedLogs);
+  }
+
+  private exercises(crateId: string): CollectionReference {
+    return collection(this.db, COLLECTIONS.crates, crateId, COLLECTIONS.sharedExercises);
   }
 
   private peachQuery(peachId: string): Query {
@@ -435,16 +463,26 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
   }
 
   /**
-   * The private log and its copy under each Crate in one batch. Crate
-   * members can read the copies but never the Peach's own log collection,
-   * which also holds unsubmitted drafts.
+   * The private log, its copy under each Crate and the exercises it shares
+   * with them, in one batch. Crate members can read the copies but never
+   * the Peach's own log collection, which also holds unsubmitted drafts.
    */
   async saveSubmitted(log: WorkoutLog): Promise<void> {
     const json = workoutLogToJson(log);
     const batch = writeBatch(this.db);
     batch.set(doc(this.col, log.id), json);
     for (const crateId of log.sharedWith) batch.set(doc(this.shared(crateId), log.id), json);
+    for (const e of sharedExercisesOf(log)) {
+      batch.set(
+        doc(this.exercises(e.crateId), sharedExerciseKey(e.exercise.id, e.peachId)),
+        sharedExerciseToJson(e),
+      );
+    }
     await batch.commit();
+  }
+
+  async getShared(crateId: string, logId: string): Promise<WorkoutLog | null> {
+    return decodeDoc(await getDoc(doc(this.shared(crateId), logId)), workoutLogFromJson);
   }
 
   /** `startedAt` is an ISO string in UTC, so string order is time order. */
@@ -466,6 +504,10 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
     return decodeAll(snap, workoutLogFromJson);
   }
 
+  async exercisesSharedWith(crateId: string): Promise<SharedExercise[]> {
+    return decodeAll(await getDocs(this.exercises(crateId)), sharedExerciseFromJson);
+  }
+
   watch(id: string): Observable<WorkoutLog | null> {
     return watchDoc(doc(this.col, id), workoutLogFromJson);
   }
@@ -485,76 +527,55 @@ export class FirestoreBallotRepository implements BallotRepository {
     return collection(this.db, COLLECTIONS.crates, crateId, COLLECTIONS.ballots);
   }
 
-  async forCrate(crateId: string): Promise<RateBallot[]> {
+  async forCrate(crateId: string): Promise<Ballot[]> {
     return decodeAll(await getDocs(this.col(crateId)), ballotFromJson);
   }
 
-  save(ballot: RateBallot): Promise<void> {
+  save(ballot: Ballot): Promise<void> {
     return setDoc(doc(this.col(ballot.crateId), ballot.peachId), ballotToJson(ballot));
   }
 }
 
-/** Library documents live under their Crate; catalog picks are keyed by exercise id. */
-export class FirestoreLibraryRepository implements LibraryRepository {
+/** Disputes live under their Crate, keyed by log and disputed numbers. */
+export class FirestoreDisputeRepository implements DisputeRepository {
   constructor(private readonly db: Firestore) {}
 
-  private col(crateId: string, name: string): CollectionReference {
-    return collection(this.db, COLLECTIONS.crates, crateId, name);
+  private col(crateId: string): CollectionReference {
+    return collection(this.db, COLLECTIONS.crates, crateId, COLLECTIONS.disputes);
   }
 
-  async entries(crateId: string): Promise<LibraryEntry[]> {
-    return decodeAll(await getDocs(this.col(crateId, COLLECTIONS.library)), libraryEntryFromJson);
+  async get(crateId: string, id: string): Promise<Dispute | null> {
+    return decodeDoc(await getDoc(doc(this.col(crateId), id)), disputeFromJson);
   }
 
-  saveEntry(entry: LibraryEntry): Promise<void> {
-    return setDoc(
-      doc(this.col(entry.crateId, COLLECTIONS.library), entry.exerciseId),
-      libraryEntryToJson(entry),
+  async forLogs(crateId: string, logIds: Iterable<string>): Promise<Dispute[]> {
+    const snaps = await Promise.all(
+      chunk(new Set(logIds), WHERE_IN_LIMIT).map((part) =>
+        getDocs(query(this.col(crateId), where('logId', 'in', part))),
+      ),
     );
+    return snaps.flatMap((snap) => decodeAll(snap, disputeFromJson));
   }
 
-  removeEntry(crateId: string, exerciseId: string): Promise<void> {
-    return deleteDoc(doc(this.col(crateId, COLLECTIONS.library), exerciseId));
-  }
-
-  async customExercises(crateId: string): Promise<CustomExercise[]> {
-    return decodeAll(
-      await getDocs(this.col(crateId, COLLECTIONS.customExercises)),
-      customExerciseFromJson,
+  /** `openedAt` is an ISO string in UTC, so string order is time order. */
+  async openedSince(crateId: string, since: Date): Promise<Dispute[]> {
+    const snap = await getDocs(
+      query(
+        this.col(crateId),
+        where('openedAt', '>=', dateTimeToJson(since)),
+        orderBy('openedAt', 'desc'),
+      ),
     );
+    return decodeAll(snap, disputeFromJson);
   }
 
-  saveCustomExercise(exercise: CustomExercise): Promise<void> {
-    return setDoc(
-      doc(this.col(exercise.crateId, COLLECTIONS.customExercises), exercise.id),
-      customExerciseToJson(exercise),
-    );
+  create(dispute: Dispute): Promise<void> {
+    return setDoc(doc(this.col(dispute.crateId), dispute.id), disputeToJson(dispute));
   }
 
-  removeCustomExercise(crateId: string, id: string): Promise<void> {
-    return deleteDoc(doc(this.col(crateId, COLLECTIONS.customExercises), id));
-  }
-
-  async routines(crateId: string): Promise<Routine[]> {
-    return decodeAll(await getDocs(this.col(crateId, COLLECTIONS.routines)), routineFromJson);
-  }
-
-  async getRoutine(crateId: string, id: string): Promise<Routine | null> {
-    return decodeDoc(
-      await getDoc(doc(this.col(crateId, COLLECTIONS.routines), id)),
-      routineFromJson,
-    );
-  }
-
-  saveRoutine(routine: Routine): Promise<void> {
-    return setDoc(
-      doc(this.col(routine.crateId, COLLECTIONS.routines), routine.id),
-      routineToJson(routine),
-    );
-  }
-
-  removeRoutine(crateId: string, id: string): Promise<void> {
-    return deleteDoc(doc(this.col(crateId, COLLECTIONS.routines), id));
+  /** A field update, so the rules can check each member only touches their own vote. */
+  vote(crateId: string, id: string, peachId: string, vote: DisputeVote): Promise<void> {
+    return updateDoc(doc(this.col(crateId), id), { [`votes.${peachId}`]: vote });
   }
 }
 
@@ -566,6 +587,6 @@ export function firestoreRepositories(db: Firestore): Repositories {
     seasons: new FirestoreSeasonRepository(db),
     logs: new FirestoreWorkoutLogRepository(db),
     ballots: new FirestoreBallotRepository(db),
-    library: new FirestoreLibraryRepository(db),
+    disputes: new FirestoreDisputeRepository(db),
   };
 }

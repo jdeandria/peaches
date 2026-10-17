@@ -5,9 +5,9 @@ import { MatButton } from '@angular/material/button';
 
 import { MatchupSide } from '../../../application/season-service';
 import { localDateOfLocal } from '../../../domain/core/local-date';
+import { isLocked, LINEUP_OPENS_MS } from '../../../domain/models/lineup';
 import { CATEGORY_INFO, SCORING_CATEGORIES } from '../../../domain/models/scoring';
 import { involves, isBye, winnerId } from '../../../domain/models/season';
-import { totalSets } from '../../../domain/models/workout-log';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { Fmt } from '../../format';
@@ -19,6 +19,7 @@ import { ListRow } from '../../layout/list-row';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
+import { DisputeCard } from '../workout/dispute-card';
 
 /** One category row of the comparison table. */
 interface CategoryRow {
@@ -37,16 +38,31 @@ interface LogRow {
   readonly id: string;
   readonly day: string;
   readonly names: string;
-  readonly sets: number;
   readonly points: string;
-  /** Only my own logs open (crate-mates' are read from the Crate's copies). */
-  readonly link: readonly string[] | null;
+  /** My own logs open to edit; crate-mates' open to view and dispute. */
+  readonly link: readonly string[];
+}
+
+/** One pledge of a lineup: how far along it is, and its battle. */
+interface PledgeRow {
+  readonly category: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly hit: boolean;
+  /** "16.2 of 15 km". */
+  readonly progress: string;
+  readonly pledgePoints: string;
+  /** "Won vs 9 km", or null without an opponent. */
+  readonly battle: string | null;
+  readonly battleWon: boolean;
+  readonly battlePoints: string;
 }
 
 /**
- * A week's head-to-head: each side brings their own workouts, and
- * everything they log that week scores with the Season's weights. Shows the
- * score (live, then final), where each side earned it, and the workouts.
+ * A week's head-to-head: each side brings their own workouts and lineup.
+ * Shows the score (live, then final) and exactly how it adds up: workout
+ * points from everything logged, pledge bonuses and battles from the
+ * lineups, then the workouts, with anything disputed.
  */
 @Component({
   selector: 'pch-matchup-page',
@@ -59,6 +75,7 @@ interface LogRow {
     ListRow,
     LoadingIndicator,
     MatButton,
+    DisputeCard,
     NgTemplateOutlet,
     Page,
     RouterLink,
@@ -103,16 +120,21 @@ export class MatchupPage {
   private readonly names = this.state.query(
     () => {
       const b = this.board();
-      return b ? [b.home.peachId, ...(b.away ? [b.away.peachId] : [])] : undefined;
+      if (!b) return undefined;
+      const ids = [b.home.peachId, ...(b.away ? [b.away.peachId] : [])];
+      return [...new Set([...ids, ...b.disputes.map((d) => d.dispute.openedBy)])];
     },
     async (ids, app) =>
       new Map((await app.peaches.getByIds(ids)).map((p) => [p.id, p.displayName])),
   ).value;
 
   protected nameOf(side: MatchupSide | null): string {
-    if (!side) return '';
-    if (side.peachId === this.me()) return 'You';
-    return this.names()?.get(side.peachId) ?? '…';
+    return side ? this.nameOfId(side.peachId) : '';
+  }
+
+  private nameOfId(peachId: string): string {
+    if (peachId === this.me()) return 'You';
+    return this.names()?.get(peachId) ?? 'A crate-mate';
   }
 
   protected readonly headline = computed(() => {
@@ -191,14 +213,108 @@ export class MatchupPage {
     );
   });
 
+  /** Whether the week has started, so lineups are locked and revealed. */
+  protected readonly started = computed(() => {
+    const b = this.board();
+    return !!b && isLocked({ locksAt: b.window.opensAt }, this.state.nowTick());
+  });
+
+  /** Setting a lineup makes sense here: mine, before the week, once lineups open. */
+  protected readonly canSetLineup = computed(() => {
+    const b = this.board();
+    const s = this.sides();
+    if (!b || !s?.playing || this.started() || b.season.rules.lineup.slots === 0) return false;
+    return b.window.opensAt.getTime() - this.state.nowTick().getTime() <= LINEUP_OPENS_MS;
+  });
+
+  protected readonly usesLineups = computed(
+    () => (this.board()?.season.rules.lineup.slots ?? 0) > 0,
+  );
+
+  /** Workouts, pledges and battles for each side: the whole score, line by line. */
+  protected readonly breakdown = computed(() => {
+    const s = this.sides();
+    if (!s) return [];
+    const sum = (xs: readonly { points: number }[]) => xs.reduce((n, x) => n + x.points, 0);
+    const line = (label: string, of: (side: MatchupSide) => number) => ({
+      label,
+      mine: Fmt.points(of(s.mine)),
+      theirs: s.theirs ? Fmt.points(of(s.theirs)) : null,
+    });
+    return [
+      line('Workouts', (side) => side.score.workouts.total),
+      ...(this.usesLineups()
+        ? [
+            line('Pledges hit', (side) => sum(side.score.pledges)),
+            line('Battles won', (side) => sum(side.score.battles)),
+          ]
+        : []),
+    ];
+  });
+
+  /** Set when a closed week's workouts were edited afterwards. */
+  protected readonly editedSince = computed(() => {
+    const score = this.score();
+    const s = this.sides();
+    if (!score?.final || !s) return false;
+    return (
+      score.mine !== s.mine.score.total ||
+      (s.theirs !== null && score.theirs !== s.theirs.score.total)
+    );
+  });
+
+  private pledgeRows(side: MatchupSide | null, opponent: MatchupSide | null): PledgeRow[] {
+    if (!side) return [];
+    const units = this.state.units();
+    const whose = opponent?.peachId === this.me() ? 'your' : `${this.nameOf(opponent)}’s`;
+    return side.score.pledges.map((p, i) => {
+      const battle = side.score.battles[i] ?? null;
+      const outcome = { win: 'Won', tie: 'Tied', loss: 'Lost' }[battle?.outcome ?? 'loss'];
+      return {
+        category: p.category,
+        label: Fmt.category(p.category),
+        icon: Fmt.categoryIcon(p.category),
+        hit: p.hit,
+        progress: `${Fmt.amount(p.category, p.amount, units)} of ${Fmt.amount(p.category, p.target, units)}`,
+        pledgePoints: `Pledge +${Fmt.points(p.points)}`,
+        battle: battle && `${outcome} vs ${whose} ${Fmt.amount(p.category, battle.theirs, units)}`,
+        battleWon: battle?.outcome === 'win',
+        battlePoints: `Battle +${Fmt.points(battle?.points ?? 0)}`,
+      };
+    });
+  }
+
+  protected readonly myPledges = computed(() => {
+    const s = this.sides();
+    return s ? this.pledgeRows(s.mine, s.theirs) : [];
+  });
+  /** Null until the week starts: before that a crate-mate's lineup is secret. */
+  protected readonly theirPledges = computed(() => {
+    const s = this.sides();
+    return s && this.started() ? this.pledgeRows(s.theirs, s.mine) : null;
+  });
+
+  /** Disputes about either side's workouts, each linking to the workout. */
+  protected readonly disputes = computed(() => {
+    const b = this.board();
+    if (!b) return [];
+    return b.disputes.map((view) => ({
+      view,
+      owner: this.nameOfId(view.dispute.peachId),
+      openedBy: this.nameOfId(view.dispute.openedBy),
+      link: ['/crates', b.crate.id, 'logs', view.dispute.logId],
+    }));
+  });
+
   protected readonly categories = computed<CategoryRow[]>(() => {
     const b = this.board();
     const s = this.sides();
     if (!b || !s) return [];
     const units = this.state.units();
     const amountOf = (side: MatchupSide | null, c: string) =>
-      side?.score.categories.find((x) => x.category === c);
-    return SCORING_CATEGORIES.filter((c) => b.season.weights[c] > 0).map((c) => {
+      side?.score.workouts.categories.find((x) => x.category === c);
+    const weights = b.season.rules.weights;
+    return SCORING_CATEGORIES.filter((c) => weights[c] > 0).map((c) => {
       const mine = amountOf(s.mine, c);
       const theirs = amountOf(s.theirs, c);
       const mp = mine?.points ?? 0;
@@ -206,7 +322,7 @@ export class MatchupPage {
       return {
         label: Fmt.category(c),
         icon: Fmt.categoryIcon(c),
-        weight: b.season.weights[c],
+        weight: weights[c],
         per: Fmt.per(c, CATEGORY_INFO[c].par, units),
         mine: Fmt.amount(c, mine?.amount ?? 0, units),
         minePoints: Fmt.points(mp),
@@ -228,10 +344,9 @@ export class MatchupPage {
       .map((log) => ({
         id: log.id,
         day: Fmt.day(localDateOfLocal(log.startedAt)),
-        names: log.entries.map((e) => e.exerciseName).join(', '),
-        sets: totalSets(log),
-        points: Fmt.points(this.state.app.scoring.scoreLog(log, b.season.weights).total),
-        link: mine ? ['/log', log.id] : null,
+        names: log.entries.map((e) => e.exerciseName).join(', ') || 'Struck',
+        points: Fmt.points(this.state.app.scoring.scoreLog(log, b.season.rules.weights).total),
+        link: mine ? ['/log', log.id] : ['/crates', b.crate.id, 'logs', log.id],
       }));
   }
 

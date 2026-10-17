@@ -7,22 +7,76 @@ import {
 import { firstValueFrom } from 'rxjs';
 
 import { ExerciseCatalog } from '../../../domain/exercises/exercise-catalog';
-import { LoggableExercise, loggableFromCatalog } from '../../../domain/exercises/loggable';
-import { CustomExercise, loggableFromCustom } from '../../../domain/models/library';
+import {
+  customExercise,
+  LoggableExercise,
+  loggableFromCatalog,
+  LogTrack,
+  MAX_CUSTOM_NAME,
+} from '../../../domain/exercises/loggable';
+import { DistanceKind } from '../../../domain/models/scoring';
+import { UnitSystem } from '../../../domain/models/training';
+import { ExerciseLogEntry, loggableFromEntry } from '../../../domain/models/workout-log';
 import { Fmt } from '../../format';
+
+/** An exercise crate-mates have logged, and who. */
+export interface CrateExercise {
+  readonly exercise: LoggableExercise;
+  /** "Ada", "Ada and Ben". */
+  readonly from: string;
+}
 
 export interface ExercisePickerData {
   readonly catalog: ExerciseCatalog;
-  /** Custom exercises from the Peach's Crates. */
-  readonly customs: readonly CustomExercise[];
-  /** Catalog exercises the Peach's Crates put in their libraries. */
-  readonly favouriteIds: ReadonlySet<string>;
+  /** The last entry for each exercise the Peach has logged, newest first. */
+  readonly recent: readonly ExerciseLogEntry[];
+  /** Exercises crate-mates have logged. */
+  readonly fromCrates: readonly CrateExercise[];
   /** Exercises already in the log, marked as such. */
   readonly loggedIds: ReadonlySet<string>;
+  readonly units: UnitSystem;
+  /** A fresh id for an exercise the Peach makes up. */
+  readonly newId: () => string;
 }
 
-/** How many catalog matches to list before asking for a narrower search. */
-const CATALOG_LIMIT = 40;
+/** How many matches per group to list before asking for a narrower search. */
+const LIMIT = 40;
+/** Recent exercises shown before anything is typed. */
+const RECENT_LIMIT = 8;
+
+/** How a made-up exercise is logged, which decides how it scores. */
+interface CreateKind {
+  readonly label: string;
+  readonly icon: string;
+  readonly track: LogTrack;
+  readonly takesLoad?: boolean;
+  readonly distanceKind?: DistanceKind;
+}
+
+const CREATE_KINDS: readonly CreateKind[] = [
+  { label: 'Reps', icon: 'repeat', track: 'reps' },
+  { label: 'Reps with weight', icon: 'fitness_center', track: 'reps', takesLoad: true },
+  { label: 'Time', icon: 'timer', track: 'time' },
+  {
+    label: Fmt.category('runWalk'),
+    icon: Fmt.categoryIcon('runWalk'),
+    track: 'distance',
+    distanceKind: 'runWalk',
+  },
+  {
+    label: Fmt.category('ride'),
+    icon: Fmt.categoryIcon('ride'),
+    track: 'distance',
+    distanceKind: 'ride',
+  },
+  {
+    label: Fmt.category('swimRow'),
+    icon: Fmt.categoryIcon('swimRow'),
+    track: 'distance',
+    distanceKind: 'swimRow',
+  },
+  { label: 'Other distance (scores time)', icon: 'route', track: 'distance' },
+];
 
 interface PickerRow {
   readonly exercise: LoggableExercise;
@@ -43,50 +97,75 @@ export function openExercisePicker(
 }
 
 /**
- * Search everything a Peach can log: their Crates' custom exercises and
- * library picks first, then the whole catalog.
+ * Search everything a Peach can log: what they logged before (with last
+ * time's numbers), what crate-mates logged (tagged with who), then the
+ * whole catalog. Anything else they can make up on the spot.
  */
 @Component({
   selector: 'pch-exercise-picker-sheet',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div class="handle" aria-hidden="true"></div>
-    <h2 class="pch-headline-small">Add an exercise</h2>
-    <label class="search">
-      <span class="material-symbols-rounded" aria-hidden="true">search</span>
-      <input
-        type="search"
-        class="pch-body-large"
-        autocomplete="off"
-        aria-label="Search exercises"
-        placeholder="Run, squat, yoga…"
-        [value]="query()"
-        (input)="query.set($any($event.target).value)"
-      />
-    </label>
-    @for (group of groups(); track group.title) {
-      <h3 class="pch-title-small group">{{ group.title }}</h3>
+    @if (creating(); as name) {
+      <h2 class="pch-headline-small">“{{ name }}”</h2>
+      <p class="pch-body-medium muted intro">How do you log it? That decides how it scores.</p>
       <ul class="rows">
-        @for (r of group.rows; track r.exercise.id) {
+        @for (k of kinds; track k.label) {
           <li>
-            <button type="button" class="row" (click)="pick(r.exercise)">
-              <span class="text">
-                <span class="pch-body-large">{{ r.exercise.name }}</span>
-                <span class="pch-body-small muted">{{ r.subtitle }}</span>
-              </span>
-              @if (r.logged) {
-                <span class="pch-label-medium logged">Logged</span>
-              }
+            <button type="button" class="row" (click)="create(k)">
+              <span class="material-symbols-rounded muted" aria-hidden="true">{{ k.icon }}</span>
+              <span class="text pch-body-large">{{ k.label }}</span>
             </button>
           </li>
         }
       </ul>
-    } @empty {
-      <p class="pch-body-medium muted empty">No exercises match “{{ query() }}”.</p>
-    }
-    @if (truncated()) {
-      <p class="pch-body-small muted empty">
-        Showing the first {{ limit }}. Keep typing to narrow it down.
-      </p>
+      <button type="button" class="row back" (click)="creating.set(null)">
+        <span class="material-symbols-rounded" aria-hidden="true">arrow_back</span>
+        <span class="pch-body-large">Back to search</span>
+      </button>
+    } @else {
+      <h2 class="pch-headline-small">Add an exercise</h2>
+      <label class="search">
+        <span class="material-symbols-rounded" aria-hidden="true">search</span>
+        <input
+          type="search"
+          class="pch-body-large"
+          autocomplete="off"
+          aria-label="Search exercises"
+          placeholder="Run, squat, yoga…"
+          [value]="query()"
+          (input)="query.set($any($event.target).value)"
+        />
+      </label>
+      @for (group of groups(); track group.title) {
+        <h3 class="pch-title-small group">{{ group.title }}</h3>
+        <ul class="rows">
+          @for (r of group.rows; track r.exercise.id) {
+            <li>
+              <button type="button" class="row" (click)="pick(r.exercise)">
+                <span class="text">
+                  <span class="pch-body-large">{{ r.exercise.name }}</span>
+                  <span class="pch-body-small muted one-line">{{ r.subtitle }}</span>
+                </span>
+                @if (r.logged) {
+                  <span class="pch-label-medium logged">Logged</span>
+                }
+              </button>
+            </li>
+          }
+        </ul>
+      }
+      @if (truncated()) {
+        <p class="pch-body-small muted empty">Keep typing to narrow it down.</p>
+      }
+      @if (newName(); as name) {
+        <button type="button" class="row create" (click)="creating.set(name)">
+          <span class="material-symbols-rounded" aria-hidden="true">add_circle</span>
+          <span class="text">
+            <span class="pch-body-large">Create “{{ name }}”</span>
+            <span class="pch-body-small muted">Your crate-mates will see it came from you</span>
+          </span>
+        </button>
+      }
     }`,
   styles: `
     :host {
@@ -176,6 +255,22 @@ export function openExercisePicker(
     .empty {
       padding: 16px 8px;
     }
+    .one-line {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .intro {
+      margin: 8px 0;
+    }
+    .create {
+      margin-top: 8px;
+      color: var(--mat-sys-primary);
+    }
+    .back {
+      margin-top: 8px;
+      color: var(--mat-sys-on-surface-variant);
+    }
   `,
 })
 export class ExercisePickerSheet {
@@ -183,42 +278,71 @@ export class ExercisePickerSheet {
     inject<MatBottomSheetRef<ExercisePickerSheet, LoggableExercise>>(MatBottomSheetRef);
   private readonly data = inject<ExercisePickerData>(MAT_BOTTOM_SHEET_DATA);
 
-  protected readonly limit = CATALOG_LIMIT;
+  protected readonly kinds = CREATE_KINDS;
   readonly query = signal('');
+  /** The name of the exercise being made up, while choosing how it's logged. */
+  readonly creating = signal<string | null>(null);
 
   private readonly matches = computed(() => {
     const q = this.query().trim().toLowerCase();
-    const { catalog, customs, favouriteIds, loggedIds } = this.data;
+    const { catalog, recent, fromCrates, loggedIds, units } = this.data;
+    const seen = new Set<string>();
+    const rows = <T>(items: readonly T[], toRow: (item: T) => PickerRow) =>
+      items.map(toRow).filter((r) => {
+        if (seen.has(r.exercise.id) || !r.exercise.name.toLowerCase().includes(q)) return false;
+        seen.add(r.exercise.id);
+        return true;
+      });
     const row = (exercise: LoggableExercise, subtitle: string): PickerRow => ({
       exercise,
       subtitle,
       logged: loggedIds.has(exercise.id),
     });
-    const custom = customs
-      .filter((c) => c.name.toLowerCase().includes(q))
-      .map((c) => row(loggableFromCustom(c), 'Made by your Crate'));
-    const found = catalog.search(q);
-    const favourites = found
-      .filter((e) => favouriteIds.has(e.id))
-      .map((e) => row(loggableFromCatalog(e), Fmt.pattern(e.pattern)));
-    const rest = found
-      .filter((e) => !favouriteIds.has(e.id))
-      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-      .map((e) => row(loggableFromCatalog(e), Fmt.pattern(e.pattern)));
-    return { crate: [...custom, ...favourites], rest };
+    const mine = rows(recent, (e) =>
+      row(
+        loggableFromEntry(e, catalog.byId(e.exerciseId)?.cues ?? null),
+        `Last time: ${Fmt.entrySummary(e, units)}`,
+      ),
+    );
+    const crate = rows(fromCrates, (c) => row(c.exercise, `From ${c.from}`));
+    const all = rows(
+      catalog.search(q).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
+      (e) => row(loggableFromCatalog(e), Fmt.pattern(e.pattern)),
+    );
+    return { mine: q ? mine : mine.slice(0, RECENT_LIMIT), crate, all };
   });
 
   protected readonly groups = computed(() => {
-    const { crate, rest } = this.matches();
+    const { mine, crate, all } = this.matches();
     return [
-      { title: 'From your Crates', rows: crate },
-      { title: 'All exercises', rows: rest.slice(0, CATALOG_LIMIT) },
+      { title: 'Recent', rows: mine },
+      { title: 'From your Crates', rows: crate.slice(0, LIMIT) },
+      { title: 'All exercises', rows: all.slice(0, LIMIT) },
     ].filter((g) => g.rows.length > 0);
   });
 
-  protected readonly truncated = computed(() => this.matches().rest.length > CATALOG_LIMIT);
+  protected readonly truncated = computed(() => {
+    const { crate, all } = this.matches();
+    return crate.length > LIMIT || all.length > LIMIT;
+  });
+
+  /** What was typed, if it isn't already an exercise by that name. */
+  protected readonly newName = computed(() => {
+    const name = this.query().trim().slice(0, MAX_CUSTOM_NAME);
+    if (!name) return null;
+    const lower = name.toLowerCase();
+    const groups = this.groups();
+    const taken = groups.some((g) => g.rows.some((r) => r.exercise.name.toLowerCase() === lower));
+    return taken ? null : name;
+  });
 
   protected pick(exercise: LoggableExercise): void {
     this.ref.dismiss(exercise);
+  }
+
+  protected create(kind: CreateKind): void {
+    const name = this.creating();
+    if (!name) return;
+    this.pick(customExercise({ id: this.data.newId(), name, ...kind }));
   }
 }

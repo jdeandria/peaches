@@ -1,8 +1,16 @@
 import { IdGenerator } from '../domain/core/ids';
 import { LocalDate, weekday } from '../domain/core/local-date';
 import { Crate, isActiveMembership } from '../domain/models/crate';
-import { LogScore } from '../domain/models/scoring';
-import { isSeasonOpen, Matchup, MAX_SEASON_WEEKS, Round, Season } from '../domain/models/season';
+import { withoutStruck } from '../domain/models/dispute';
+import { Lineup, WeekScore } from '../domain/models/lineup';
+import {
+  isSeasonOpen,
+  Matchup,
+  matchupPeachIds,
+  MAX_SEASON_WEEKS,
+  Round,
+  Season,
+} from '../domain/models/season';
 import { Standing } from '../domain/models/score';
 import { WorkoutLog } from '../domain/models/workout-log';
 import { CrateRepository, SeasonRepository, WorkoutLogRepository } from '../domain/repositories';
@@ -10,7 +18,10 @@ import { RoundRobinScheduler } from '../domain/services/round-robin-scheduler';
 import { RoundWindow, RoundWindowService } from '../domain/services/round-window';
 import { ScoringService } from '../domain/services/scoring-service';
 import { StandingsCalculator } from '../domain/services/standings-calculator';
+import { DisputeService, DisputeView } from './dispute-service';
 import { DomainError } from './errors';
+import { LineupService } from './lineup-service';
+import { roundContext, RoundContext } from './round-context';
 import { VotingService } from './voting-service';
 
 export interface SeasonServiceDeps {
@@ -18,17 +29,22 @@ export interface SeasonServiceDeps {
   readonly crates: CrateRepository;
   readonly logs: WorkoutLogRepository;
   readonly voting: VotingService;
+  readonly lineups: LineupService;
+  readonly disputes: DisputeService;
   readonly ids: IdGenerator;
   readonly windows: RoundWindowService;
   readonly scoring?: ScoringService;
   readonly standings?: StandingsCalculator;
 }
 
-/** One side of a matchup's week: the logs that count and what they score. */
+/** One side of a matchup's week: what counts and how it scores. */
 export interface MatchupSide {
   readonly peachId: string;
+  /** The logs that count, as the Crate scores them (struck numbers removed). */
   readonly logs: readonly WorkoutLog[];
-  readonly score: LogScore;
+  /** The lineup in force, or null if none (or a crate-mate's is still secret). */
+  readonly lineup: Lineup | null;
+  readonly score: WeekScore;
 }
 
 /** A matchup with everything needed to show its live score. */
@@ -41,12 +57,22 @@ export interface MatchupBoard {
   readonly home: MatchupSide;
   /** Null for a bye. */
   readonly away: MatchupSide | null;
+  /** Disputes about either side's logs this week. */
+  readonly disputes: readonly DisputeView[];
+}
+
+/** A week's logs as the Crate scores them, with the disputes about them. */
+interface WeekState {
+  readonly window: RoundWindow;
+  readonly rounds: readonly Round[];
+  readonly logs: readonly WorkoutLog[];
+  readonly disputes: readonly DisputeView[];
 }
 
 /**
  * Season lifecycle: scheduling a week-by-week round robin, opening each
  * week, closing it (scoring every matchup from the logs its two Peaches
- * shared with the Crate that week) and standings.
+ * shared with the Crate that week and their lineups) and standings.
  */
 export class SeasonService {
   private readonly scoring: ScoringService;
@@ -59,7 +85,7 @@ export class SeasonService {
 
   /**
    * Creates and schedules a Season for every active member of `crate`,
-   * freezing the Crate's current vote on category weights.
+   * freezing the Crate's current vote on how it scores.
    */
   async createSeason(args: {
     crate: Crate;
@@ -88,7 +114,7 @@ export class SeasonService {
       startWeek: args.startWeek,
       weeks: args.weeks,
       participantIds: members,
-      weights: await voting.currentWeights(args.crate.id),
+      rules: await voting.currentRules(args.crate.id),
       status: 'scheduled',
       createdAt: args.now,
     };
@@ -101,7 +127,7 @@ export class SeasonService {
   /** Marks the week open and its matchups in progress. Safe to call repeatedly. */
   async openRound(roundId: string): Promise<Round> {
     const { seasons } = this.deps;
-    const { round, season } = await this.context(roundId);
+    const { round, season } = await roundContext(this.deps, roundId);
     for (const matchup of await seasons.matchupsInRound(round.id)) {
       if (matchup.status === 'scheduled') {
         await seasons.saveMatchup({ ...matchup, status: 'inProgress' });
@@ -115,30 +141,27 @@ export class SeasonService {
 
   /**
    * Scores every matchup in the week from the logs its Peaches shared with
-   * the Crate, using the Season's frozen weights, and closes the round.
-   * Completes the Season when its last round closes.
+   * the Crate (less anything the Crate struck) and their lineups, using the
+   * Season's frozen rules, and closes the round. Completes the Season when
+   * its last round closes.
    */
   async closeRound(roundId: string): Promise<Round> {
     const { seasons } = this.deps;
-    const { round, season, crate } = await this.context(roundId);
-    const window = this.deps.windows.windowFor(round, crate);
-    const logs = await this.weekLogs(crate.id, window);
-
+    const context = await roundContext(this.deps, roundId);
+    const { round, season } = context;
+    const week = await this.week(context);
     for (const matchup of await seasons.matchupsInRound(round.id)) {
-      await seasons.saveMatchup(
-        this.scoring.resolve({
-          matchup,
-          homeLogs: logs.filter((l) => l.peachId === matchup.homePeachId),
-          awayLogs: logs.filter((l) => l.peachId === matchup.awayPeachId),
-          weights: season.weights,
-        }),
-      );
+      const { home, away } = await this.sides(context, week, matchup);
+      await seasons.saveMatchup({
+        ...matchup,
+        status: 'complete',
+        result: { homePoints: home.score.total, awayPoints: away?.score.total ?? 0 },
+      });
     }
 
     const closed: Round = { ...round, status: 'closed' };
     await seasons.saveRound(closed);
-    const rounds = await seasons.roundsOf(season.id);
-    if (rounds.every((r) => r.status === 'closed')) {
+    if (week.rounds.every((r) => r.id === closed.id || r.status === 'closed')) {
       await seasons.save({ ...season, status: 'complete' });
     }
     return closed;
@@ -155,27 +178,22 @@ export class SeasonService {
   }
 
   /**
-   * Both sides of a matchup with the logs that count so far and their
-   * points, scored with the Season's weights. Null if the matchup is gone.
+   * Both sides of a matchup with the logs that count so far, their lineups
+   * and their points, scored with the Season's rules. Null if the matchup is
+   * gone.
    */
   async board(matchupId: string): Promise<MatchupBoard | null> {
     const matchup = await this.deps.seasons.getMatchup(matchupId);
     if (!matchup) return null;
-    const { round, season, crate } = await this.context(matchup.roundId);
-    const window = this.deps.windows.windowFor(round, crate);
-    const logs = await this.weekLogs(crate.id, window);
-    const side = (peachId: string): MatchupSide => {
-      const mine = logs.filter((l) => l.peachId === peachId);
-      return { peachId, logs: mine, score: this.scoring.scoreLogs(mine, season.weights) };
-    };
+    const context = await roundContext(this.deps, matchup.roundId);
+    const week = await this.week(context);
+    const players = new Set(matchupPeachIds(matchup));
     return {
+      ...context,
+      ...(await this.sides(context, week, matchup)),
       matchup,
-      round,
-      season,
-      crate,
-      window,
-      home: side(matchup.homePeachId),
-      away: matchup.awayPeachId === null ? null : side(matchup.awayPeachId),
+      window: week.window,
+      disputes: week.disputes.filter((d) => players.has(d.dispute.peachId)),
     };
   }
 
@@ -223,18 +241,45 @@ export class SeasonService {
     });
   }
 
-  /** Submitted logs shared with the Crate and started during the round's week. */
-  private async weekLogs(crateId: string, window: RoundWindow): Promise<WorkoutLog[]> {
-    return this.deps.logs.sharedWith(crateId, window.opensAt, window.endsAt);
+  /**
+   * The logs shared with the Crate and started during the round's week, as
+   * the Crate scores them: without numbers it struck by majority vote.
+   */
+  private async week({ round, season, crate }: RoundContext): Promise<WeekState> {
+    const window = this.deps.windows.windowFor(round, crate);
+    const [logs, rounds] = await Promise.all([
+      this.deps.logs.sharedWith(crate.id, window.opensAt, window.endsAt),
+      this.deps.seasons.roundsOf(season.id),
+    ]);
+    const disputes = await this.deps.disputes.views(crate.id, logs);
+    const struck = disputes.filter((d) => d.outcome === 'struck').map((d) => d.dispute);
+    return { window, rounds, logs: logs.map((l) => withoutStruck(l, struck)), disputes };
   }
 
-  private async context(roundId: string): Promise<{ round: Round; season: Season; crate: Crate }> {
-    const { seasons, crates } = this.deps;
-    const round = await seasons.getRound(roundId);
-    if (!round) throw new DomainError('Round not found.');
-    const season = await seasons.getById(round.seasonId);
-    const crate = season ? await crates.getById(season.crateId) : null;
-    if (!season || !crate) throw new DomainError('Season not found.');
-    return { round, season, crate };
+  /**
+   * Both sides of a matchup's week: each Peach's logs and lineup, scored
+   * with the Season's rules. A Peach who logged nothing scores zero; a bye
+   * has no away side.
+   */
+  private async sides(
+    { round, season }: RoundContext,
+    week: WeekState,
+    matchup: Matchup,
+  ): Promise<{ home: MatchupSide; away: MatchupSide | null }> {
+    const side = async (peachId: string) => ({
+      peachId,
+      logs: week.logs.filter((l) => l.peachId === peachId),
+      lineup: await this.deps.lineups.inForce(season, week.rounds, round, peachId),
+    });
+    const [home, away] = await Promise.all([
+      side(matchup.homePeachId),
+      matchup.awayPeachId === null ? null : side(matchup.awayPeachId),
+    ]);
+    const scoring = (s: typeof home) => ({ logs: s.logs, pledges: s.lineup?.pledges ?? [] });
+    const scores = this.scoring.scoreMatchup(scoring(home), away && scoring(away), season.rules);
+    return {
+      home: { ...home, score: scores.home },
+      away: away && { ...away, score: scores.away! },
+    };
   }
 }

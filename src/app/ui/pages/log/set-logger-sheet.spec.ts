@@ -5,9 +5,13 @@ import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { DistanceUnits, WeightUnits } from '../../../domain/core/units';
 import { ExerciseCatalog } from '../../../domain/exercises/exercise-catalog';
 import { LoggableExercise, loggableFromCatalog } from '../../../domain/exercises/loggable';
-import { RoutineItem } from '../../../domain/models/library';
 import { UnitSystem } from '../../../domain/models/training';
-import { ExerciseLogEntry, exerciseLogEntry } from '../../../domain/models/workout-log';
+import {
+  ExerciseLogEntry,
+  exerciseLogEntry,
+  SetLog,
+  setLog,
+} from '../../../domain/models/workout-log';
 import { settle } from '../../../../testing/test-app';
 import { openSetLogger } from './set-logger-sheet';
 
@@ -21,15 +25,14 @@ describe('SetLoggerSheet', () => {
   const row = loggable('row-steady');
   const plank = loggable('bw-forearm-plank');
 
-  const target = (init: Partial<RoutineItem>): RoutineItem => ({
-    exerciseId: 'x',
-    exerciseName: 'X',
-    sets: 3,
-    reps: null,
-    seconds: null,
-    meters: null,
-    ...init,
-  });
+  /** Last time's entry: these sets of `exercise`. */
+  const last = (exercise: LoggableExercise, sets: Partial<SetLog>[]): ExerciseLogEntry =>
+    exerciseLogEntry({ exerciseId: exercise.id, sets: sets.map(setLog) });
+  const lifts = (...loads: number[]) =>
+    last(
+      squat,
+      loads.map((loadKg) => ({ reps: 8, loadKg })),
+    );
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -46,17 +49,15 @@ describe('SetLoggerSheet', () => {
     exercise: LoggableExercise,
     options: {
       units?: UnitSystem;
-      previous?: number[];
+      previous?: ExerciseLogEntry;
       existing?: ExerciseLogEntry;
-      target?: RoutineItem;
     } = {},
   ) {
     const result = openSetLogger(TestBed.inject(MatBottomSheet), {
       exercise,
-      target: options.target ?? target({ reps: 8 }),
       existing: options.existing,
+      previous: options.previous,
       units: options.units,
-      previousLoadsKg: options.previous,
     });
     await settle();
     TestBed.tick();
@@ -107,7 +108,8 @@ describe('SetLoggerSheet', () => {
     expect(units(dialog, 'kg')).toHaveLength(0);
     const entry = await save(dialog, result);
     expect(entry.sets.map((s) => s.loadKg)).toEqual([null, null, null]);
-    expect(entry.sets.map((s) => s.reps)).toEqual([8, 8, 8]);
+    expect(entry.sets.map((s) => s.reps)).toEqual([10, 10, 10]);
+    expect(entry).toMatchObject({ track: 'reps', takesLoad: false });
   });
 
   it('weighted exercises get a weight per set', async () => {
@@ -120,21 +122,26 @@ describe('SetLoggerSheet', () => {
     const entry = await save(dialog, result);
     // Carried forward to the later, still-blank sets.
     expect(entry.sets.map((s) => s.loadKg)).toEqual([2.5, 2.5, 2.5]);
-    expect(entry.sets.map((s) => s.reps)).toEqual([8, 8, 8]);
+    expect(entry.sets.map((s) => s.reps)).toEqual([10, 10, 10]);
+    expect(entry.takesLoad).toBe(true);
   });
 
-  it('pre-fills from last time and shows it', async () => {
-    const { dialog, result } = await open(squat, { previous: [60, 62.5] });
+  it('starts from last time’s sets and says what they were', async () => {
+    const previous = last(squat, [
+      { reps: 5, loadKg: 60 },
+      { reps: 5, loadKg: 62.5 },
+    ]);
+    const { dialog, result } = await open(squat, { previous });
     expect(dialog.querySelector('.last-time')?.textContent?.trim()).toContain(
-      'Last time: 60 · 62.5 kg',
+      'Last time: 2 sets · 10 reps · 60–62.5 kg',
     );
+    // Repeating it is one tap.
     const entry = await save(dialog, result);
-    // The last recorded set's weight fills sets beyond last time's count.
-    expect(entry.sets.map((s) => s.loadKg)).toEqual([60, 62.5, 62.5]);
+    expect(entry.sets).toEqual(previous.sets);
   });
 
   it('changing a weight carries to later matching sets only', async () => {
-    const { dialog, result } = await open(squat, { previous: [50, 60, 60] });
+    const { dialog, result } = await open(squat, { previous: lifts(50, 60, 60) });
     // Raise set 2 from 60 to 62.5: set 3 (also 60) follows, set 1 stays.
     await click(buttons(dialog, 'Heavier')[1]);
     const entry = await save(dialog, result);
@@ -142,7 +149,7 @@ describe('SetLoggerSheet', () => {
   });
 
   it('typed weights carry forward too', async () => {
-    const { dialog, result } = await open(squat, { previous: [40, 40, 40] });
+    const { dialog, result } = await open(squat, { previous: lifts(40, 40, 40) });
     const field = weightFields(dialog)[0];
     expect(field.value).toBe('40');
     field.value = '45';
@@ -154,7 +161,7 @@ describe('SetLoggerSheet', () => {
   });
 
   it('commits typed weights on blur', async () => {
-    const { dialog, result } = await open(squat, { previous: [40, 40, 40] });
+    const { dialog, result } = await open(squat, { previous: lifts(40, 40, 40) });
     const field = weightFields(dialog)[1];
     field.value = '42.5';
     field.dispatchEvent(new Event('input'));
@@ -167,7 +174,7 @@ describe('SetLoggerSheet', () => {
   it('shows and steps pounds but stores kilograms', async () => {
     const { dialog, result } = await open(squat, {
       units: 'imperial',
-      previous: [WeightUnits.toKg(135, 'imperial')],
+      previous: lifts(...[1, 2, 3].map(() => WeightUnits.toKg(135, 'imperial'))),
     });
     expect(units(dialog, 'lb')).toHaveLength(3);
     expect(weightFields(dialog).map((f) => f.value)).toEqual(['135', '135', '135']);
@@ -180,7 +187,7 @@ describe('SetLoggerSheet', () => {
   it('an existing entry wins over last time', async () => {
     const set = (reps: number, loadKg: number) => ({ reps, loadKg, seconds: null, meters: null });
     const { dialog, result } = await open(squat, {
-      previous: [100],
+      previous: lifts(100),
       existing: exerciseLogEntry({
         exerciseId: 'bb-back-squat',
         sets: [set(6, 80), set(6, 80), set(5, 82.5)],
@@ -191,16 +198,13 @@ describe('SetLoggerSheet', () => {
     expect(entry.sets.map((s) => s.reps)).toEqual([6, 6, 5]);
   });
 
-  it('steps values, puts the target back and records RPE', async () => {
+  it('steps values and records RPE', async () => {
     const { dialog, result } = await open(pushUp);
-    expect(dialog.textContent).toContain('Target: 3 × 8 reps');
     await click(buttons(dialog, 'Fewer reps')[0]);
     await click(buttons(dialog, 'More reps')[2]);
     const valueFields = () =>
       Array.from(dialog.querySelectorAll<HTMLInputElement>('input[inputmode="numeric"]'));
-    expect(valueFields().map((f) => f.value)).toEqual(['7', '8', '9']);
-    await click(buttons(dialog, 'Use target')[0]);
-    expect(valueFields().map((f) => f.value)).toEqual(['8', '8', '8']);
+    expect(valueFields().map((f) => f.value)).toEqual(['9', '10', '11']);
     const rpe8 = Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find(
       (b) => b.textContent?.trim() === '8',
     )!;
@@ -212,7 +216,9 @@ describe('SetLoggerSheet', () => {
   });
 
   it('adds and removes sets', async () => {
-    const { dialog, result } = await open(pushUp, { target: target({ sets: 2, reps: 12 }) });
+    const { dialog, result } = await open(pushUp, {
+      previous: last(pushUp, [{ reps: 12 }, { reps: 12 }]),
+    });
     await click(buttons(dialog, 'Add set')[0]);
     await click(buttons(dialog, 'Add set')[0]);
     await click(buttons(dialog, 'Remove set')[0]);
@@ -222,18 +228,10 @@ describe('SetLoggerSheet', () => {
     expect(entry.sets.map((s) => s.reps)).toEqual([12, 12, 12]);
   });
 
-  it('without a target starts from three sets of ten', async () => {
-    const result = openSetLogger(TestBed.inject(MatBottomSheet), { exercise: pushUp });
-    await settle();
-    TestBed.tick();
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(buttons(dialog, 'Use target')).toHaveLength(0);
-    const entry = await save(dialog, result);
-    expect(entry.sets.map((s) => s.reps)).toEqual([10, 10, 10]);
-  });
-
   it('timed exercises record seconds', async () => {
-    const { dialog, result } = await open(plank, { target: target({ sets: 2, seconds: 45 }) });
+    const { dialog, result } = await open(plank, {
+      previous: last(plank, [{ seconds: 45 }, { seconds: 45 }]),
+    });
     await click(buttons(dialog, 'More sec')[0]);
     const entry = await save(dialog, result);
     expect(entry.sets.map((s) => s.seconds)).toEqual([50, 45]);
@@ -241,7 +239,7 @@ describe('SetLoggerSheet', () => {
   });
 
   it('cardio records distance and time, in km or miles', async () => {
-    const { dialog, result } = await open(run, { units: 'imperial', target: target({ sets: 1 }) });
+    const { dialog, result } = await open(run, { units: 'imperial' });
     expect(units(dialog, 'mi')).toHaveLength(1);
     const [distance, minutes] = Array.from(
       dialog.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]'),
@@ -259,7 +257,9 @@ describe('SetLoggerSheet', () => {
   });
 
   it('rowing counts metres, and empty sets are dropped', async () => {
-    const { dialog, result } = await open(row, { target: target({ sets: 2, meters: 500 }) });
+    const { dialog, result } = await open(row, {
+      previous: last(row, [{ meters: 500 }, { meters: 500 }]),
+    });
     expect(units(dialog, 'm')).toHaveLength(2);
     const fields = Array.from(
       dialog.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]'),

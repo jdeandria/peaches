@@ -1,4 +1,4 @@
-import { JsonMap, numberFromJson } from '../core/json';
+import { JsonMap, mapFromJson, numberFromJson } from '../core/json';
 
 /**
  * What a workout log is measured in for fantasy points.
@@ -114,6 +114,81 @@ export function weightsFromJson(json: JsonMap | null): CategoryWeights {
 
 export function weightsToJson(w: CategoryWeights): JsonMap {
   return Object.fromEntries(SCORING_CATEGORIES.map((c) => [c, w[c]]));
+}
+
+/**
+ * How lineups score in a Crate. Members vote on these alongside the
+ * category weights (the middle vote wins), and a Season freezes them.
+ */
+export interface LineupRules {
+  /** Categories a Peach can pledge each week; 0 turns lineups off. */
+  readonly slots: number;
+  /** A pledge that is hit earns this percentage of the pledged amount's points again. */
+  readonly pledgeBonus: number;
+  /** Beating your opponent in a lineup category earns this many pars of it. */
+  readonly battlePars: number;
+}
+
+/** The range each lineup rule can be voted within. */
+export const LINEUP_RULE_LIMITS: Readonly<Record<keyof LineupRules, readonly [number, number]>> =
+  Object.freeze({
+    slots: [0, SCORING_CATEGORIES.length],
+    pledgeBonus: [0, 100],
+    battlePars: [0, 3],
+  });
+
+export const LINEUP_RULE_KEYS = ['slots', 'pledgeBonus', 'battlePars'] as const;
+
+export const DEFAULT_LINEUP_RULES: LineupRules = Object.freeze({
+  slots: 3,
+  pledgeBonus: 50,
+  battlePars: 1,
+});
+
+/** Builds lineup rules, checking each is a whole number within its limits. */
+export function lineupRules(values: Partial<LineupRules>): LineupRules {
+  const r = { ...DEFAULT_LINEUP_RULES, ...values };
+  for (const key of LINEUP_RULE_KEYS) {
+    const [min, max] = LINEUP_RULE_LIMITS[key];
+    if (!Number.isInteger(r[key]) || r[key] < min || r[key] > max) {
+      throw new RangeError(`${key} must be a whole number from ${min} to ${max}`);
+    }
+  }
+  return r;
+}
+
+/** Everything that decides how a week scores: what the Crate voted for. */
+export interface ScoringRules {
+  readonly weights: CategoryWeights;
+  readonly lineup: LineupRules;
+}
+
+export const DEFAULT_RULES: ScoringRules = Object.freeze({
+  weights: DEFAULT_WEIGHTS,
+  lineup: DEFAULT_LINEUP_RULES,
+});
+
+/** Decodes stored rules; anything missing or invalid falls back to the defaults. */
+export function rulesFromJson(json: JsonMap | null): ScoringRules {
+  const lineup = mapFromJson(json?.['lineup']);
+  let decoded = DEFAULT_LINEUP_RULES;
+  if (lineup) {
+    try {
+      decoded = lineupRules(
+        Object.fromEntries(LINEUP_RULE_KEYS.map((k) => [k, numberFromJson(lineup[k], -1)])),
+      );
+    } catch {
+      // Keep the defaults.
+    }
+  }
+  return { weights: weightsFromJson(mapFromJson(json?.['weights'])), lineup: decoded };
+}
+
+export function rulesToJson(r: ScoringRules): JsonMap {
+  return {
+    weights: weightsToJson(r.weights),
+    lineup: Object.fromEntries(LINEUP_RULE_KEYS.map((k) => [k, r.lineup[k]])),
+  };
 }
 
 /** Points earned in one category. */

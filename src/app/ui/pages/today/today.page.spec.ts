@@ -50,12 +50,17 @@ describe('TodayPage', () => {
     expect(text(hero)).toContain('closes in 6 d');
     // Cho has logged this week already; I haven't.
     expect(text(hero)).toContain('Trailing');
-    expect(text(hero)).toContain('31.8');
+    expect(text(hero)).toContain('35.8');
     const cta = hero.querySelector<HTMLAnchorElement>('a')!;
     expect(text(cta)).toContain('View matchup');
     expect(cta.getAttribute('href')).toMatch(/^\/matchups\/.+/);
     // The only interactive element in the card is the link.
     expect(hero.querySelectorAll('a, button')).toHaveLength(1);
+
+    // Lineups for next week are open and I haven't set mine.
+    const lineup = el.querySelector('pch-card.lineup')!;
+    expect(text(lineup.querySelector('h3'))).toBe('Set your lineup');
+    expect(lineup.querySelector('a')?.getAttribute('href')).toMatch(/^\/matchups\/.+\/lineup$/);
   });
 
   it('shows the week stats, what is coming and my workouts', async () => {
@@ -80,7 +85,9 @@ describe('TodayPage', () => {
     expect(text(cho.querySelector('.subtitle'))).toBe('Lunch Break Lifters · Oct 19 – 25');
     expect(rows.some((r) => text(r.querySelector('.headline')) === 'Bye round')).toBe(true);
 
-    const recent = el.querySelectorAll('a[pch-list-row]');
+    // Upcoming matchups open; so does every workout.
+    expect(rows.every((r) => r.querySelector('a[href^="/matchups/"]'))).toBe(true);
+    const recent = el.querySelectorAll('a[pch-list-row][href^="/log"]');
     expect(recent).toHaveLength(6);
     expect(recent[0].getAttribute('href')).toMatch(/^\/log\/.+/);
     expect(text(recent[0])).toContain('Run');
@@ -98,7 +105,6 @@ describe('TodayPage', () => {
         exerciseName: 'Push Up',
         sets: [setLog({ reps: 20 })],
       }),
-      FIXED_NOW,
     );
     await stable(f);
     const card = f.nativeElement.querySelector('pch-card.log');
@@ -106,7 +112,9 @@ describe('TodayPage', () => {
     expect(text(card)).toContain('1 exercise logged so far.');
     expect(text(card.querySelector('a'))).toContain('Continue');
     // The draft is listed, linking back to the log page.
-    expect(f.nativeElement.querySelector('a[pch-list-row]')?.getAttribute('href')).toBe('/log');
+    expect(
+      f.nativeElement.querySelector('a[pch-list-row][href^="/log"]')?.getAttribute('href'),
+    ).toBe('/log');
   });
 
   it('invites a new Peach to log, with empty history', async () => {

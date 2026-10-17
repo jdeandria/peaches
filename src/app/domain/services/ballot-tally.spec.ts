@@ -1,4 +1,11 @@
-import { categoryWeights, DEFAULT_WEIGHTS, weightsTotal } from '../models/scoring';
+import {
+  categoryWeights,
+  DEFAULT_LINEUP_RULES,
+  DEFAULT_RULES,
+  DEFAULT_WEIGHTS,
+  LineupRules,
+  weightsTotal,
+} from '../models/scoring';
 import { BallotTally } from './ballot-tally';
 
 describe('BallotTally', () => {
@@ -51,5 +58,27 @@ describe('BallotTally', () => {
       categoryWeights({ swimRow: 1, reps: 99 }),
     ];
     expect(() => categoryWeights(BallotTally.tally(ballots))).not.toThrow();
+  });
+});
+
+describe('BallotTally.rules', () => {
+  const ballot = (lineup: Partial<LineupRules>) => ({
+    weights: DEFAULT_WEIGHTS,
+    lineup: { ...DEFAULT_LINEUP_RULES, ...lineup },
+  });
+
+  it('uses the defaults with no ballots', () => {
+    expect(BallotTally.rules([])).toEqual(DEFAULT_RULES);
+  });
+
+  it('each lineup rule is the middle vote, the lower one when even', () => {
+    const rules = BallotTally.rules([
+      ballot({ slots: 1, pledgeBonus: 100 }),
+      ballot({ slots: 6, pledgeBonus: 0 }),
+      ballot({ slots: 2, pledgeBonus: 40 }),
+    ]);
+    expect(rules.lineup).toEqual({ slots: 2, pledgeBonus: 40, battlePars: 1 });
+    const even = BallotTally.rules([ballot({ slots: 1 }), ballot({ slots: 4 })]);
+    expect(even.lineup.slots).toBe(1);
   });
 });

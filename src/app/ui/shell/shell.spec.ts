@@ -19,8 +19,7 @@ describe('Shell', () => {
     expect(activeDestination(router, '/matchups/m1')).toBe(0);
     expect(activeDestination(router, '/crates')).toBe(1);
     expect(activeDestination(router, '/crates/c1?tab=2')).toBe(1);
-    expect(activeDestination(router, '/exercises')).toBe(2);
-    expect(activeDestination(router, '/profile')).toBe(3);
+    expect(activeDestination(router, '/profile')).toBe(2);
     expect(activeDestination(router, '/sign-in')).toBe(-1);
   });
 
@@ -34,11 +33,10 @@ describe('Shell', () => {
     expect(links.map((a) => a.querySelector('.label')?.textContent)).toEqual([
       'Today',
       'Crates',
-      'Exercises',
       'Profile',
     ]);
     expect(links.every((a) => a.querySelector('.icon')?.getAttribute('aria-hidden'))).toBe(true);
-    expect(links.map((a) => a.getAttribute('aria-current'))).toEqual([null, 'page', null, null]);
+    expect(links.map((a) => a.getAttribute('aria-current'))).toEqual([null, 'page', null]);
     expect(links[1].querySelector('.icon')?.classList).toContain('pch-icon-filled');
     expect(links[0].getAttribute('href')).toBe('/');
     expect(el.querySelector('main')).not.toBeNull();

@@ -51,7 +51,7 @@ App frame with `<router-outlet>` inside `<main>`. Navigation per M3 window
 size class (pure CSS): bottom bar < 600px (68px), rail 600–839px (🍑, labels
 under icons), extended rail ≥ 840px (200px, labels beside icons). Destinations
 `NAV_DESTINATIONS`: Today `/` (also active on `/matchups/*` and `/log*`), Crates `/crates`
-(also `/crates/*`), Exercises `/exercises`, Profile `/profile`. Active link
+(also `/crates/*`), Profile `/profile`. Active link
 has `aria-current="page"` and a filled icon. Includes a "Skip to content"
 button. Used as the parent route component in `app.routes.ts`.
 

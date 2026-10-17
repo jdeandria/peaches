@@ -1,10 +1,13 @@
 import { IdGenerator } from '../domain/core/ids';
 import { isActiveMembership } from '../domain/models/crate';
-import { Routine } from '../domain/models/library';
+import { SharedExercise } from '../domain/models/crate-exercise';
 import {
   ExerciseLogEntry,
   isSubmitted,
+  pauseTimer,
+  elapsedSeconds,
   removeEntry,
+  resumeTimer,
   upsertEntry,
   WorkoutLog,
   workoutLog,
@@ -13,13 +16,14 @@ import { CrateRepository, WorkoutLogRepository } from '../domain/repositories';
 import { implausibility } from '../domain/services/plausibility';
 import { DomainError } from './errors';
 
-/** The longest session a Peach can report. */
-export const MAX_SESSION_MINUTES = 600;
+/** The longest session a log can record. */
+export const MAX_SESSION_SECONDS = 10 * 3600;
 
 /**
  * Recording what a Peach did. Logs are the Peach's own: they are not tied to
- * a Crate or Matchup, and submitting one shares it with every Crate the
- * Peach is active in, where it scores toward that week's matchup.
+ * a Crate or Matchup, and submitting one shares it, and the exercises in it,
+ * with every Crate the Peach is active in, where it scores toward that
+ * week's matchup. The Peach can keep editing it after that.
  */
 export class LoggingService {
   constructor(
@@ -35,77 +39,147 @@ export class LoggingService {
     return (await this.deps.logs.forPeach(peachId)).find((l) => !isSubmitted(l)) ?? null;
   }
 
-  async startLog(peachId: string, now: Date, routine?: Routine): Promise<WorkoutLog> {
+  /**
+   * Starts a log with its clock running since `startedAt`, when the Peach
+   * opened the log screen.
+   */
+  async startLog(peachId: string, startedAt: Date): Promise<WorkoutLog> {
     const log = workoutLog({
       id: this.deps.ids.newId(),
       peachId,
-      startedAt: now,
-      routineId: routine?.id ?? null,
+      startedAt,
+      timerStartedAt: startedAt,
     });
     await this.deps.logs.save(log);
     return log;
   }
 
   /**
-   * Adds or replaces the entry for one exercise. A log counts toward the
-   * week it was started in, so the clock restarts when the first exercise is
-   * recorded: a log opened on Sunday but filled in on Tuesday is Tuesday's.
+   * The log screen opened: resumes the Peach's draft, or starts one. A
+   * draft with nothing in it yet starts afresh, so a log opened on Sunday
+   * but filled in on Tuesday counts as Tuesday's.
    */
-  async recordEntry(logId: string, entry: ExerciseLogEntry, now: Date): Promise<WorkoutLog> {
+  async openDraft(peachId: string, now: Date): Promise<WorkoutLog> {
+    const draft = await this.currentLog(peachId);
+    if (!draft) return this.startLog(peachId, now);
+    const opened =
+      draft.entries.length === 0
+        ? { ...draft, startedAt: now, durationSeconds: 0, timerStartedAt: now }
+        : resumeTimer(draft, now);
+    if (opened !== draft) await this.deps.logs.save(opened);
+    return opened;
+  }
+
+  /** Adds or replaces the entry for one exercise, before or after submitting. */
+  async recordEntry(logId: string, entry: ExerciseLogEntry): Promise<WorkoutLog> {
     const problem = implausibility(entry);
     if (problem) throw new DomainError(problem);
-    const log = await this.requireEditable(logId);
-    const started = log.entries.length === 0 ? { ...log, startedAt: now } : log;
-    const updated = upsertEntry(started, entry);
-    await this.deps.logs.save(updated);
-    return updated;
+    return this.update(logId, (log) => upsertEntry(log, entry));
   }
 
   async removeEntry(logId: string, exerciseId: string): Promise<WorkoutLog> {
-    const updated = removeEntry(await this.requireEditable(logId), exerciseId);
-    await this.deps.logs.save(updated);
-    return updated;
+    return this.update(logId, (log) => {
+      const updated = removeEntry(log, exerciseId);
+      if (isSubmitted(log) && updated.entries.length === 0) {
+        throw new DomainError('A workout needs at least one exercise.');
+      }
+      return updated;
+    });
+  }
+
+  /** Stops the clock while the log screen is closed; a no-op once submitted. */
+  async pauseTimer(logId: string, now: Date): Promise<WorkoutLog> {
+    const log = await this.require(logId);
+    const paused = pauseTimer(log, now);
+    if (paused !== log) await this.deps.logs.save(paused);
+    return paused;
   }
 
   /**
-   * Freezes the log and shares it with the Peach's active Crates. Points
-   * land in a matchup only if the log is submitted before that week's
-   * round closes.
+   * Stops the clock and shares the log with the Peach's active Crates.
+   * Points land in a matchup only if the log is submitted before that
+   * week's round closes.
    */
-  async submit(
-    logId: string,
-    now: Date,
-    details: { durationMinutes?: number | null; notes?: string | null } = {},
-  ): Promise<WorkoutLog> {
-    const log = await this.requireEditable(logId);
+  async submit(logId: string, now: Date): Promise<WorkoutLog> {
+    const log = await this.require(logId);
+    if (isSubmitted(log)) throw new DomainError('This workout has already been submitted.');
     if (log.entries.length === 0) throw new DomainError('Log at least one exercise first.');
-    const minutes = details.durationMinutes ?? log.durationMinutes;
-    if (minutes !== null && (!Number.isInteger(minutes) || minutes < 0)) {
-      throw new DomainError('Session length must be a whole number of minutes.');
-    }
-    if (minutes !== null && minutes > MAX_SESSION_MINUTES) {
-      throw new DomainError('A session can’t be longer than 10 hours.');
-    }
-    const crates = (await this.deps.crates.membershipsFor(log.peachId))
-      .filter(isActiveMembership)
-      .map((m) => m.crateId)
-      .sort();
     const submitted: WorkoutLog = {
       ...log,
       status: 'submitted',
       completedAt: now,
-      durationMinutes: minutes,
-      notes: details.notes?.trim() || log.notes,
-      sharedWith: crates,
+      durationSeconds: Math.min(MAX_SESSION_SECONDS, elapsedSeconds(log, now)),
+      timerStartedAt: null,
+      sharedWith: await this.activeCrateIds(log.peachId),
     };
     await this.deps.logs.saveSubmitted(submitted);
     return submitted;
   }
 
-  private async requireEditable(logId: string): Promise<WorkoutLog> {
+  /** Corrects when a submitted workout happened, how long it took, and its notes. */
+  async editDetails(
+    logId: string,
+    details: { startedAt: Date; durationSeconds: number; notes: string },
+    now: Date,
+  ): Promise<WorkoutLog> {
+    const { startedAt, durationSeconds } = details;
+    if (Number.isNaN(startedAt.getTime()) || startedAt > now) {
+      throw new DomainError('A workout can’t start in the future.');
+    }
+    if (!Number.isInteger(durationSeconds) || durationSeconds < 0) {
+      throw new DomainError('Session time must be a whole number of seconds.');
+    }
+    if (durationSeconds > MAX_SESSION_SECONDS) {
+      throw new DomainError('A session can’t be longer than 10 hours.');
+    }
+    return this.update(logId, (log) => {
+      if (!isSubmitted(log)) throw new DomainError('Finish the workout first.');
+      return { ...log, startedAt, durationSeconds, notes: details.notes.trim() || null };
+    });
+  }
+
+  /**
+   * Exercises crate-mates have logged in any of the Peach's Crates, for the
+   * exercise picker; each is tagged with who logged it.
+   */
+  async crateExercises(peachId: string): Promise<SharedExercise[]> {
+    const lists = await Promise.all(
+      (await this.activeCrateIds(peachId)).map((id) => this.deps.logs.exercisesSharedWith(id)),
+    );
+    return lists.flat();
+  }
+
+  /**
+   * Applies `change` and saves: a draft privately; a submitted log with its
+   * copies, re-shared with the Crates it was shared with that the Peach is
+   * still in.
+   */
+  private async update(
+    logId: string,
+    change: (log: WorkoutLog) => WorkoutLog,
+  ): Promise<WorkoutLog> {
+    const log = await this.require(logId);
+    const changed = change(log);
+    if (!isSubmitted(changed)) {
+      await this.deps.logs.save(changed);
+      return changed;
+    }
+    const active = new Set(await this.activeCrateIds(log.peachId));
+    const updated = { ...changed, sharedWith: changed.sharedWith.filter((id) => active.has(id)) };
+    await this.deps.logs.saveSubmitted(updated);
+    return updated;
+  }
+
+  private async require(logId: string): Promise<WorkoutLog> {
     const log = await this.deps.logs.getById(logId);
     if (!log) throw new DomainError('Workout log not found.');
-    if (isSubmitted(log)) throw new DomainError('This workout has already been submitted.');
     return log;
+  }
+
+  private async activeCrateIds(peachId: string): Promise<string[]> {
+    return (await this.deps.crates.membershipsFor(peachId))
+      .filter(isActiveMembership)
+      .map((m) => m.crateId)
+      .sort();
   }
 }

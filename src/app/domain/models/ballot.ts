@@ -5,35 +5,35 @@ import {
   mapFromJson,
   requireString,
 } from '../core/json';
-import { CategoryWeights, weightsFromJson, weightsToJson } from './scoring';
+import { rulesFromJson, rulesToJson, ScoringRules } from './scoring';
 
 /**
- * One member's vote on what each scoring category is worth: the
- * 100-point budget split across the categories. A member has at most
- * one ballot per Crate and can change it at any time; the Crate's weights
+ * One member's vote on how the Crate scores: the 100-point budget split
+ * across the categories, and the lineup rules they want. A member has at
+ * most one ballot per Crate and can change it at any time; the Crate's rules
  * are the tally of its active members' ballots.
  */
-export interface RateBallot {
+export interface Ballot {
   readonly crateId: string;
   readonly peachId: string;
-  readonly weights: CategoryWeights;
+  readonly rules: ScoringRules;
   readonly updatedAt: Date;
 }
 
-export function ballotFromJson(json: JsonMap): RateBallot {
+export function ballotFromJson(json: JsonMap): Ballot {
   return {
     crateId: requireString(json['crateId'], 'crateId'),
     peachId: requireString(json['peachId'], 'peachId'),
-    weights: weightsFromJson(mapFromJson(json['weights'])),
+    rules: rulesFromJson(mapFromJson(json['rules'])),
     updatedAt: dateTimeFromJson(json['updatedAt']),
   };
 }
 
-export function ballotToJson(b: RateBallot): JsonMap {
+export function ballotToJson(b: Ballot): JsonMap {
   return {
     crateId: b.crateId,
     peachId: b.peachId,
-    weights: weightsToJson(b.weights),
+    rules: rulesToJson(b.rules),
     updatedAt: dateTimeToJson(b.updatedAt),
   };
 }

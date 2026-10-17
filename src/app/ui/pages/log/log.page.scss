@@ -8,6 +8,93 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.clock {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  border-radius: var(--pch-radius-extra-large);
+  background: var(--mat-sys-surface-container-high);
+
+  .material-symbols-rounded {
+    grid-row: span 2;
+    font-size: 32px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hint {
+    grid-column: 2;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .edit-details {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  &.running {
+    background: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+
+    .material-symbols-rounded,
+    .hint {
+      color: inherit;
+    }
+  }
+}
+
+.pledges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.pledge {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: center;
+  padding: 8px 14px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--pch-radius-large);
+  color: var(--mat-sys-on-surface-variant);
+
+  .material-symbols-rounded {
+    grid-row: span 2;
+    font-size: 20px;
+  }
+
+  .pch-label-large {
+    color: var(--mat-sys-on-surface);
+  }
+
+  &.hit {
+    border-color: transparent;
+    background: var(--mat-sys-tertiary-container);
+    color: var(--mat-sys-on-tertiary-container);
+
+    .pch-label-large {
+      color: inherit;
+    }
+  }
+}
+
+.disputes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
 .totals {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -76,11 +163,6 @@
 }
 
 .action {
-  &.tonal {
-    background: var(--mat-sys-secondary-container);
-    color: var(--mat-sys-on-secondary-container);
-  }
-
   &.filled {
     background: var(--mat-sys-primary);
     color: var(--mat-sys-on-primary);

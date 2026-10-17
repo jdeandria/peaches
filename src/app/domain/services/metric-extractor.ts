@@ -8,8 +8,8 @@ import { WorkoutLog } from '../models/workout-log';
  * - distance: metres on entries with a distance kind, credited to that kind;
  * - weight moved: reps × load on every set;
  * - reps: every rep, loaded or not;
- * - active minutes: timed sets, or the session length the Peach reported if
- *   that is longer (so a yoga class with no timed sets still counts).
+ * - active minutes: timed sets, or the session's time on the clock if that
+ *   is longer (so a yoga class with no timed sets still counts).
  */
 export const MetricExtractor = {
   extract(log: WorkoutLog): CategoryTotals {
@@ -33,7 +33,7 @@ export const MetricExtractor = {
       swimRow: metres.swimRow,
       weightMoved: kg,
       reps,
-      activeMinutes: Math.max(seconds / 60, log.durationMinutes ?? 0),
+      activeMinutes: Math.max(seconds, log.durationSeconds) / 60,
     };
   },
 } as const;

@@ -11,7 +11,7 @@ import {
   stringOrNull,
 } from '../core/json';
 import { addDays, LocalDate, parseLocalDate } from '../core/local-date';
-import { CategoryWeights, weightsFromJson, weightsToJson } from './scoring';
+import { rulesFromJson, rulesToJson, ScoringRules } from './scoring';
 
 export const SEASON_STATUSES = ['draft', 'scheduled', 'active', 'complete', 'cancelled'] as const;
 export type SeasonStatus = (typeof SEASON_STATUSES)[number];
@@ -25,7 +25,7 @@ export const MAX_SEASON_WEEKS = 12;
  * Each week (Monday to Sunday in the Crate's time zone) is a {@link Round}
  * that pairs the participants into {@link Matchup}s. Participants are frozen
  * when the Season is scheduled, so members who join later wait for the next
- * Season. So are the category weights: the Crate's vote at scheduling time
+ * Season. So are the scoring rules: the Crate's vote at scheduling time
  * decides how the whole Season scores, and later votes apply to the next one.
  */
 export interface Season {
@@ -37,8 +37,8 @@ export interface Season {
   readonly weeks: number;
   /** Peaches competing in this Season, frozen at scheduling time. */
   readonly participantIds: readonly string[];
-  /** Points per par for each category, frozen at scheduling time. */
-  readonly weights: CategoryWeights;
+  /** Category weights and lineup rules, frozen at scheduling time. */
+  readonly rules: ScoringRules;
   readonly status: SeasonStatus;
   readonly createdAt: Date;
 }
@@ -64,7 +64,7 @@ export function seasonFromJson(json: JsonMap): Season {
     startWeek: parseLocalDate(requireString(json['startWeek'], 'startWeek')),
     weeks: intFromJson(json['weeks'], 1),
     participantIds: stringListFromJson(json['participantIds']),
-    weights: weightsFromJson(mapFromJson(json['weights'])),
+    rules: rulesFromJson(mapFromJson(json['rules'])),
     status: enumFromJson(SEASON_STATUSES, json['status'], 'draft'),
     createdAt: dateTimeFromJson(json['createdAt']),
   };
@@ -78,7 +78,7 @@ export function seasonToJson(s: Season): JsonMap {
     startWeek: s.startWeek,
     weeks: s.weeks,
     participantIds: [...s.participantIds],
-    weights: weightsToJson(s.weights),
+    rules: rulesToJson(s.rules),
     status: s.status,
     createdAt: dateTimeToJson(s.createdAt),
   };

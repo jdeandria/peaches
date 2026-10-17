@@ -1,5 +1,11 @@
-import { categoryWeights, DEFAULT_WEIGHTS } from '../models/scoring';
-import { matchup, winnerId } from '../models/season';
+import { Pledge } from '../models/lineup';
+import {
+  categoryWeights,
+  DEFAULT_LINEUP_RULES,
+  DEFAULT_WEIGHTS,
+  ScoringRules,
+  ZERO_TOTALS,
+} from '../models/scoring';
 import { exerciseLogEntry, setLog, WorkoutLog, workoutLog } from '../models/workout-log';
 import { ScoringService } from './scoring-service';
 
@@ -49,45 +55,92 @@ describe('ScoringService', () => {
   });
 
   it('several logs score the same as their combined totals', () => {
-    const together = service.scoreLogs([run5k, lifting], DEFAULT_WEIGHTS).total;
+    const together = service.scoreTotals(service.totalsOf([run5k, lifting]), DEFAULT_WEIGHTS);
     const apart =
       service.scoreLog(run5k, DEFAULT_WEIGHTS).total +
       service.scoreLog(lifting, DEFAULT_WEIGHTS).total;
-    expect(together).toBeCloseTo(apart, 1);
-    expect(service.scoreLogs([], DEFAULT_WEIGHTS)).toEqual({ categories: [], total: 0 });
+    expect(together.total).toBeCloseTo(apart, 1);
+    expect(service.scoreTotals(service.totalsOf([]), DEFAULT_WEIGHTS)).toEqual({
+      categories: [],
+      total: 0,
+    });
   });
 
-  it('resolves a matchup from each side’s logs', () => {
-    const m = matchup({ id: 'm', seasonId: 's', roundId: 'r', homePeachId: 'a', awayPeachId: 'b' });
-    const resolved = service.resolve({
-      matchup: m,
-      homeLogs: [run5k],
-      awayLogs: [lifting, lifting],
-      weights: DEFAULT_WEIGHTS,
-    });
-    expect(resolved.status).toBe('complete');
-    expect(resolved.result!.homePoints).toBe(service.scoreLog(run5k, DEFAULT_WEIGHTS).total);
-    expect(winnerId(resolved)).toBe('a');
+  describe('a week with a lineup', () => {
+    const rules: ScoringRules = {
+      weights: categoryWeights({
+        runWalk: 25,
+        weightMoved: 20,
+        activeMinutes: 20,
+        reps: 20,
+        ride: 10,
+        swimRow: 5,
+      }),
+      lineup: DEFAULT_LINEUP_RULES,
+    };
+    const mine = { ...ZERO_TOTALS, runWalk: 16.2, weightMoved: 8400, activeMinutes: 195 };
+    const theirs = { ...ZERO_TOTALS, runWalk: 9, weightMoved: 12000, activeMinutes: 140 };
+    const pledges: Pledge[] = [
+      { category: 'runWalk', target: 15 },
+      { category: 'weightMoved', target: 10000 },
+      { category: 'activeMinutes', target: 180 },
+    ];
 
-    const crateOfLifters = categoryWeights({ weightMoved: 100 });
-    const flipped = service.resolve({
-      matchup: m,
-      homeLogs: [run5k],
-      awayLogs: [lifting],
-      weights: crateOfLifters,
+    it('adds pledge bonuses for pledges hit and battles won to workout points', () => {
+      const week = service.scoreWeek(mine, theirs, pledges, rules);
+      // 16.2 km = 81, 8,400 kg = 33.6, 195 min = 86.67.
+      expect(week.workouts.total).toBe(201.27);
+      // Half of what 15 km (75) and 180 min (80) are worth; 10,000 kg was missed.
+      expect(week.pledges.map((p) => [p.hit, p.points])).toEqual([
+        [true, 37.5],
+        [false, 0],
+        [true, 40],
+      ]);
+      // One par of each category won: running and minutes, not weight.
+      expect(week.battles.map((b) => [b.outcome, b.points])).toEqual([
+        ['win', 25],
+        ['loss', 0],
+        ['win', 20],
+      ]);
+      expect(week.total).toBe(323.77);
     });
-    expect(winnerId(flipped)).toBe('b');
-  });
 
-  it('a bye scores only the home side', () => {
-    const bye = matchup({ id: 'm', seasonId: 's', roundId: 'r', homePeachId: 'a' });
-    const resolved = service.resolve({
-      matchup: bye,
-      homeLogs: [run5k],
-      awayLogs: [run5k],
-      weights: DEFAULT_WEIGHTS,
+    it('the Crate’s rules size the bonuses', () => {
+      const richer = { ...rules, lineup: { slots: 3, pledgeBonus: 100, battlePars: 2 } };
+      const week = service.scoreWeek(mine, theirs, pledges, richer);
+      expect(week.pledges[0].points).toBe(75);
+      expect(week.battles[0].points).toBe(50);
     });
-    expect(resolved.result!.awayPoints).toBe(0);
-    expect(resolved.result!.homePoints).toBeGreaterThan(0);
+
+    it('ties split a battle, but nothing for nothing', () => {
+      const both = [
+        { category: 'runWalk', target: 5 },
+        { category: 'ride', target: 20 },
+      ] as Pledge[];
+      const week = service.scoreWeek(mine, { ...theirs, runWalk: 16.2 }, both, rules);
+      expect(week.battles.map((b) => [b.outcome, b.points])).toEqual([
+        ['tie', 12.5],
+        ['tie', 0],
+      ]);
+    });
+
+    it('a bye has pledges but no battles', () => {
+      const week = service.scoreWeek(mine, null, pledges, rules);
+      expect(week.battles).toEqual([]);
+      expect(week.total).toBe(201.27 + 77.5);
+    });
+
+    it('scores both sides of a matchup against each other', () => {
+      const { home, away } = service.scoreMatchup(
+        { logs: [run5k], pledges: [{ category: 'runWalk', target: 5 }] },
+        { logs: [lifting], pledges: [{ category: 'weightMoved', target: 5000 }] },
+        rules,
+      );
+      // Home hit 5 km and out-ran away; away missed 5,000 kg but out-lifted home.
+      expect(home.pledges[0].hit).toBe(true);
+      expect(home.battles[0].outcome).toBe('win');
+      expect(away!.pledges[0].hit).toBe(false);
+      expect(away!.battles[0].outcome).toBe('win');
+    });
   });
 });

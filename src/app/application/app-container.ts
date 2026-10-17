@@ -4,7 +4,7 @@ import { ExerciseCatalog } from '../domain/exercises/exercise-catalog';
 import {
   BallotRepository,
   CrateRepository,
-  LibraryRepository,
+  DisputeRepository,
   PeachRepository,
   SeasonRepository,
   WorkoutLogRepository,
@@ -12,20 +12,21 @@ import {
 import { RoundWindowService } from '../domain/services/round-window';
 import { ScoringService } from '../domain/services/scoring-service';
 import { CrateService } from './crate-service';
-import { LibraryService } from './library-service';
+import { DisputeService } from './dispute-service';
+import { LineupService } from './lineup-service';
 import { LoggingService } from './logging-service';
 import { SeasonService } from './season-service';
 import { SessionService } from './session-service';
 import { VotingService } from './voting-service';
 
-/** The six repositories a backend provides. */
+/** The repositories a backend provides. */
 export interface Repositories {
   readonly peaches: PeachRepository;
   readonly crates: CrateRepository;
   readonly seasons: SeasonRepository;
   readonly logs: WorkoutLogRepository;
   readonly ballots: BallotRepository;
-  readonly library: LibraryRepository;
+  readonly disputes: DisputeRepository;
 }
 
 /**
@@ -40,14 +41,15 @@ export class AppContainer implements Repositories {
   readonly seasons: SeasonRepository;
   readonly logs: WorkoutLogRepository;
   readonly ballots: BallotRepository;
-  readonly library: LibraryRepository;
+  readonly disputes: DisputeRepository;
 
   readonly windows: RoundWindowService;
   readonly scoring = new ScoringService();
   readonly crateService: CrateService;
   readonly loggingService: LoggingService;
   readonly votingService: VotingService;
-  readonly libraryService: LibraryService;
+  readonly lineupService: LineupService;
+  readonly disputeService: DisputeService;
   readonly seasonService: SeasonService;
   readonly sessionService: SessionService;
 
@@ -63,18 +65,31 @@ export class AppContainer implements Repositories {
       seasons: this.seasons,
       logs: this.logs,
       ballots: this.ballots,
-      library: this.library,
+      disputes: this.disputes,
     } = repositories);
     this.windows = new RoundWindowService(zone);
     this.crateService = new CrateService(this.crates, ids);
     this.loggingService = new LoggingService({ logs: this.logs, crates: this.crates, ids });
     this.votingService = new VotingService(this.ballots, this.crates);
-    this.libraryService = new LibraryService(this.library, this.crates, catalog, ids);
+    this.lineupService = new LineupService({
+      seasons: this.seasons,
+      crates: this.crates,
+      windows: this.windows,
+    });
+    this.disputeService = new DisputeService({
+      disputes: this.disputes,
+      logs: this.logs,
+      crates: this.crates,
+      seasons: this.seasons,
+      windows: this.windows,
+    });
     this.seasonService = new SeasonService({
       seasons: this.seasons,
       crates: this.crates,
       logs: this.logs,
       voting: this.votingService,
+      lineups: this.lineupService,
+      disputes: this.disputeService,
       ids,
       windows: this.windows,
       scoring: this.scoring,

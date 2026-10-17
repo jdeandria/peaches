@@ -41,6 +41,11 @@ describe('MatchupPage', () => {
   }
 
   const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim();
+  /** The "How the score adds up" lines: label, then each side's points. */
+  const breakdown = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('.category:not(.heading)'))
+      .slice(0, 3)
+      .map((row) => Array.from(row.children).map(text).join(' '));
   const points = (el: HTMLElement) =>
     Array.from(el.querySelectorAll('.scoreboard pch-animated-number .pch-visually-hidden')).map(
       text,
@@ -54,13 +59,27 @@ describe('MatchupPage', () => {
 
     expect(text(el.querySelector('h1'))).toBe('You vs Cho');
     expect(text(el.querySelector('.subtitle'))).toBe('Weekend Warriors · Week 3 · Oct 12 – 18');
-    expect(points(el)).toEqual(['0', '31.8']);
+    expect(points(el)).toEqual(['0', '35.8']);
     expect(text(el.querySelector('.verdict'))).toBe('Live · Cho leads');
     expect(text(el.querySelector('.banner'))).toContain('Everything you both log this week counts');
     expect(el.querySelector('a.log')?.getAttribute('href')).toBe('/log');
 
     const headings = Array.from(el.querySelectorAll('h2')).map(text);
-    expect(headings).toEqual(['Where the points came from', 'Your workouts', 'Cho’s workouts']);
+    expect(headings).toEqual([
+      'How the score adds up',
+      'Your lineup',
+      'Cho’s lineup',
+      'Workout points by category',
+      'Your workouts',
+      'Cho’s workouts',
+    ]);
+    // The whole score, line by line: Cho out-rode me (nobody else rode).
+    expect(breakdown(el)).toEqual(['Workouts 0 31.8', 'Pledges hit 0 0', 'Battles won 0 4']);
+    const choRide = Array.from(el.querySelectorAll('.sides > div')[1].querySelectorAll('.pledge'))
+      .map(text)
+      .find((t) => t?.includes('Ride'));
+    expect(choRide).toContain('20.07 km of 40 km');
+    expect(choRide).toContain('Won vs your 0 km');
     // Every category the Crate gave points to, with its weight per par.
     const categories = Array.from(el.querySelectorAll('.category .what .pch-title-small')).map(
       text,
@@ -73,7 +92,7 @@ describe('MatchupPage', () => {
       'Reps',
       'Active minutes',
     ]);
-    expect(text(el.querySelector('.category:not(.heading)'))).toContain('23 pts per 5 km');
+    expect(text(el.querySelectorAll('.category:not(.heading)')[3])).toContain('23 pts per 5 km');
     expect(text(el.querySelector('.category.heading'))).toBe('YouCho');
     expect(text(el)).toContain('Nothing logged this week yet.');
 
@@ -87,13 +106,18 @@ describe('MatchupPage', () => {
         distanceKind: 'runWalk',
         sets: [setLog({ meters: 10_000, seconds: 3000 })],
       }),
-      FIXED_NOW,
     );
-    await backend.container.loggingService.submit(log.id, FIXED_NOW, { durationMinutes: 50 });
+    await backend.container.loggingService.submit(log.id, FIXED_NOW);
     TestBed.inject(AppState).bump();
     await stable(f);
-    // 10 km = 2 pars at 23; 50 min = 1.11 pars at 25.
-    expect(points(el)[0]).toBe('73.8');
+    // 10 km = 2 pars at 23; 50 min = 1.11 pars at 25. My 5 km pledge is hit
+    // (+11.5), I out-ran Cho (+23) and tied Cho's 50 minutes (half of 25).
+    expect(breakdown(el)).toEqual([
+      'Workouts 73.8 31.8',
+      'Pledges hit 11.5 0',
+      'Battles won 35.5 4',
+    ]);
+    expect(points(el)[0]).toBe('120.8');
     expect(text(el.querySelector('.verdict'))).toBe('Live · You lead');
     const mine = el.querySelectorAll('.logs > div')[0];
     expect(mine.querySelector('a[pch-list-row]')?.getAttribute('href')).toBe(`/log/${log.id}`);
@@ -105,14 +129,20 @@ describe('MatchupPage', () => {
     const f = await render(done.id);
     const el: HTMLElement = f.nativeElement;
     expect(text(el.querySelector('h1'))).toBe('You vs Ada');
-    expect(points(el)).toEqual(['174.1', '197.6']);
+    expect(points(el)).toEqual(['253.6', '288.4']);
+    // Workouts, then pledges hit (5 km and 90 min for me; 15 km and 120 min
+    // for Ada) and battles won (weight and minutes for me, running for Ada).
+    expect(breakdown(el)).toEqual([
+      'Workouts 174.1 197.6',
+      'Pledges hit 36.5 67.8',
+      'Battles won 43 23',
+    ]);
     expect(text(el.querySelector('.verdict'))).toBe('Final · Ada won');
     expect(el.querySelector('.banner')).toBeNull();
     expect(el.querySelector('a.log')).toBeNull();
-    // Crate-mates' workouts are listed but only mine open.
+    // Crate-mates' workouts open as shared with the Crate, to view and dispute.
     const theirs = el.querySelectorAll('.logs > div')[1];
-    expect(theirs.querySelectorAll('pch-list-row').length).toBeGreaterThan(0);
-    expect(theirs.querySelector('a')).toBeNull();
+    expect(theirs.querySelector('a')?.getAttribute('href')).toMatch(/^\/crates\/.+\/logs\//);
   });
 
   it('shows a bye week that has not started yet', async () => {

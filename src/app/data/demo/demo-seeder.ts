@@ -1,20 +1,26 @@
 import { AppContainer } from '../../application/app-container';
-import { addDays, startOfWeek } from '../../domain/core/local-date';
+import { addDays, LocalDate, startOfWeek } from '../../domain/core/local-date';
 import { SeededRandom } from '../../domain/core/random';
 import { stableHash } from '../../domain/core/stable-hash';
 import { Exercise, takesLoad } from '../../domain/exercises/exercise';
-import { loggableFromCatalog, LoggableExercise } from '../../domain/exercises/loggable';
+import {
+  customExercise,
+  loggableFromCatalog,
+  LoggableExercise,
+} from '../../domain/exercises/loggable';
 import { Equipment } from '../../domain/exercises/taxonomy';
-import { loggableFromCustom } from '../../domain/models/library';
+import { Pledge } from '../../domain/models/lineup';
 import { peach, Peach } from '../../domain/models/peach';
-import { categoryWeights } from '../../domain/models/scoring';
-import { exerciseLogEntry, SetLog, setLog } from '../../domain/models/workout-log';
+import { categoryWeights, LineupRules } from '../../domain/models/scoring';
+import { Season } from '../../domain/models/season';
+import { entryOf, SetLog, setLog } from '../../domain/models/workout-log';
 
 /** The demo user's Peach id. */
 export const DEMO_PEACH_ID = 'me';
 
 const MS_PER_DAY = 86_400_000;
 const MS_PER_HOUR = 3_600_000;
+const MS_PER_MINUTE = 60_000;
 
 /** How each demo Peach likes to train, so the categories they win differ. */
 type Style = 'runner' | 'lifter' | 'mixed' | 'bodyweight' | 'rider';
@@ -40,6 +46,31 @@ const SESSIONS: Readonly<Record<Style, readonly (readonly string[])[]>> = {
     ['bw-pull-up', 'bw-push-up'],
   ],
   rider: [['outdoor-cycling'], ['row-steady', 'bw-push-up'], ['outdoor-cycling']],
+};
+
+/** What each style pledges in a week. */
+const LINEUPS: Readonly<Record<Style, readonly Pledge[]>> = {
+  runner: [
+    { category: 'runWalk', target: 15 },
+    { category: 'activeMinutes', target: 120 },
+  ],
+  lifter: [
+    { category: 'weightMoved', target: 8000 },
+    { category: 'reps', target: 150 },
+  ],
+  mixed: [
+    { category: 'runWalk', target: 5 },
+    { category: 'weightMoved', target: 3000 },
+    { category: 'activeMinutes', target: 90 },
+  ],
+  bodyweight: [
+    { category: 'reps', target: 300 },
+    { category: 'activeMinutes', target: 90 },
+  ],
+  rider: [
+    { category: 'ride', target: 40 },
+    { category: 'swimRow', target: 2000 },
+  ],
 };
 
 /**
@@ -100,7 +131,14 @@ export class DemoSeeder {
       crateId: string,
       peachId: string,
       weights: Parameters<typeof categoryWeights>[0],
-    ) => app.votingService.castBallot(crateId, peachId, categoryWeights(weights), created);
+      lineup: LineupRules = { slots: 3, pledgeBonus: 50, battlePars: 1 },
+    ) =>
+      app.votingService.castBallot(
+        crateId,
+        peachId,
+        { weights: categoryWeights(weights), lineup },
+        created,
+      );
     await vote(crate.id, 'ada', {
       runWalk: 40,
       ride: 10,
@@ -108,47 +146,19 @@ export class DemoSeeder {
       reps: 15,
       activeMinutes: 25,
     });
-    await vote(crate.id, 'ben', { weightMoved: 45, reps: 25, runWalk: 10, activeMinutes: 20 });
-    await vote(crate.id, 'dev', { reps: 40, runWalk: 20, weightMoved: 10, activeMinutes: 30 });
+    await vote(
+      crate.id,
+      'ben',
+      { weightMoved: 45, reps: 25, runWalk: 10, activeMinutes: 20 },
+      { slots: 2, pledgeBonus: 75, battlePars: 1 },
+    );
+    await vote(
+      crate.id,
+      'dev',
+      { reps: 40, runWalk: 20, weightMoved: 10, activeMinutes: 30 },
+      { slots: 3, pledgeBonus: 50, battlePars: 2 },
+    );
     await vote(second.id, DEMO_PEACH_ID, { weightMoved: 60, reps: 30, activeMinutes: 10 });
-
-    // The library: a few catalog favourites, a made-up loop and a routine.
-    for (const [exerciseId, by] of [
-      ['kb-swing', 'ada'],
-      ['bw-burpee', 'dev'],
-      ['bb-deadlift', 'ben'],
-    ] as const) {
-      await app.libraryService.addCatalogExercise(crate.id, exerciseId, by, created);
-    }
-    const hillLoop = await app.libraryService.createCustomExercise({
-      crateId: crate.id,
-      peachId: 'ada',
-      name: 'Reservoir hill loop',
-      track: 'distance',
-      takesLoad: false,
-      distanceKind: 'runWalk',
-      now: created,
-    });
-    await app.libraryService.createRoutine({
-      crateId: crate.id,
-      peachId: 'dev',
-      name: 'Saturday sweat',
-      items: (
-        [
-          ['bw-burpee', 15],
-          ['bw-push-up', 20],
-          ['bw-air-squat', 25],
-        ] as const
-      ).map(([exerciseId, reps]) => ({
-        exerciseId,
-        exerciseName: app.catalog.require(exerciseId).name,
-        sets: 3,
-        reps,
-        seconds: null,
-        meters: null,
-      })),
-      now: created,
-    });
 
     // Season: started two weeks ago, six weeks long, so two weeks are
     // final and this week is live.
@@ -160,9 +170,18 @@ export class DemoSeeder {
       now: created,
     });
 
-    // Everyone trains a few times a week, in their own style, up to now.
+    await this.pledge(season, now, timeZone);
+
+    // Everyone trains a few times a week, in their own style, up to now. Ada
+    // made up a loop of her own, which the Crate sees as hers.
     const random = new SeededRandom(2026);
-    const custom = new Map([[hillLoop.id, loggableFromCustom(hillLoop)]]);
+    const hillLoop = customExercise({
+      id: 'reservoir-loop',
+      name: 'Reservoir hill loop',
+      track: 'distance',
+      distanceKind: 'runWalk',
+    });
+    const custom = new Map([[hillLoop.id, hillLoop]]);
     for (const p of roster) {
       for (let day = addDays(thisWeek, -14); day <= today; day = addDays(day, 1)) {
         if (random.nextDouble() > 0.5) continue;
@@ -177,6 +196,7 @@ export class DemoSeeder {
 
     // Close the finished weeks and open this one.
     await app.seasonService.syncSeason(season.id, now);
+    await this.dispute(crate.id, thisWeek, now, timeZone);
 
     await app.seasonService.createSeason({
       crate: second,
@@ -184,6 +204,50 @@ export class DemoSeeder {
       startWeek: addDays(thisWeek, 7),
       weeks: 4,
       now: created,
+    });
+  }
+
+  /**
+   * Everyone set a lineup the day before each week so far; for next week,
+   * everyone but you has, so there's a lineup waiting to be set.
+   */
+  private async pledge(season: Season, now: Date, timeZone: string): Promise<void> {
+    const { app } = this;
+    const rounds = await app.seasons.roundsOf(season.id);
+    const thisWeek = startOfWeek(app.zone.dateOf(now, timeZone));
+    for (const round of rounds.filter((r) => r.weekStart <= addDays(thisWeek, 7))) {
+      const dayBefore = new Date(
+        app.zone.startOfDay(round.weekStart, timeZone).getTime() - MS_PER_DAY,
+      );
+      for (const peachId of season.participantIds) {
+        if (round.weekStart > thisWeek && peachId === DEMO_PEACH_ID) continue;
+        await app.lineupService.setLineup({
+          roundId: round.id,
+          peachId,
+          pledges: LINEUPS[STYLES[peachId]],
+          now: dayBefore,
+        });
+      }
+    }
+  }
+
+  /** Ben thinks one of Ada's sessions this week was generous, and wants your vote. */
+  private async dispute(
+    crateId: string,
+    thisWeek: LocalDate,
+    now: Date,
+    timeZone: string,
+  ): Promise<void> {
+    const { app } = this;
+    const from = app.zone.startOfDay(thisWeek, timeZone);
+    const log = (await app.logs.sharedWith(crateId, from, now)).find((l) => l.peachId === 'ada');
+    if (!log) return;
+    await app.disputeService.open({
+      crateId,
+      logId: log.id,
+      target: log.entries[0].exerciseId,
+      peachId: 'ben',
+      now,
     });
   }
 
@@ -208,19 +272,14 @@ export class DemoSeeder {
           : null;
       await app.loggingService.recordEntry(
         log.id,
-        exerciseLogEntry({
-          exerciseId: exercise.id,
-          exerciseName: exercise.name,
-          distanceKind: exercise.distanceKind,
+        entryOf(exercise, {
           sets: plausibleSets(exercise, effort, loadKg),
           rpe: 5 + random.nextInt(5),
         }),
-        at,
       );
     }
-    await app.loggingService.submit(log.id, new Date(at.getTime() + MS_PER_HOUR), {
-      durationMinutes: 30 + random.nextInt(4) * 10,
-    });
+    const minutes = 30 + random.nextInt(4) * 10;
+    await app.loggingService.submit(log.id, new Date(at.getTime() + minutes * MS_PER_MINUTE));
   }
 }
 

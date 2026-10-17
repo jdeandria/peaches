@@ -50,13 +50,13 @@ describe('VotePage', () => {
   it('starts from the Crate’s tally and casts a full-budget vote', async () => {
     const warriors = await crate('Weekend Warriors');
     const { f, el } = await render(warriors.id);
-    expect(text(el.querySelector('h1'))).toBe('What counts');
+    expect(text(el.querySelector('h1'))).toBe('Rules');
     expect(text(el.querySelector('.subtitle'))).toBe('Weekend Warriors · 3 of 5 voted');
     // I haven't voted: my draft is the Crate's current tally.
     expect(values(el)).toEqual(['23', '4', '3', '18', '27', '25']);
     expect(text(el.querySelector('.budget'))).toContain('All 100 points given');
     expect(text(el)).toContain('per 5 km · Crate 23 · this Season 23');
-    expect(text(el)).toContain('keeps the weights it started with');
+    expect(text(el)).toContain('keeps the rules it started with');
     // Not the owner: no grace period.
     expect(text(el)).not.toContain('Grace period');
 
@@ -75,7 +75,7 @@ describe('VotePage', () => {
     await stable(f);
     const ballots = await backend.container.votingService.ballotsOf(warriors.id);
     const mine = ballots.find((b) => b.peachId === DEMO_PEACH_ID)!;
-    expect(mine.weights.reps).toBe(31);
+    expect(mine.rules.weights.reps).toBe(31);
     expect(text(el.querySelector('.subtitle'))).toBe('Weekend Warriors · 4 of 5 voted');
     expect(button(el, 'Update my vote')).toBeDefined();
   });

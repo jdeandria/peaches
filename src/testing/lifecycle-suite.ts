@@ -5,8 +5,14 @@ import { DomainError } from '../app/application/errors';
 import { localDate } from '../app/domain/core/local-date';
 import { Crate } from '../app/domain/models/crate';
 import { peach } from '../app/domain/models/peach';
-import { categoryWeights, DEFAULT_WEIGHTS } from '../app/domain/models/scoring';
-import { isBye, winnerId } from '../app/domain/models/season';
+import { SESSION_TIME } from '../app/domain/models/dispute';
+import {
+  categoryWeights,
+  DEFAULT_LINEUP_RULES,
+  DEFAULT_RULES,
+  ScoringRules,
+} from '../app/domain/models/scoring';
+import { involves, isBye, winnerId } from '../app/domain/models/season';
 import { played } from '../app/domain/models/score';
 import {
   exerciseLogEntry,
@@ -58,12 +64,18 @@ export function runLifecycleSuite(
       sets: [setLog({ reps, loadKg })],
     });
 
-  /** Logs and submits one session at `at`. */
+  /** Logs and submits one hour-long session at `at`. */
   async function logSession(peachId: string, at: Date, ...entries: ReturnType<typeof run>[]) {
     const log = await app.loggingService.startLog(peachId, at);
-    for (const e of entries) await app.loggingService.recordEntry(log.id, e, at);
+    for (const e of entries) await app.loggingService.recordEntry(log.id, e);
     return app.loggingService.submit(log.id, new Date(at.getTime() + 3_600_000));
   }
+
+  /** A ballot of `weights` with the default lineup rules. */
+  const rules = (weights: Parameters<typeof categoryWeights>[0]): ScoringRules => ({
+    weights: categoryWeights(weights),
+    lineup: DEFAULT_LINEUP_RULES,
+  });
 
   describe(`${backend} CrateService`, () => {
     it('creates a crate with the owner as a member and an invite code', async () => {
@@ -107,7 +119,7 @@ export function runLifecycleSuite(
   });
 
   describe(`${backend} LoggingService`, () => {
-    it('logs solo and shares the submitted log with every active crate', async () => {
+    it('logs solo and shares the submitted log, and its exercises, with every active crate', async () => {
       const one = await crateWithMembers(['a', 'b'], 'One');
       const two = await crateWithMembers(['a'], 'Two');
       const three = await crateWithMembers(['b', 'a'], 'Three');
@@ -115,15 +127,13 @@ export function runLifecycleSuite(
 
       const log = await app.loggingService.startLog('a', now);
       expect(await app.loggingService.currentLog('a')).toEqual(log);
-      await app.loggingService.recordEntry(log.id, run(5), now);
-      const submitted = await app.loggingService.submit(log.id, utc(10, 10, 10), {
-        durationMinutes: 35,
-        notes: ' easy ',
-      });
+      await app.loggingService.recordEntry(log.id, run(5));
+      const submitted = await app.loggingService.submit(log.id, utc(10, 10, 10));
       expect(isSubmitted(submitted)).toBe(true);
       expect(submitted.completedAt).toEqual(utc(10, 10, 10));
-      expect(submitted.durationMinutes).toBe(35);
-      expect(submitted.notes).toBe('easy');
+      // The clock ran from 09:00 to 10:00 and stopped.
+      expect(submitted.durationSeconds).toBe(3600);
+      expect(submitted.timerStartedAt).toBeNull();
       expect(submitted.sharedWith).toEqual([one.id, two.id].sort());
       expect(await app.loggingService.currentLog('a')).toBeNull();
 
@@ -135,172 +145,294 @@ export function runLifecycleSuite(
       // Outside the range nothing is returned.
       expect(await app.logs.sharedWith(one.id, utc(10, 12), utc(10, 19))).toEqual([]);
       expect((await app.logs.recentlySharedWith(one.id, 5)).map((l) => l.id)).toEqual([log.id]);
+      expect((await app.logs.getShared(one.id, log.id))?.id).toBe(log.id);
+      expect(await app.logs.getShared(three.id, log.id)).toBeNull();
+
+      // Its exercises are shared too, tagged with who logged them.
+      const shared = await app.logs.exercisesSharedWith(one.id);
+      expect(shared.map((e) => [e.peachId, e.exercise.id, e.exercise.track])).toEqual([
+        ['a', 'bw-run', 'distance'],
+      ]);
+      expect((await app.loggingService.crateExercises('b')).map((e) => e.exercise.id)).toEqual([
+        'bw-run',
+      ]);
+      expect(await app.loggingService.crateExercises('c')).toEqual([]);
     });
 
-    it('the clock starts with the first exercise, not when the log was opened', async () => {
-      const log = await app.loggingService.startLog('a', utc(10, 4, 22));
-      const recorded = await app.loggingService.recordEntry(log.id, run(3), utc(10, 6, 7));
-      expect(recorded.startedAt).toEqual(utc(10, 6, 7));
-      const second = await app.loggingService.recordEntry(log.id, squats(10, 60), utc(10, 6, 8));
-      expect(second.startedAt).toEqual(utc(10, 6, 7));
-      expect(second.entries.map((e) => e.exerciseId)).toEqual(['bw-run', 'bb-back-squat']);
-      const removed = await app.loggingService.removeEntry(log.id, 'bw-run');
-      expect(removed.entries.map((e) => e.exerciseId)).toEqual(['bb-back-squat']);
+    it('the clock runs while the log screen is open', async () => {
+      const opened = await app.loggingService.openDraft('a', utc(10, 6, 7));
+      expect(opened.timerStartedAt).toEqual(utc(10, 6, 7));
+      // Reopening an empty draft days later starts afresh.
+      const reopened = await app.loggingService.openDraft('a', utc(10, 8, 18));
+      expect(reopened.id).toBe(opened.id);
+      expect(reopened.startedAt).toEqual(utc(10, 8, 18));
+      await app.loggingService.recordEntry(opened.id, run(3));
+      // Leaving the screen for an hour pauses it; coming back resumes it.
+      const paused = await app.loggingService.pauseTimer(
+        opened.id,
+        new Date(utc(10, 8, 18).getTime() + 600_000),
+      );
+      expect(paused.durationSeconds).toBe(600);
+      const resumed = await app.loggingService.openDraft('a', utc(10, 8, 20));
+      expect(resumed.startedAt).toEqual(utc(10, 8, 18));
+      const done = await app.loggingService.submit(
+        opened.id,
+        new Date(utc(10, 8, 20).getTime() + 300_000),
+      );
+      expect(done.durationSeconds).toBe(900);
     });
 
-    it('rejects implausible entries, empty logs and edits after submitting', async () => {
+    it('rejects implausible entries and empty logs', async () => {
       const log = await app.loggingService.startLog('a', now);
       await expect(app.loggingService.submit(log.id, now)).rejects.toBeInstanceOf(DomainError);
-      await expect(
-        app.loggingService.recordEntry(log.id, squats(5000, 20), now),
-      ).rejects.toBeInstanceOf(DomainError);
-      await app.loggingService.recordEntry(log.id, squats(5, 100), now);
-      await expect(
-        app.loggingService.submit(log.id, now, { durationMinutes: 900 }),
-      ).rejects.toBeInstanceOf(DomainError);
+      await expect(app.loggingService.recordEntry(log.id, squats(5000, 20))).rejects.toBeInstanceOf(
+        DomainError,
+      );
+      await app.loggingService.recordEntry(log.id, squats(5, 100));
       await app.loggingService.submit(log.id, now);
-      await expect(
-        app.loggingService.recordEntry(log.id, squats(5, 100), now),
-      ).rejects.toBeInstanceOf(DomainError);
       await expect(app.loggingService.submit(log.id, now)).rejects.toBeInstanceOf(DomainError);
+    });
+
+    it('submitted workouts stay editable, and the shared copies follow', async () => {
+      const crate = await crateWithMembers(['a', 'b']);
+      const log = await logSession('a', utc(10, 9, 7), run(5));
+      await app.loggingService.recordEntry(log.id, squats(10, 60));
+      const edited = await app.loggingService.editDetails(
+        log.id,
+        { startedAt: utc(10, 8, 6), durationSeconds: 2700, notes: ' hills ' },
+        now,
+      );
+      expect(edited).toMatchObject({ durationSeconds: 2700, notes: 'hills', status: 'submitted' });
+      const copy = (await app.logs.getShared(crate.id, log.id))!;
+      expect(copy.entries.map((e) => e.exerciseId)).toEqual(['bw-run', 'bb-back-squat']);
+      expect(copy.startedAt).toEqual(utc(10, 8, 6));
+      expect(copy.durationSeconds).toBe(2700);
+
+      await expect(
+        app.loggingService.editDetails(
+          log.id,
+          { startedAt: utc(10, 11), durationSeconds: 60, notes: '' },
+          now,
+        ),
+      ).rejects.toBeInstanceOf(DomainError);
+      await expect(
+        app.loggingService.editDetails(
+          log.id,
+          { startedAt: utc(10, 8), durationSeconds: 11 * 3600, notes: '' },
+          now,
+        ),
+      ).rejects.toBeInstanceOf(DomainError);
+      await app.loggingService.removeEntry(log.id, 'bw-run');
+      await expect(app.loggingService.removeEntry(log.id, 'bb-back-squat')).rejects.toBeInstanceOf(
+        DomainError,
+      );
     });
   });
 
   describe(`${backend} VotingService`, () => {
-    it('tallies active members’ ballots into the next season’s weights', async () => {
+    it('tallies active members’ ballots into the next season’s rules', async () => {
       const crate = await crateWithMembers(['a', 'b', 'c']);
-      expect(await app.votingService.currentWeights(crate.id)).toEqual(DEFAULT_WEIGHTS);
+      expect(await app.votingService.currentRules(crate.id)).toEqual(DEFAULT_RULES);
 
-      await app.votingService.castBallot(crate.id, 'a', categoryWeights({ runWalk: 100 }), now);
-      await app.votingService.castBallot(crate.id, 'b', categoryWeights({ reps: 100 }), now);
-      expect(await app.votingService.currentWeights(crate.id)).toEqual(
-        categoryWeights({ runWalk: 50, reps: 50 }),
+      await app.votingService.castBallot(crate.id, 'a', rules({ runWalk: 100 }), now);
+      await app.votingService.castBallot(
+        crate.id,
+        'b',
+        { ...rules({ reps: 100 }), lineup: { slots: 1, pledgeBonus: 20, battlePars: 0 } },
+        now,
       );
+      const tally = await app.votingService.currentRules(crate.id);
+      expect(tally.weights).toEqual(categoryWeights({ runWalk: 50, reps: 50 }));
+      // The lower middle vote of two.
+      expect(tally.lineup).toEqual({ slots: 1, pledgeBonus: 20, battlePars: 0 });
 
       // Changing a vote replaces it.
-      await app.votingService.castBallot(crate.id, 'b', categoryWeights({ runWalk: 100 }), now);
-      expect((await app.votingService.currentWeights(crate.id)).runWalk).toBe(100);
+      await app.votingService.castBallot(crate.id, 'b', rules({ runWalk: 100 }), now);
+      expect((await app.votingService.currentRules(crate.id)).weights.runWalk).toBe(100);
 
       // A member who leaves stops counting.
-      await app.votingService.castBallot(crate.id, 'c', categoryWeights({ ride: 100 }), now);
+      await app.votingService.castBallot(crate.id, 'c', rules({ ride: 100 }), now);
       await app.crateService.leave(crate.id, 'c');
       expect(await app.votingService.ballotsOf(crate.id)).toHaveLength(2);
-      expect((await app.votingService.currentWeights(crate.id)).ride).toBe(0);
+      expect((await app.votingService.currentRules(crate.id)).weights.ride).toBe(0);
     });
 
-    it('only members vote, and only with a full budget', async () => {
+    it('only members vote, and only with a full budget and rules in range', async () => {
       const crate = await crateWithMembers(['a']);
       await expect(
-        app.votingService.castBallot(crate.id, 'b', DEFAULT_WEIGHTS, now),
+        app.votingService.castBallot(crate.id, 'b', DEFAULT_RULES, now),
       ).rejects.toBeInstanceOf(DomainError);
       await expect(
-        app.votingService.castBallot(crate.id, 'a', { ...DEFAULT_WEIGHTS, reps: 99 }, now),
+        app.votingService.castBallot(
+          crate.id,
+          'a',
+          { ...DEFAULT_RULES, weights: { ...DEFAULT_RULES.weights, reps: 99 } },
+          now,
+        ),
+      ).rejects.toBeInstanceOf(DomainError);
+      await expect(
+        app.votingService.castBallot(
+          crate.id,
+          'a',
+          { ...DEFAULT_RULES, lineup: { ...DEFAULT_LINEUP_RULES, slots: 9 } },
+          now,
+        ),
       ).rejects.toBeInstanceOf(DomainError);
     });
   });
 
-  describe(`${backend} LibraryService`, () => {
-    it('members add catalog exercises, custom exercises and routines', async () => {
+  describe(`${backend} Lineups`, () => {
+    it('are set before the week, carry over, and score pledges and battles', async () => {
       const crate = await crateWithMembers(['a', 'b']);
-      await app.libraryService.addCatalogExercise(crate.id, 'kb-swing', 'b', now);
-      await app.libraryService.addCatalogExercise(crate.id, 'kb-swing', 'a', now);
-      await expect(
-        app.libraryService.addCatalogExercise(crate.id, 'no-such-thing', 'a', now),
-      ).rejects.toBeInstanceOf(DomainError);
-      await expect(
-        app.libraryService.addCatalogExercise(crate.id, 'kb-swing', 'c', now),
-      ).rejects.toBeInstanceOf(DomainError);
-
-      const loop = await app.libraryService.createCustomExercise({
-        crateId: crate.id,
-        peachId: 'b',
-        name: ' Hill loop ',
-        track: 'distance',
-        takesLoad: true,
-        distanceKind: 'runWalk',
+      await app.votingService.castBallot(crate.id, 'a', rules({ runWalk: 50, reps: 50 }), now);
+      // Starts Monday 12 October; now is Saturday the 10th.
+      const season = await app.seasonService.createSeason({
+        crate,
+        name: 'S',
+        startWeek: localDate(2026, 10, 12),
+        weeks: 2,
         now,
       });
-      expect(loop.name).toBe('Hill loop');
-      expect(loop.id.startsWith('custom-')).toBe(true);
-      // Only rep-tracked exercises take a load.
-      expect(loop.takesLoad).toBe(false);
+      const [week1, week2] = await app.seasons.roundsOf(season.id);
+      const set = (
+        peachId: string,
+        roundId: string,
+        pledges: { category: 'runWalk' | 'reps'; target: number }[],
+        at = now,
+      ) => app.lineupService.setLineup({ roundId, peachId, pledges, now: at });
 
-      const log = await logSession('b', now, run(4), squats(10, 50));
-      const routine = await app.libraryService.saveLogAsRoutine({
-        crateId: crate.id,
-        log,
-        name: 'Run and squat',
-        now,
-      });
-      expect(routine.items).toEqual([
-        {
-          exerciseId: 'bw-run',
-          exerciseName: 'Run',
-          sets: 1,
-          reps: null,
-          seconds: 1320,
-          meters: 4000,
-        },
-        {
-          exerciseId: 'bb-back-squat',
-          exerciseName: 'Back Squat',
-          sets: 1,
-          reps: 10,
-          seconds: null,
-          meters: null,
-        },
+      const lineup = await set('a', week1.id, [{ category: 'runWalk', target: 8 }]);
+      expect(lineup.locksAt).toEqual(utc(10, 12));
+      await set('b', week1.id, [
+        { category: 'runWalk', target: 20 },
+        { category: 'reps', target: 50 },
       ]);
+      // Changing it before the week starts replaces it.
+      await set('a', week1.id, [
+        { category: 'runWalk', target: 10 },
+        { category: 'reps', target: 100 },
+      ]);
+      // Too many, too early, too late, or not playing: refused.
+      const four = (['runWalk', 'reps', 'ride', 'swimRow'] as const).map((category) => ({
+        category,
+        target: 1,
+      }));
+      await expect(
+        app.lineupService.setLineup({ roundId: week1.id, peachId: 'a', pledges: four, now }),
+      ).rejects.toBeInstanceOf(DomainError);
+      await expect(set('a', week2.id, [])).rejects.toBeInstanceOf(DomainError);
+      await expect(set('a', week1.id, [], utc(10, 12, 1))).rejects.toBeInstanceOf(DomainError);
+      await expect(set('c', week1.id, [])).rejects.toBeInstanceOf(DomainError);
 
-      const library = await app.libraryService.libraryOf(crate.id);
-      expect(library.entries.map((e) => [e.exerciseId, e.addedBy])).toEqual([['kb-swing', 'b']]);
-      expect(library.customExercises.map((e) => e.id)).toEqual([loop.id]);
-      expect(library.routines.map((r) => r.id)).toEqual([routine.id]);
+      // a runs 10 km and does 120 reps; b runs 5 km and does 60 reps.
+      const pushUps = (reps: number) =>
+        exerciseLogEntry({ exerciseId: 'bw-push-up', sets: [setLog({ reps })] });
+      await logSession('a', utc(10, 13, 7), run(10), pushUps(120));
+      await logSession('b', utc(10, 14, 7), run(5), pushUps(60));
+      await app.seasonService.syncSeason(season.id, utc(10, 19, 7));
 
-      // Custom exercises reach the log picker of every member, and resolve.
-      const customs = await app.libraryService.customExercisesFor('a');
-      expect(customs.map((c) => c.id)).toEqual([loop.id]);
-      expect(app.libraryService.loggable(loop.id, customs)?.distanceKind).toBe('runWalk');
-      expect(app.libraryService.loggable('bw-run', customs)?.track).toBe('distance');
-      expect(await app.libraryService.customExercisesFor('c')).toEqual([]);
+      const [m] = await app.seasons.matchupsInRound(week1.id);
+      const board = (await app.seasonService.board(m.id))!;
+      const side = (id: string) => (board.home.peachId === id ? board.home : board.away!);
+      const a = side('a').score;
+      // Workouts: 10 km = 2 pars × 50 = 100; 120 reps = 0.8 par × 50 = 40.
+      expect(a.workouts.total).toBe(140);
+      // 10 km hit (+50% of 100); 120 of 100 reps hit (+50% of 33.33).
+      expect(a.pledges.map((p) => p.points)).toEqual([50, 16.67]);
+      // Out-ran and out-repped b: a par (50) each.
+      expect(a.battles.map((x) => x.points)).toEqual([50, 50]);
+      const b = side('b').score;
+      // 5 of 20 km missed; 60 of 50 reps hit (+50% of 16.67); both battles lost.
+      expect(b.pledges.map((p) => p.hit)).toEqual([false, true]);
+      expect(b.total).toBeCloseTo(78.33, 2);
+      const result = (await app.seasons.getMatchup(m.id))!.result!;
+      expect(m.homePeachId === 'a' ? result.homePoints : result.awayPoints).toBe(a.total);
+
+      // Nobody set a week-two lineup: week one's carries over.
+      const [m2] = await app.seasons.matchupsInRound(week2.id);
+      const board2 = (await app.seasonService.board(m2.id))!;
+      expect(board2.home.lineup?.roundId).toBe(week1.id);
     });
+  });
 
-    it('whoever added an item, or the owner, can remove it', async () => {
+  describe(`${backend} Disputes`, () => {
+    it('a majority of the Crate strikes a metric, and it stops scoring there', async () => {
       const crate = await crateWithMembers(['a', 'b', 'c']);
-      await app.libraryService.addCatalogExercise(crate.id, 'kb-swing', 'b', now);
-      const routine = await app.libraryService.createRoutine({
-        crateId: crate.id,
-        peachId: 'b',
-        name: 'Swings',
-        items: [
-          {
-            exerciseId: 'kb-swing',
-            exerciseName: 'Swing',
-            sets: 5,
-            reps: 20,
-            seconds: null,
-            meters: null,
-          },
-        ],
+      await app.votingService.castBallot(crate.id, 'a', rules({ runWalk: 50, reps: 50 }), now);
+      const season = await app.seasonService.createSeason({
+        crate,
+        name: 'S',
+        startWeek: localDate(2026, 10, 5),
+        weeks: 1,
         now,
       });
+      await app.seasonService.syncSeason(season.id, now);
+      const log = await logSession('b', utc(10, 9, 7), run(40), squats(10, 50));
+      const open = (peachId: string, target = 'bw-run') =>
+        app.disputeService.open({ crateId: crate.id, logId: log.id, target, peachId, now });
+
+      await expect(open('b')).rejects.toBeInstanceOf(DomainError);
+      await expect(open('z')).rejects.toBeInstanceOf(DomainError);
+      await expect(open('a', 'nope')).rejects.toBeInstanceOf(DomainError);
+      const dispute = await open('a');
+      // Opening again is the same dispute.
+      expect((await open('c')).id).toBe(dispute.id);
+      let [view] = await app.disputeService.views(crate.id, [log]);
+      expect(view).toMatchObject({ outcome: 'open', strike: 1, keep: 1, needed: 2 });
+      expect(
+        (await app.disputeService.awaitingVote(crate.id, 'c', now)).map((v) => v.dispute.id),
+      ).toEqual([dispute.id]);
+      expect(await app.disputeService.awaitingVote(crate.id, 'b', now)).toEqual([]);
+
       await expect(
-        app.libraryService.removeCatalogExercise(crate.id, 'kb-swing', 'c'),
-      ).rejects.toBeInstanceOf(DomainError);
-      await app.libraryService.removeCatalogExercise(crate.id, 'kb-swing', 'b');
-      await expect(
-        app.libraryService.removeRoutine(crate.id, routine.id, 'c'),
-      ).rejects.toBeInstanceOf(DomainError);
-      await app.libraryService.removeRoutine(crate.id, routine.id, 'a');
-      const library = await app.libraryService.libraryOf(crate.id);
-      expect(library.entries).toEqual([]);
-      expect(library.routines).toEqual([]);
-      await expect(
-        app.libraryService.createRoutine({
+        app.disputeService.vote({
           crateId: crate.id,
+          disputeId: dispute.id,
+          peachId: 'b',
+          vote: 'strike',
+        }),
+      ).rejects.toBeInstanceOf(DomainError);
+      await app.disputeService.vote({
+        crateId: crate.id,
+        disputeId: dispute.id,
+        peachId: 'c',
+        vote: 'strike',
+      });
+      [view] = await app.disputeService.views(crate.id, [log]);
+      expect(view.outcome).toBe('struck');
+      await expect(
+        app.disputeService.vote({
+          crateId: crate.id,
+          disputeId: dispute.id,
+          peachId: 'c',
+          vote: 'keep',
+        }),
+      ).rejects.toBeInstanceOf(DomainError);
+
+      // The run no longer scores; the squats and the session time do.
+      const m = (await app.seasons.matchupsOf(season.id)).find((x) => involves(x, 'b'))!;
+      const side = async () => {
+        const board = (await app.seasonService.board(m.id))!;
+        return [board.home, board.away].find((s) => s?.peachId === 'b')!;
+      };
+      expect((await side()).logs[0].entries.map((e) => e.exerciseId)).toEqual(['bb-back-squat']);
+      expect((await side()).score.workouts.total).toBeCloseTo(3.33, 2);
+
+      // Correcting the run ends the dispute: 4 km counts again.
+      const corrected = await app.loggingService.recordEntry(log.id, run(4));
+      [view] = await app.disputeService.views(crate.id, [corrected]);
+      expect(view.applies).toBe(false);
+      expect((await side()).score.workouts.total).toBeCloseTo(43.33, 2);
+
+      // Once the week is over, its scores are final.
+      await app.seasonService.syncSeason(season.id, utc(10, 13));
+      await expect(
+        app.disputeService.open({
+          crateId: crate.id,
+          logId: log.id,
+          target: SESSION_TIME,
           peachId: 'a',
-          name: 'x',
-          items: [],
-          now,
+          now: utc(10, 13),
         }),
       ).rejects.toBeInstanceOf(DomainError);
     });
@@ -312,7 +444,7 @@ export function runLifecycleSuite(
       await app.votingService.castBallot(
         crate.id,
         'a',
-        categoryWeights({ runWalk: 50, weightMoved: 50 }),
+        rules({ runWalk: 50, weightMoved: 50 }),
         now,
       );
       const season = await app.seasonService.createSeason({
@@ -325,9 +457,9 @@ export function runLifecycleSuite(
       expect(season.status).toBe('scheduled');
       expect(season.participantIds).toEqual(['a', 'b', 'c']);
       // The vote is frozen into the season.
-      expect(season.weights).toEqual(categoryWeights({ runWalk: 50, weightMoved: 50 }));
-      await app.votingService.castBallot(crate.id, 'a', categoryWeights({ ride: 100 }), now);
-      expect((await app.seasons.getById(season.id))!.weights.runWalk).toBe(50);
+      expect(season.rules).toEqual(rules({ runWalk: 50, weightMoved: 50 }));
+      await app.votingService.castBallot(crate.id, 'a', rules({ ride: 100 }), now);
+      expect((await app.seasons.getById(season.id))!.rules.weights.runWalk).toBe(50);
 
       const rounds = await app.seasons.roundsOf(season.id);
       expect(rounds.map((r) => r.weekStart)).toEqual(['2026-10-05', '2026-10-12', '2026-10-19']);
@@ -351,7 +483,7 @@ export function runLifecycleSuite(
       await logSession(away, utc(10, 9, 18), squats(20, 100));
       await logSession(away, utc(10, 4, 18), squats(200, 100));
       const draft = await app.loggingService.startLog(away, utc(10, 9));
-      await app.loggingService.recordEntry(draft.id, squats(100, 100), utc(10, 9));
+      await app.loggingService.recordEntry(draft.id, squats(100, 100));
 
       const board = (await app.seasonService.board(real.id))!;
       expect(board.home.logs).toHaveLength(2);
@@ -392,11 +524,11 @@ export function runLifecycleSuite(
       expect((await app.seasons.getById(season.id))?.status).toBe('complete');
     });
 
-    it('one workout scores in every crate, each with its own weights', async () => {
+    it('one workout scores in every crate, each with its own rules', async () => {
       const runners = await crateWithMembers(['a', 'b'], 'Runners');
       const lifters = await crateWithMembers(['a', 'b'], 'Lifters');
-      await app.votingService.castBallot(runners.id, 'a', categoryWeights({ runWalk: 100 }), now);
-      await app.votingService.castBallot(lifters.id, 'a', categoryWeights({ reps: 100 }), now);
+      await app.votingService.castBallot(runners.id, 'a', rules({ runWalk: 100 }), now);
+      await app.votingService.castBallot(lifters.id, 'a', rules({ reps: 100 }), now);
       const seasonOf = (crate: Crate) =>
         app.seasonService.createSeason({
           crate,
@@ -472,7 +604,7 @@ export function runLifecycleSuite(
       const [season] = await demo.seasons.forCrate(warriors.id);
       expect(season.status).toBe('active');
       // The members' votes, not the defaults.
-      expect(season.weights).not.toEqual(DEFAULT_WEIGHTS);
+      expect(season.rules.weights).not.toEqual(DEFAULT_RULES.weights);
       const rounds = await demo.seasons.roundsOf(season.id);
       expect(rounds.map((r) => r.status)).toEqual([
         'closed',
@@ -487,9 +619,16 @@ export function runLifecycleSuite(
       const mine: WorkoutLog[] = await demo.logs.forPeach('me');
       expect(mine.length).toBeGreaterThan(0);
       expect(mine.every((l) => l.sharedWith.length === 2)).toBe(true);
-      const library = await demo.libraryService.libraryOf(warriors.id);
-      expect(library.routines.length).toBeGreaterThan(0);
-      expect(library.customExercises.length).toBeGreaterThan(0);
+      // Everyone's exercises are shared with the Crate, Ada's made-up loop included.
+      const shared = await demo.logs.exercisesSharedWith(warriors.id);
+      expect(new Set(shared.map((e) => e.peachId)).size).toBe(5);
+      expect(shared.some((e) => e.peachId === 'ada' && e.exercise.id.startsWith('custom-'))).toBe(
+        true,
+      );
+      // Everyone but you has set next week's lineup.
+      const next = rounds[3];
+      expect(await demo.seasons.getLineup(season.id, next.id, 'me')).toBeNull();
+      expect(await demo.seasons.getLineup(season.id, next.id, 'ada')).not.toBeNull();
     });
   });
 }

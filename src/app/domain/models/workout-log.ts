@@ -3,6 +3,7 @@ import {
   dateTimeOrNullFromJson,
   dateTimeToJson,
   enumFromJson,
+  intFromJson,
   intOrNullFromJson,
   JsonMap,
   mapListFromJson,
@@ -11,6 +12,7 @@ import {
   stringListFromJson,
   stringOrNull,
 } from '../core/json';
+import { LOG_TRACKS, LoggableExercise, LogTrack } from '../exercises/loggable';
 import { DISTANCE_KINDS, DistanceKind } from './scoring';
 
 /** What was actually done in one set. */
@@ -33,14 +35,17 @@ export function setLog(init: Partial<SetLog>): SetLog {
 /**
  * Everything logged against one exercise in a session.
  *
- * The exercise's name and distance kind are copied in when it is logged. A
- * log is shared with every Crate its Peach belongs to, and an exercise from
- * one Crate's private library means nothing in another, so the entry has to
- * render and score on its own.
+ * How the exercise is logged (its name, track, whether it takes a load and
+ * its distance kind) is copied in, so an entry renders, scores and can be
+ * logged again on its own: custom exercises exist only in the entries of
+ * the Peach who made them up, and in the Crates those entries are shared
+ * with.
  */
 export interface ExerciseLogEntry {
   readonly exerciseId: string;
   readonly exerciseName: string;
+  readonly track: LogTrack;
+  readonly takesLoad: boolean;
   /** Which distance category metres count toward; null when distance doesn't score. */
   readonly distanceKind: DistanceKind | null;
   readonly sets: readonly SetLog[];
@@ -51,9 +56,12 @@ export interface ExerciseLogEntry {
 export type NewExerciseLogEntry = Pick<ExerciseLogEntry, 'exerciseId' | 'sets'> &
   Partial<ExerciseLogEntry>;
 
+/** Builds an entry; how it is logged defaults to what its sets record. */
 export function exerciseLogEntry(init: NewExerciseLogEntry): ExerciseLogEntry {
   const e: ExerciseLogEntry = {
     exerciseName: init.exerciseId,
+    track: trackOfSets(init.sets),
+    takesLoad: init.sets.some((s) => s.loadKg !== null),
     distanceKind: null,
     rpe: null,
     notes: null,
@@ -61,6 +69,41 @@ export function exerciseLogEntry(init: NewExerciseLogEntry): ExerciseLogEntry {
   };
   if (e.rpe !== null && (e.rpe < 1 || e.rpe > 10)) throw new RangeError('rpe is 1..10');
   return e;
+}
+
+/** An entry for `exercise`, copying in how it is logged. */
+export function entryOf(
+  exercise: Omit<LoggableExercise, 'cues'>,
+  init: Pick<ExerciseLogEntry, 'sets'> & Partial<ExerciseLogEntry>,
+): ExerciseLogEntry {
+  return exerciseLogEntry({
+    exerciseId: exercise.id,
+    exerciseName: exercise.name,
+    track: exercise.track,
+    takesLoad: exercise.takesLoad,
+    distanceKind: exercise.distanceKind,
+    ...init,
+  });
+}
+
+function trackOfSets(sets: readonly SetLog[]): LogTrack {
+  if (sets.some((s) => s.meters !== null)) return 'distance';
+  return sets.some((s) => s.reps !== null) ? 'reps' : 'time';
+}
+
+/** The exercise an entry was logged against, to log it again. */
+export function loggableFromEntry(
+  e: ExerciseLogEntry,
+  cues: string | null = null,
+): LoggableExercise {
+  return {
+    id: e.exerciseId,
+    name: e.exerciseName,
+    track: e.track,
+    takesLoad: e.takesLoad,
+    distanceKind: e.distanceKind,
+    cues,
+  };
 }
 
 export function totalReps(e: ExerciseLogEntry): number {
@@ -89,22 +132,27 @@ export type WorkoutLogStatus = (typeof WORKOUT_LOG_STATUSES)[number];
  * Logs belong to no Crate or Matchup. When submitted, a log is shared with
  * every Crate the Peach is active in (`sharedWith`); a Matchup scores the
  * shared logs its two Peaches started inside its week, so one workout counts
- * in every Crate, each with that Crate's own weights.
+ * in every Crate, each with that Crate's own rules. The Peach can still edit
+ * a submitted log, and the shared copies follow.
+ *
+ * The session times itself: the clock runs while the log screen is open
+ * (`timerStartedAt` is set) and pauses when it is not, banking the time in
+ * `durationSeconds`.
  */
 export interface WorkoutLog {
   readonly id: string;
   readonly peachId: string;
-  /** The Crate routine this log was started from, if any. */
-  readonly routineId: string | null;
-  /** Decides which week the log counts toward. */
+  /** When the session began; decides which week the log counts toward. */
   readonly startedAt: Date;
   readonly completedAt: Date | null;
   readonly status: WorkoutLogStatus;
   readonly entries: readonly ExerciseLogEntry[];
-  /** How long the whole session took, as the Peach reports it on submit. */
-  readonly durationMinutes: number | null;
+  /** Time on the clock, not counting a segment that is still running. */
+  readonly durationSeconds: number;
+  /** When the running segment started; null while paused and once submitted. */
+  readonly timerStartedAt: Date | null;
   readonly notes: string | null;
-  /** Crates the log was shared with on submit. */
+  /** Crates the log is shared with. */
   readonly sharedWith: readonly string[];
 }
 
@@ -112,11 +160,11 @@ export type NewWorkoutLog = Pick<WorkoutLog, 'id' | 'peachId' | 'startedAt'> & P
 
 export function workoutLog(init: NewWorkoutLog): WorkoutLog {
   return {
-    routineId: null,
     completedAt: null,
     status: 'inProgress',
     entries: [],
-    durationMinutes: null,
+    durationSeconds: 0,
+    timerStartedAt: null,
     notes: null,
     sharedWith: [],
     ...init,
@@ -125,6 +173,25 @@ export function workoutLog(init: NewWorkoutLog): WorkoutLog {
 
 export function isSubmitted(log: WorkoutLog): boolean {
   return log.status === 'submitted';
+}
+
+/** Seconds on the clock at `now`, including a running segment. */
+export function elapsedSeconds(log: WorkoutLog, now: Date): number {
+  const running = log.timerStartedAt
+    ? Math.max(0, Math.floor((now.getTime() - log.timerStartedAt.getTime()) / 1000))
+    : 0;
+  return log.durationSeconds + running;
+}
+
+/** Banks the running segment and stops the clock. */
+export function pauseTimer(log: WorkoutLog, now: Date): WorkoutLog {
+  if (!log.timerStartedAt) return log;
+  return { ...log, durationSeconds: elapsedSeconds(log, now), timerStartedAt: null };
+}
+
+/** Starts the clock again. */
+export function resumeTimer(log: WorkoutLog, now: Date): WorkoutLog {
+  return log.timerStartedAt ? log : { ...log, timerStartedAt: now };
 }
 
 export function entryFor(log: WorkoutLog, exerciseId: string): ExerciseLogEntry | undefined {
@@ -170,6 +237,8 @@ export function entryFromJson(json: JsonMap): ExerciseLogEntry {
   return {
     exerciseId,
     exerciseName: stringOrNull(json['exerciseName']) ?? exerciseId,
+    track: enumFromJson(LOG_TRACKS, json['track'], 'reps'),
+    takesLoad: json['takesLoad'] === true,
     distanceKind: distanceKindFromJson(json['distanceKind']),
     sets: mapListFromJson(json['sets']).map(setFromJson),
     rpe: intOrNullFromJson(json['rpe']),
@@ -181,6 +250,8 @@ export function entryToJson(e: ExerciseLogEntry): JsonMap {
   return {
     exerciseId: e.exerciseId,
     exerciseName: e.exerciseName,
+    track: e.track,
+    takesLoad: e.takesLoad,
     distanceKind: e.distanceKind,
     sets: e.sets.map((s) => ({
       reps: s.reps,
@@ -197,12 +268,12 @@ export function workoutLogFromJson(json: JsonMap): WorkoutLog {
   return {
     id: requireString(json['id'], 'id'),
     peachId: requireString(json['peachId'], 'peachId'),
-    routineId: stringOrNull(json['routineId']),
     startedAt: dateTimeFromJson(json['startedAt']),
     completedAt: dateTimeOrNullFromJson(json['completedAt']),
     status: enumFromJson(WORKOUT_LOG_STATUSES, json['status'], 'inProgress'),
     entries: mapListFromJson(json['entries']).map(entryFromJson),
-    durationMinutes: intOrNullFromJson(json['durationMinutes']),
+    durationSeconds: intFromJson(json['durationSeconds']),
+    timerStartedAt: dateTimeOrNullFromJson(json['timerStartedAt']),
     notes: stringOrNull(json['notes']),
     sharedWith: stringListFromJson(json['sharedWith']),
   };
@@ -212,12 +283,12 @@ export function workoutLogToJson(log: WorkoutLog): JsonMap {
   return {
     id: log.id,
     peachId: log.peachId,
-    routineId: log.routineId,
     startedAt: dateTimeToJson(log.startedAt),
     completedAt: log.completedAt ? dateTimeToJson(log.completedAt) : null,
     status: log.status,
     entries: log.entries.map(entryToJson),
-    durationMinutes: log.durationMinutes,
+    durationSeconds: log.durationSeconds,
+    timerStartedAt: log.timerStartedAt ? dateTimeToJson(log.timerStartedAt) : null,
     notes: log.notes,
     sharedWith: [...log.sharedWith],
   };

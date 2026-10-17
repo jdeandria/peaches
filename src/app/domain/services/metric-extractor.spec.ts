@@ -59,17 +59,17 @@ describe('MetricExtractor', () => {
     expect(totals.runWalk).toBe(0);
   });
 
-  it('active minutes fall back to the reported session length', () => {
+  it('active minutes fall back to the session’s time on the clock', () => {
     const yoga = workoutLog({
       id: 'l',
       peachId: 'p',
       startedAt,
-      durationMinutes: 60,
+      durationSeconds: 3600,
       entries: [exerciseLogEntry({ exerciseId: 'custom-yoga', sets: [setLog({ seconds: 600 })] })],
     });
     expect(MetricExtractor.extract(yoga).activeMinutes).toBe(60);
-    // Timed sets win when they add up to more than the reported length.
-    expect(MetricExtractor.extract({ ...yoga, durationMinutes: 5 }).activeMinutes).toBe(10);
-    expect(MetricExtractor.extract({ ...yoga, durationMinutes: null }).activeMinutes).toBe(10);
+    // Timed sets win when they add up to more than the clock.
+    expect(MetricExtractor.extract({ ...yoga, durationSeconds: 300 }).activeMinutes).toBe(10);
+    expect(MetricExtractor.extract({ ...yoga, durationSeconds: 0 }).activeMinutes).toBe(10);
   });
 });

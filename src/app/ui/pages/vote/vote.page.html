@@ -1,22 +1,23 @@
 @let d = loaded();
 @if (d === undefined) {
-  <pch-page title="What counts" showBack [backLink]="'/crates/' + crateId()">
+  <pch-page title="Rules" showBack [backLink]="'/crates/' + crateId()">
     <div class="loading"><pch-loading-indicator /></div>
   </pch-page>
 } @else if (!d.crate || !d.member) {
-  <pch-page title="What counts" showBack backLink="/crates">
+  <pch-page title="Rules" showBack backLink="/crates">
     <pch-empty-state icon="search_off" title="Crate not found" />
   </pch-page>
 } @else {
   <pch-page
-    title="What counts"
+    title="Rules"
     [subtitle]="d.crate.name + ' · ' + d.votes + ' of ' + d.memberCount + ' voted'"
     showBack
     [backLink]="'/crates/' + crateId()"
   >
     <p class="intro pch-body-large" [pchStagger]="0">
-      Split {{ budget }} points across the kinds of training. The Crate scores with the average of
-      everyone’s votes. Each number is the points for one “par”: a solid session of that kind.
+      Vote on how your Crate scores. First split {{ budget }} points across the kinds of training:
+      each number is the points for one “par”, a solid session of that kind. The Crate uses the
+      average of everyone’s votes.
     </p>
 
     <div class="budget" [pchStagger]="0" role="status">
@@ -69,8 +70,56 @@
       }
     </pch-list-card>
 
+    <button matButton="outlined" type="button" class="even" (click)="evenSplit()">
+      Even split
+    </button>
+
+    <pch-section title="Lineups" />
+    <p class="pch-body-medium muted lineup-intro">
+      Each week Peaches pledge amounts in a few categories, before seeing their opponent’s. Hitting
+      a pledge and beating your opponent in it earn extra. For each rule, the middle vote wins.
+    </p>
+    <pch-list-card [pchStagger]="2">
+      @for (r of lineupRules(); track r.key) {
+        <div class="category">
+          <div class="what">
+            <span class="pch-title-medium">{{ r.label }}</span>
+            <span class="pch-body-small muted">{{ r.describe }}</span>
+            <span class="pch-body-small muted"
+              >Crate {{ r.crate }}{{ r.unit
+              }}{{ r.season !== null ? ' · this Season ' + r.season + r.unit : '' }}</span
+            >
+          </div>
+          <div class="stepper">
+            <button
+              matIconButton
+              class="outlined"
+              type="button"
+              [disabled]="r.mine <= r.min"
+              [attr.aria-label]="'Less: ' + r.label"
+              (click)="nudgeRule(r.key, -1)"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">remove</span>
+            </button>
+            <span class="pch-title-large value" [attr.aria-label]="r.label + ' ' + r.mine + r.unit"
+              >{{ r.mine }}{{ r.unit }}</span
+            >
+            <button
+              matIconButton
+              class="tonal"
+              type="button"
+              [disabled]="r.mine >= r.max"
+              [attr.aria-label]="'More: ' + r.label"
+              (click)="nudgeRule(r.key, 1)"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">add</span>
+            </button>
+          </div>
+        </div>
+      }
+    </pch-list-card>
+
     <div class="actions">
-      <button matButton="outlined" type="button" (click)="evenSplit()">Even split</button>
       <button
         matButton="filled"
         type="button"
@@ -83,17 +132,17 @@
     </div>
     @if (d.season) {
       <p class="pch-body-small muted note">
-        “{{ d.season.name }}” keeps the weights it started with; votes apply to the next Season.
+        “{{ d.season.name }}” keeps the rules it started with; votes apply to the next Season.
       </p>
     }
 
     @if (d.manager && grace() !== null) {
       <pch-section title="Grace period" />
-      <pch-card variant="outlined" class="grace" [pchStagger]="2">
+      <pch-card variant="outlined" class="grace" [pchStagger]="3">
         <div class="what">
           <span class="pch-title-medium">{{ grace() }} h after Sunday</span>
           <span class="pch-body-small muted"
-            >How long a finished week stays open for late submissions.</span
+            >How long a finished week stays open for late workouts and dispute votes.</span
           >
         </div>
         <div class="stepper">

@@ -24,6 +24,20 @@
           </a>
         </pch-card>
 
+        @if (lineupDue(); as m) {
+          <pch-card class="lineup" variant="filled" [pchStagger]="0">
+            <span class="material-symbols-rounded" aria-hidden="true">checklist</span>
+            <div class="log-text">
+              <h3 class="pch-title-medium">Set your lineup</h3>
+              <p class="pch-body-medium muted">
+                Pledge what you’ll do next week before it starts. Your opponent can’t see it until
+                then.
+              </p>
+            </div>
+            <a matButton="tonal" [routerLink]="['/matchups', m.id, 'lineup']">Set lineup</a>
+          </pch-card>
+        }
+
         @if (open().length > 0) {
           <pch-section title="This week" />
         }
@@ -47,7 +61,7 @@
           <pch-section title="Coming up" [top]="8" />
           <pch-list-card [pchStagger]="statsIndex() + 1">
             @for (m of upcoming(); track m.id) {
-              <pch-matchup-row [matchup]="m" />
+              <pch-matchup-row [matchup]="m" [link]="true" />
             }
           </pch-list-card>
         }
