@@ -1,0 +1,59 @@
+# Deploys each pull request to a temporary Firebase Hosting preview channel and comments the URL.
+# Skipped for forks (they cannot read secrets) and until the secrets are configured.
+name: Preview
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write # comment the preview URL
+  checks: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CONFIGURED: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    steps:
+      - name: Check secrets
+        if: env.CONFIGURED != 'true'
+        run: echo "::notice::Preview skipped. Add the FIREBASE_SERVICE_ACCOUNT secret to enable previews."
+
+      - uses: actions/checkout@v7
+        if: env.CONFIGURED == 'true'
+
+      - uses: actions/setup-node@v7
+        if: env.CONFIGURED == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+        if: env.CONFIGURED == 'true'
+
+      - name: Configure Firebase web app
+        id: config
+        if: env.CONFIGURED == 'true'
+        run: npm run firebase:config
+        env:
+          FIREBASE_WEB_CONFIG: ${{ secrets.FIREBASE_WEB_CONFIG }}
+
+      - name: Build
+        if: env.CONFIGURED == 'true'
+        run: npm run build:firebase
+
+      - name: Deploy preview channel
+        if: env.CONFIGURED == 'true'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ steps.config.outputs.project_id }}
+          expires: 7d
