@@ -1,6 +1,6 @@
 # Peaches
 
-A social fitness app. Every user is a **Peach**. Peaches log any workout
+A social fitness app! Every user is a **Peach**. Peaches log any workout
 they do, solo, and belong to **Crates** (groups). Each Crate runs a
 fantasy-football style **Season**: every week Peaches are paired in
 head-to-head **Matchups**, and whoever's workouts that week earn more points
@@ -30,7 +30,7 @@ Android, iOS and desktop, and updates itself in the background.
 | Persistence | In-memory demo backend and Firestore repositories (contract- and rules-tested on the Firestore emulator) |
 | Auth | Firebase Auth (Google, Apple, email) behind an `AuthService`; demo mode auto-signs in |
 | CI (format, lint, type-check, unit, emulator, e2e, builds) | Done |
-| CD (Firebase Hosting, GitHub Pages demo) | Workflows done; Hosting needs secrets |
+| CD (Firebase Hosting with PR previews, GitHub Pages demo) | Workflows done; Hosting needs two secrets (`scripts/setup-ci.sh`) |
 
 ## Live demo
 

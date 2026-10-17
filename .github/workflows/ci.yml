@@ -1,37 +1,56 @@
+# Verifies every change: formatting, lint, type-check, unit tests, Firestore emulator tests,
+# production builds and end-to-end journeys.
 name: CI
 
 on:
   push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch:
+    branches-ignore: [main] # main is verified by the Deploy workflow before it deploys
+  pull_request: # only runs for forks; branches in this repository are covered by `push`
+  workflow_call:
 
+permissions:
+  contents: read
+
+# Scoped to the calling workflow: when Deploy calls this workflow, `github.ref` is refs/heads/main,
+# and so is a pull_request event's for a PR that has just been merged. Sharing a group would let
+# that PR run cancel the deploy's verification.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   quality:
     name: Format, lint, type-check, unit tests
+    # The other jobs need this one, so they are skipped with it.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
+
       - run: npm ci
+
       - name: Check formatting
         run: npm run format:check
+
       - name: Lint
         run: npm run lint
+
       - name: Icon font covers every icon used
         run: npm run icons:check
+
       - name: Type-check (app and specs)
         run: npx tsc --noEmit -p tsconfig.app.json && npx tsc --noEmit -p tsconfig.spec.json
+
       - name: Unit tests
-        run: npx ng test --watch=false --coverage
-      - uses: actions/upload-artifact@v4
+        run: npm run test:ci
+
+      - uses: actions/upload-artifact@v6
         with:
           name: coverage
           path: coverage/
@@ -39,36 +58,56 @@ jobs:
 
   firestore:
     name: Firestore contract tests (emulator)
-    runs-on: ubuntu-latest
     needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
-      - uses: actions/setup-java@v4
+
+      # The Firestore emulator runs on Java.
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: 21
+
+      - name: Cache Firebase emulators
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - run: npm ci
-      - run: npm run test:firestore
+
+      - name: Firestore tests
+        run: npm run test:firestore
 
   build:
     name: Build (demo and Firebase)
-    runs-on: ubuntu-latest
     needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
+
       - run: npm ci
-      - run: npm run build
+
+      - name: Build the demo
+        run: npm run build
+
       - name: Build the Firebase configuration too
         run: npx ng build --configuration production,firebase --output-path dist/firebase
-      - uses: actions/upload-artifact@v4
+
+      - uses: actions/upload-artifact@v6
         with:
           name: web
           path: dist/peaches/browser
@@ -76,18 +115,25 @@ jobs:
 
   e2e:
     name: End-to-end (Playwright)
-    runs-on: ubuntu-latest
     needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
+
       - run: npm ci
+
       - run: npx playwright install --with-deps chromium
-      - run: npm run e2e
-      - uses: actions/upload-artifact@v4
+
+      - name: End-to-end journeys
+        run: npm run e2e
+
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: playwright-report
