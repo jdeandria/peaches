@@ -12,6 +12,7 @@ import { DistanceUnits, WeightUnits } from '../../../domain/core/units';
 import { LoggableExercise } from '../../../domain/exercises/loggable';
 import { UnitSystem } from '../../../domain/models/training';
 import { entryOf, ExerciseLogEntry, SetLog } from '../../../domain/models/workout-log';
+import { implausibility } from '../../../domain/services/plausibility';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { Fmt } from '../../format';
 
@@ -103,6 +104,13 @@ export class SetLoggerSheet {
   protected readonly lastTime = this.data.previous
     ? `Last time: ${Fmt.entrySummary(this.data.previous, this.units)}`
     : null;
+
+  /** Why Save was refused, until the sets it was refused for change. */
+  private readonly refused = signal<{ sets: SetDraft[]; message: string } | null>(null);
+  protected readonly problem = computed(() => {
+    const refused = this.refused();
+    return refused?.sets === this.sets() ? refused.message : null;
+  });
 
   protected readonly canAdd = computed(() => this.sets().length < MAX_SETS);
   protected readonly canRemove = computed(() => this.sets().length > 1);
@@ -200,13 +208,23 @@ export class SetLoggerSheet {
     this.committed = this.committed.slice(0, -1);
   }
 
+  /**
+   * Hands back the entry, unless its numbers are implausible: then the sheet
+   * stays open with the sets as typed (the log would refuse them anyway).
+   */
   protected save(): void {
     const sets: SetLog[] = [];
     for (const draft of this.sets()) {
       const set = this.toSet(draft);
       if (set) sets.push(set);
     }
-    this.ref.dismiss(entryOf(this.exercise, { sets, rpe: this.rpe() }));
+    const entry = entryOf(this.exercise, { sets, rpe: this.rpe() });
+    const message = implausibility(entry);
+    if (message) {
+      this.refused.set({ sets: this.sets(), message });
+      return;
+    }
+    this.ref.dismiss(entry);
   }
 
   /** A typed set as stored, or null if nothing usable was entered. */

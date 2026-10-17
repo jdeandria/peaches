@@ -188,3 +188,18 @@ h3 {
     flex: 1;
   }
 }
+
+.problem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  border-radius: var(--pch-radius-medium);
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+
+  .material-symbols-rounded {
+    font-size: 20px;
+  }
+}

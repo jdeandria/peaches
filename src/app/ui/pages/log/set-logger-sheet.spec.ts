@@ -215,6 +215,21 @@ describe('SetLoggerSheet', () => {
     expect(entry.distanceKind).toBeNull();
   });
 
+  it('keeps the sheet open, sets intact, when the numbers are implausible', async () => {
+    const { dialog, result } = await open(pushUp, { previous: last(pushUp, [{ reps: 5000 }]) });
+    let settled = false;
+    void result.then(() => (settled = true));
+    await click(buttons(dialog, 'Save')[0]);
+    expect(settled).toBe(false);
+    expect(document.body.contains(dialog)).toBe(true);
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toContain(
+      'more than 1000 reps in one set',
+    );
+    // Changing the sets clears the complaint until the next Save.
+    await click(buttons(dialog, 'Fewer reps')[0]);
+    expect(dialog.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it('adds and removes sets', async () => {
     const { dialog, result } = await open(pushUp, {
       previous: last(pushUp, [{ reps: 12 }, { reps: 12 }]),

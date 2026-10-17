@@ -31,7 +31,6 @@ import { Card } from '../../layout/card';
             [disabled]="busy()"
             (click)="run(signInWithGoogle)"
           >
-            <span class="material-symbols-rounded" aria-hidden="true">g_mobiledata</span>
             Continue with Google
           </button>
         }
@@ -42,7 +41,6 @@ import { Card } from '../../layout/card';
             [disabled]="busy()"
             (click)="run(signInWithApple)"
           >
-            <span class="material-symbols-rounded" aria-hidden="true">ios</span>
             Continue with Apple
           </button>
         }

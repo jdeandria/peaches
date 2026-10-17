@@ -141,6 +141,12 @@
   allowDeselect
 />
 
+@if (problem(); as message) {
+  <p class="problem pch-body-medium" role="alert">
+    <span class="material-symbols-rounded" aria-hidden="true">error</span>{{ message }}
+  </p>
+}
+
 <div class="actions">
   <button matButton="filled" type="button" class="save" (click)="save()">Save</button>
 </div>
