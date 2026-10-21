@@ -227,6 +227,11 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
       setDoc(sharedRef(client('b'), 'l3'), { ...submitted('b', 'l3'), status: 'inProgress' }),
     ).rejects.toThrow();
     await expect(setDoc(sharedRef(client('c'), 'l4'), submitted('c', 'l4'))).rejects.toThrow();
+    // Heart rate is private: it never reaches a shared copy.
+    const heartRate = { avgBpm: 140, minBpm: 90, maxBpm: 172, minutes: 30 };
+    await expect(
+      setDoc(sharedRef(client('b')), { ...submitted('b'), heartRate }),
+    ).rejects.toThrow();
   });
 
   it('members vote with their own ballot only', async () => {

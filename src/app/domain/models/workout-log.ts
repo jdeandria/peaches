@@ -13,6 +13,12 @@ import {
   stringOrNull,
 } from '../core/json';
 import { LOG_TRACKS, LoggableExercise, LogTrack } from '../exercises/loggable';
+import {
+  HeartRateSummary,
+  heartRateSummaryFromJson,
+  heartRateSummaryToJson,
+  MAX_HEART_RATE_WINDOW_MS,
+} from './heart-rate';
 import { DISTANCE_KINDS, DistanceKind } from './scoring';
 
 /** What was actually done in one set. */
@@ -154,6 +160,11 @@ export interface WorkoutLog {
   readonly notes: string | null;
   /** Crates the log is shared with. */
   readonly sharedWith: readonly string[];
+  /**
+   * The Peach's heart rate during the session, from a connected wearable.
+   * Private: it is left out of the copies shared with Crates.
+   */
+  readonly heartRate: HeartRateSummary | null;
 }
 
 export type NewWorkoutLog = Pick<WorkoutLog, 'id' | 'peachId' | 'startedAt'> & Partial<WorkoutLog>;
@@ -167,6 +178,7 @@ export function workoutLog(init: NewWorkoutLog): WorkoutLog {
     timerStartedAt: null,
     notes: null,
     sharedWith: [],
+    heartRate: null,
     ...init,
   };
 }
@@ -192,6 +204,25 @@ export function pauseTimer(log: WorkoutLog, now: Date): WorkoutLog {
 /** Starts the clock again. */
 export function resumeTimer(log: WorkoutLog, now: Date): WorkoutLog {
   return log.timerStartedAt ? log : { ...log, timerStartedAt: now };
+}
+
+/**
+ * The time a log's heart rate is read over: from its start until now, or
+ * until it was finished, and never longer than a session can be.
+ */
+export function heartRateSpan(log: WorkoutLog, now: Date): { from: Date; to: Date } {
+  const from = log.startedAt;
+  let end: Date;
+  if (!isSubmitted(log)) end = now;
+  else if (log.completedAt && log.completedAt > from) end = log.completedAt;
+  else end = new Date(from.getTime() + log.durationSeconds * 1000);
+  const latest = from.getTime() + MAX_HEART_RATE_WINDOW_MS;
+  return { from, to: new Date(Math.min(end.getTime(), latest)) };
+}
+
+/** The log as its Crates see it: without the Peach's private heart rate. */
+export function sharedCopyOf(log: WorkoutLog): WorkoutLog {
+  return log.heartRate === null ? log : { ...log, heartRate: null };
 }
 
 export function entryFor(log: WorkoutLog, exerciseId: string): ExerciseLogEntry | undefined {
@@ -276,6 +307,7 @@ export function workoutLogFromJson(json: JsonMap): WorkoutLog {
     timerStartedAt: dateTimeOrNullFromJson(json['timerStartedAt']),
     notes: stringOrNull(json['notes']),
     sharedWith: stringListFromJson(json['sharedWith']),
+    heartRate: heartRateSummaryFromJson(json['heartRate']),
   };
 }
 
@@ -291,5 +323,6 @@ export function workoutLogToJson(log: WorkoutLog): JsonMap {
     timerStartedAt: log.timerStartedAt ? dateTimeToJson(log.timerStartedAt) : null,
     notes: log.notes,
     sharedWith: [...log.sharedWith],
+    heartRate: log.heartRate ? heartRateSummaryToJson(log.heartRate) : null,
   };
 }

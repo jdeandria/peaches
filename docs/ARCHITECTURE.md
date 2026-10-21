@@ -17,9 +17,10 @@ ui (Angular components)  ──►  state (signals, DI)  ──►  application 
   or a database, which is why it is where most tests live.
 * **application** holds use cases (`CrateService`, `SeasonService`,
   `LoggingService`, `VotingService`, `LineupService`, `DisputeService`,
-  `SessionService`), the
-  `AuthService` boundary with a `DemoAuthService`, and `AppContainer`, the
-  single composition root. Also framework-free.
+  `SessionService`, `HeartRateService`), the
+  `AuthService` boundary with a `DemoAuthService`, the `HeartRateSource`
+  boundary (Google Health, or a pretend watch in the demo), and
+  `AppContainer`, the single composition root. Also framework-free.
 * **data** implements the repository interfaces twice: in memory (demo
   mode, tests) and on Firestore with the Firebase JS SDK. `startBackend` in
   `state/backend.ts` is the only place that knows which is which; the
@@ -72,7 +73,7 @@ Peach ──< WorkoutLog (private; shared on submit) ──> copies under each C
 | `Round` | `id` | One week (`weekStart`, a Monday in the Crate's zone). |
 | `Matchup` | `id` | Home vs away for a week (away null = bye). Holds the `MatchupResult` once the week closes. |
 | `Lineup` | `(seasonId, roundId, peachId)` | A Peach's pledges for a week; `locksAt` is when the week starts. |
-| `WorkoutLog` | `id` | What a Peach did: entries per exercise (each with how it is logged copied in: name, track, load, distance kind), sets, the session clock, notes. Belongs to the Peach; `sharedWith` lists the Crates it is shared with. Custom exercises exist only in entries (ids start `custom-`). |
+| `WorkoutLog` | `id` | What a Peach did: entries per exercise (each with how it is logged copied in: name, track, load, distance kind), sets, the session clock, notes, and optionally a `heartRate` summary from a wearable. Belongs to the Peach; `sharedWith` lists the Crates it is shared with. Custom exercises exist only in entries (ids start `custom-`). |
 
 Derived, never stored: category totals and points, week scores (pledges
 and battles), live matchup scores, the Crate's current rules (the tally of
@@ -96,6 +97,8 @@ ballots), dispute outcomes, standings.
   with results.
 * **Hand-written JSON**, no decorators or code generation: the domain stays
   plain TypeScript and the stored shape is explicit.
+* **Heart rate is private** (DECISIONS #29): `sharedCopyOf` drops it from
+  the copies Crates read, and the rules refuse a copy that carries it.
 
 ## Firestore layout
 
@@ -133,9 +136,36 @@ but the owner may change only their own vote; a lineup is written by its
 Peach only before it locks, and read by crate-mates only after; only
 owners/admins write schedules, and nobody changes a Season's participants
 or rules. A crate-mate's lineup that is still secret reads as missing in
-`getLineup`.
+`getLineup`. A shared copy never carries the Peach's heart rate.
 `src/app/data/firestore/firestore-rules.spec.ts` tests these rules on the
 emulator.
+
+## Heart rate (Google Health)
+
+The log screen reads the Peach's heart rate from the
+[Google Health API](https://developers.google.com/health) (v4), which serves
+what Fitbit and Pixel Watch devices (and other apps syncing to Google
+Health) record. There is still no server:
+
+* **Access** comes from Google Identity Services' token model in the
+  browser (`data/google-health/google-health-source.ts`): one scope,
+  `googlehealth.health_metrics_and_measurements.readonly`, and a token that
+  lasts about an hour, kept in memory only. It is separate from signing in,
+  so it works for Apple and email accounts too. Connecting again is one tap
+  without a consent screen.
+* **Reading** is one `POST users/me/dataTypes/heart-rate/dataPoints:rollUp`
+  over the session in one-minute windows (`google-health-client.ts`).
+  Google reconciles devices and drops time the watch wasn't worn; the domain
+  (`summarizeHeartRate`) turns the windows into a time-weighted average,
+  max and min. The span is the session's start to now, or to its finish
+  (`heartRateSpan`), capped at ten hours.
+* **When**: on opening the log screen, every minute while it is open and
+  visible, just before Finish, and on request for a finished log
+  (`HeartRateService.refresh`). A read that finds nothing keeps the summary
+  the log has.
+
+The demo build uses `DemoHeartRateSource`, a pretend watch whose readings
+are a pure function of the minute.
 
 ### No server
 

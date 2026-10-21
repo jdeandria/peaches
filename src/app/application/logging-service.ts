@@ -1,6 +1,7 @@
 import { IdGenerator } from '../domain/core/ids';
 import { isActiveMembership } from '../domain/models/crate';
 import { SharedExercise } from '../domain/models/crate-exercise';
+import { HeartRateSummary } from '../domain/models/heart-rate';
 import {
   ExerciseLogEntry,
   isSubmitted,
@@ -85,6 +86,20 @@ export class LoggingService {
       }
       return updated;
     });
+  }
+
+  /**
+   * Keeps the heart rate read from the Peach's wearable on their log,
+   * before or after submitting. It stays private: shared copies leave it out.
+   */
+  async recordHeartRate(logId: string, summary: HeartRateSummary): Promise<WorkoutLog> {
+    const log = await this.require(logId);
+    const same =
+      log.heartRate !== null &&
+      (Object.keys(summary) as (keyof HeartRateSummary)[]).every(
+        (k) => log.heartRate?.[k] === summary[k],
+      );
+    return same ? log : this.update(logId, (l) => ({ ...l, heartRate: summary }));
   }
 
   /** Stops the clock while the log screen is closed; a no-op once submitted. */

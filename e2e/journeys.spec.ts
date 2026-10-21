@@ -118,6 +118,21 @@ test('dispute a crate-mate’s numbers and vote on them', async ({ page }) => {
   await expect(page.getByText('Disputed. Your crate-mates can now vote.')).toBeVisible();
 });
 
+test('track heart rate while logging', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('link', { name: 'Start' }).click();
+  const heart = page.getByRole('region', { name: 'Heart rate' });
+  await expect(heart.getByText('See it while you log, from Google Health (demo)')).toBeVisible();
+  await heart.getByRole('button', { name: 'Track heart rate' }).click();
+  // The demo watch syncs a reading a minute; it is read every minute.
+  await page.clock.fastForward('20:00');
+  const live = page.getByRole('region', { name: /bpm/ });
+  await expect(live.getByText(/from Google Health \(demo\)/)).toBeVisible();
+  await expect(live.getByText('Avg')).toBeVisible();
+  await live.getByRole('button', { name: 'Stop reading heart rate' }).click();
+  await expect(page.getByRole('button', { name: 'Track heart rate' })).toBeVisible();
+});
+
 test('edit a finished workout’s time', async ({ page }) => {
   await openApp(page);
   await page.locator('a[pch-list-row][href^="/log/"]').first().click();

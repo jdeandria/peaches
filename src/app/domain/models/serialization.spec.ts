@@ -256,6 +256,15 @@ describe('model JSON round trips', () => {
     expect(workoutLogFromJson(viaJson(workoutLogToJson(log)))).toEqual(log);
     const running = { ...log, timerStartedAt: now };
     expect(workoutLogFromJson(viaJson(workoutLogToJson(running)))).toEqual(running);
+    const withHeartRate = {
+      ...log,
+      heartRate: { avgBpm: 138, minBpm: 88, maxBpm: 171, minutes: 41 },
+    };
+    expect(workoutLogFromJson(viaJson(workoutLogToJson(withHeartRate)))).toEqual(withHeartRate);
+    // Logs written before heart rate existed read as having none.
+    const older = workoutLogToJson(log);
+    delete older['heartRate'];
+    expect(workoutLogFromJson(viaJson(older)).heartRate).toBeNull();
     expect(isSubmitted(log)).toBe(true);
     expect(totalSets(log)).toBe(3);
     expect(entryFor(log, 'bw-run')?.distanceKind).toBe('runWalk');

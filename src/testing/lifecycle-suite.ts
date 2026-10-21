@@ -2,8 +2,10 @@ import { firstValueFrom } from 'rxjs';
 
 import { AppContainer } from '../app/application/app-container';
 import { DomainError } from '../app/application/errors';
+import { HeartRateService, HeartRateSource } from '../app/application/heart-rate';
 import { localDate } from '../app/domain/core/local-date';
 import { Crate } from '../app/domain/models/crate';
+import { HeartRateWindow } from '../app/domain/models/heart-rate';
 import { peach } from '../app/domain/models/peach';
 import { SESSION_TIME } from '../app/domain/models/dispute';
 import {
@@ -226,6 +228,59 @@ export function runLifecycleSuite(
       await expect(app.loggingService.removeEntry(log.id, 'bb-back-squat')).rejects.toBeInstanceOf(
         DomainError,
       );
+    });
+
+    it('keeps the heart rate of a workout on the Peach’s log, never on the shared copy', async () => {
+      const crate = await crateWithMembers(['a', 'b']);
+      // A watch that synced one reading a minute, at 120 then 150 bpm.
+      const readings: HeartRateWindow[] = [];
+      const asked: [Date, Date][] = [];
+      const source: HeartRateSource = {
+        name: 'Test watch',
+        connected: true,
+        prepare: async () => undefined,
+        connect: async () => undefined,
+        disconnect: async () => undefined,
+        windows: async (from, to) => {
+          asked.push([from, to]);
+          return readings.filter((w) => w.start >= from && w.end <= to);
+        },
+      };
+      const heartRate = new HeartRateService({
+        source,
+        logs: app.logs,
+        logging: app.loggingService,
+      });
+      const at = (minutes: number) => new Date(now.getTime() + minutes * 60_000);
+      const minute = (m: number, bpm: number) => ({
+        start: at(m),
+        end: at(m + 1),
+        avgBpm: bpm,
+        minBpm: bpm - 5,
+        maxBpm: bpm + 5,
+      });
+
+      const log = await app.loggingService.startLog('a', now);
+      // Nothing synced yet: nothing to keep.
+      expect(await heartRate.refresh(log.id, at(5))).toEqual({ summary: null, latest: null });
+      expect((await app.logs.getById(log.id))?.heartRate).toBeNull();
+
+      readings.push(minute(0, 120), minute(1, 150));
+      const live = await heartRate.refresh(log.id, at(10));
+      expect(asked.at(-1)).toEqual([now, at(10)]);
+      expect(live.latest).toEqual({ bpm: 150, at: at(2) });
+      expect(live.summary).toEqual({ avgBpm: 135, minBpm: 115, maxBpm: 155, minutes: 2 });
+      expect((await app.logs.getById(log.id))?.heartRate).toEqual(live.summary);
+
+      // After finishing, the watch syncs the rest; reading again fills it in.
+      await app.loggingService.recordEntry(log.id, run(5));
+      await app.loggingService.submit(log.id, at(30));
+      readings.push(minute(20, 165));
+      const later = await heartRate.refresh(log.id, at(90));
+      expect(asked.at(-1)).toEqual([now, at(30)]);
+      expect(later.summary).toMatchObject({ maxBpm: 170, minutes: 3 });
+      expect((await app.logs.getById(log.id))?.heartRate).toEqual(later.summary);
+      expect((await app.logs.getShared(crate.id, log.id))?.heartRate).toBeNull();
     });
   });
 

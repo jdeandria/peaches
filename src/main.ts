@@ -3,7 +3,7 @@ import { bootstrapApplication } from '@angular/platform-browser';
 import { App } from './app/app';
 import { appConfig } from './app/app.config';
 import { startBackend } from './app/state/backend';
-import { APP_CONTAINER, AUTH_SERVICE } from './app/state/tokens';
+import { APP_CONTAINER, AUTH_SERVICE, HEART_RATE_SOURCE } from './app/state/tokens';
 import { environment } from './environments/environment';
 
 /**
@@ -21,6 +21,7 @@ async function main(): Promise<void> {
       ...appConfig.providers,
       { provide: APP_CONTAINER, useValue: backend.container },
       { provide: AUTH_SERVICE, useValue: backend.auth },
+      { provide: HEART_RATE_SOURCE, useValue: backend.heartRate },
     ],
   });
 }

@@ -5,10 +5,12 @@ import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
+import { DemoHeartRateSource } from '../../../data/demo/demo-heart-rate';
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { AppState } from '../../../state/app-state';
-import { isSubmitted } from '../../../domain/models/workout-log';
-import { seededBackend, settle, TestBackend } from '../../../../testing/test-app';
+import { CLOCK, HEART_RATE_SOURCE } from '../../../state/tokens';
+import { exerciseLogEntry, isSubmitted, setLog } from '../../../domain/models/workout-log';
+import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { LogPage } from './log.page';
 
 @Component({ template: '' })
@@ -193,5 +195,79 @@ describe('LogPage', () => {
   it('says when a workout does not exist', async () => {
     const { el } = await render({ logId: 'nope' });
     expect(text(el)).toContain('Workout not found');
+  });
+
+  describe('heart rate', () => {
+    let now: Date;
+    let source: DemoHeartRateSource;
+    const minutesLater = (m: number) => (now = new Date(FIXED_NOW.getTime() + m * 60_000));
+
+    beforeEach(() => {
+      now = FIXED_NOW;
+      source = new DemoHeartRateSource();
+      TestBed.overrideProvider(CLOCK, { useValue: () => now });
+      TestBed.overrideProvider(HEART_RATE_SOURCE, { useValue: source });
+    });
+
+    it('is tracked while logging once connected, and kept on the finished log only', async () => {
+      const { f, el } = await render();
+      expect(text(el.querySelector('.heart'))).toContain(
+        'See it while you log, from Google Health (demo)',
+      );
+
+      minutesLater(20);
+      button(el, 'Track heart rate')!.click();
+      await stable(f);
+      expect(source.connected).toBe(true);
+      const heart = text(el.querySelector('.heart'))!;
+      expect(heart).toMatch(/\d+ bpm/);
+      expect(heart).toContain('from Google Health (demo)');
+      expect(heart).toMatch(/Avg\s*\d+\s*Max\s*\d+\s*Min\s*\d+/);
+      const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+      expect(draft.heartRate?.minutes).toBe(20);
+
+      // Finishing reads it once more, up to the finish.
+      await backend.container.loggingService.recordEntry(
+        draft.id,
+        exerciseLogEntry({ exerciseId: 'bw-push-up', sets: [setLog({ reps: 20 })] }),
+      );
+      await stable(f);
+      minutesLater(30);
+      Array.from(el.querySelectorAll('button'))
+        .find((b) => text(b)?.includes('Finish ·'))!
+        .click();
+      await stable(f);
+      const done = (await backend.container.logs.getById(draft.id))!;
+      expect(isSubmitted(done)).toBe(true);
+      expect(done.heartRate?.minutes).toBe(30);
+      const crate = done.sharedWith[0];
+      expect((await backend.container.logs.getShared(crate, done.id))?.heartRate).toBeNull();
+    });
+
+    it('can be stopped', async () => {
+      await source.connect();
+      const { f, el } = await render();
+      button(el, 'Stop reading heart rate')!.click();
+      await stable(f);
+      expect(source.connected).toBe(false);
+      expect(button(el, 'Track heart rate')).toBeDefined();
+    });
+
+    it('can be added to a finished workout after the watch syncs', async () => {
+      const [latest] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+      now = new Date(latest.completedAt!.getTime() + 3_600_000);
+      const { f, el } = await render({ logId: latest.id });
+      expect(text(el.querySelector('.heart'))).toContain('once your watch has synced');
+      button(el, 'Add heart rate')!.click();
+      await stable(f);
+      expect((await backend.container.logs.getById(latest.id))!.heartRate).not.toBeNull();
+      expect(text(el.querySelector('.heart'))).toMatch(/Avg\s*\d+\s*Max\s*\d+\s*Min\s*\d+/);
+      expect(button(el, 'Update')).toBeDefined();
+    });
+  });
+
+  it('offers no heart rate when the build has no source', async () => {
+    const { el } = await render();
+    expect(el.querySelector('.heart')).toBeNull();
   });
 });

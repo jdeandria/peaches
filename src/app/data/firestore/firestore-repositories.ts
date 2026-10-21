@@ -64,7 +64,12 @@ import {
   seasonFromJson,
   seasonToJson,
 } from '../../domain/models/season';
-import { WorkoutLog, workoutLogFromJson, workoutLogToJson } from '../../domain/models/workout-log';
+import {
+  sharedCopyOf,
+  WorkoutLog,
+  workoutLogFromJson,
+  workoutLogToJson,
+} from '../../domain/models/workout-log';
 import {
   BallotRepository,
   CrateRepository,
@@ -465,13 +470,14 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
   /**
    * The private log, its copy under each Crate and the exercises it shares
    * with them, in one batch. Crate members can read the copies but never
-   * the Peach's own log collection, which also holds unsubmitted drafts.
+   * the Peach's own log collection, which also holds unsubmitted drafts
+   * and the heart rate the copies leave out.
    */
   async saveSubmitted(log: WorkoutLog): Promise<void> {
-    const json = workoutLogToJson(log);
+    const copy = workoutLogToJson(sharedCopyOf(log));
     const batch = writeBatch(this.db);
-    batch.set(doc(this.col, log.id), json);
-    for (const crateId of log.sharedWith) batch.set(doc(this.shared(crateId), log.id), json);
+    batch.set(doc(this.col, log.id), workoutLogToJson(log));
+    for (const crateId of log.sharedWith) batch.set(doc(this.shared(crateId), log.id), copy);
     for (const e of sharedExercisesOf(log)) {
       batch.set(
         doc(this.exercises(e.crateId), sharedExerciseKey(e.exercise.id, e.peachId)),

@@ -43,7 +43,7 @@ service cloud.firestore {
 
       // Copies of submitted logs, written by their Peach in the same batch
       // as the log itself, and again whenever they edit it. Members read
-      // them to score matchups.
+      // them to score matchups. Heart rate stays on the Peach's own log.
       match /logs/{logId} {
         allow read: if isMember(crateId);
         allow create, update: if isSelf(request.resource.data.peachId)
@@ -51,7 +51,8 @@ service cloud.firestore {
                               && isMember(crateId)
                               && request.resource.data.id == logId
                               && request.resource.data.status == 'submitted'
-                              && crateId in request.resource.data.sharedWith;
+                              && crateId in request.resource.data.sharedWith
+                              && request.resource.data.get('heartRate', null) == null;
         allow delete: if false;
       }
 

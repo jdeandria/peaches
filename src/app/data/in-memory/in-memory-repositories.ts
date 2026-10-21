@@ -12,7 +12,7 @@ import { Dispute, DisputeVote } from '../../domain/models/dispute';
 import { Lineup, lineupKey } from '../../domain/models/lineup';
 import { Peach } from '../../domain/models/peach';
 import { involves, Matchup, Round, Season } from '../../domain/models/season';
-import { isSubmitted, WorkoutLog } from '../../domain/models/workout-log';
+import { isSubmitted, sharedCopyOf, WorkoutLog } from '../../domain/models/workout-log';
 import {
   BallotRepository,
   CrateRepository,
@@ -191,7 +191,7 @@ export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
     this.store.put(log);
   }
 
-  /** The shared copies are the log itself. */
+  /** The shared copies are the log itself, read through {@link sharedCopyOf}. */
   async saveSubmitted(log: WorkoutLog): Promise<void> {
     this.store.put(log);
     this.exercises.putAll(sharedExercisesOf(log));
@@ -199,20 +199,22 @@ export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
 
   async getShared(crateId: string, logId: string): Promise<WorkoutLog | null> {
     const log = this.store.get(logId);
-    return log && this.isShared(log, crateId) ? log : null;
+    return log && this.isShared(log, crateId) ? sharedCopyOf(log) : null;
   }
 
   async sharedWith(crateId: string, from: Date, to: Date): Promise<WorkoutLog[]> {
     return this.store
       .where((l) => this.isShared(l, crateId) && l.startedAt >= from && l.startedAt < to)
-      .sort(newestLogFirst);
+      .sort(newestLogFirst)
+      .map(sharedCopyOf);
   }
 
   async recentlySharedWith(crateId: string, limit: number): Promise<WorkoutLog[]> {
     return this.store
       .where((l) => this.isShared(l, crateId))
       .sort(newestLogFirst)
-      .slice(0, limit);
+      .slice(0, limit)
+      .map(sharedCopyOf);
   }
 
   async exercisesSharedWith(crateId: string): Promise<SharedExercise[]> {

@@ -24,6 +24,59 @@
       }
     </div>
 
+    @if (heart(); as h) {
+      <section class="heart" [class.live]="h.live" [pchStagger]="0" aria-labelledby="heart-title">
+        <span class="material-symbols-rounded pch-icon-filled" aria-hidden="true">favorite</span>
+        <h2 id="heart-title" class="pch-title-medium title">
+          @if (h.bpm !== null) {
+            <span class="bpm pch-headline-small">{{ h.bpm }}</span> bpm
+          } @else {
+            Heart rate
+          }
+        </h2>
+        <span class="pch-body-small hint">{{ h.hint }}</span>
+        @if (h.summary; as s) {
+          <dl class="stats pch-body-medium">
+            <div>
+              <dt>Avg</dt>
+              <dd>{{ s.avgBpm }}</dd>
+            </div>
+            <div>
+              <dt>Max</dt>
+              <dd>{{ s.maxBpm }}</dd>
+            </div>
+            <div>
+              <dt>Min</dt>
+              <dd>{{ s.minBpm }}</dd>
+            </div>
+          </dl>
+        }
+        <div class="actions">
+          @if (h.action) {
+            <button
+              matButton="tonal"
+              type="button"
+              [disabled]="heartRate.connecting()"
+              (click)="trackHeartRate()"
+            >
+              {{ h.action }}
+            </button>
+          }
+          @if (h.canStop) {
+            <button
+              matIconButton
+              type="button"
+              matTooltip="Stop reading heart rate"
+              aria-label="Stop reading heart rate"
+              (click)="stopHeartRate()"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">link_off</span>
+            </button>
+          }
+        </div>
+      </section>
+    }
+
     @if (pledges().length > 0) {
       <h2 id="pledges-caption" class="caption pch-label-large" [pchStagger]="0">
         Your pledges this week

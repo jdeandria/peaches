@@ -494,6 +494,13 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       expect(await repo.getShared('c9', 'l1')).toBeNull();
     });
 
+    it('keeps heart rate on the Peach’s own log, out of the shared copies', async () => {
+      const heartRate = { avgBpm: 141, minBpm: 92, maxBpm: 174, minutes: 38 };
+      await repo.saveSubmitted({ ...full, heartRate });
+      expect((await repo.getById('l1'))?.heartRate).toEqual(heartRate);
+      expect(await repo.getShared('c1', 'l1')).toEqual(full);
+    });
+
     it('saveSubmitted shares each exercise, one per exercise per Peach, and edits overwrite', async () => {
       await repo.saveSubmitted(full);
       await repo.saveSubmitted({ ...full, id: 'l2', peachId: 'b', sharedWith: ['c1'] });

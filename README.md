@@ -9,7 +9,9 @@ which earn a bonus when hit and a battle against their opponent. Crate
 members vote on the rules (what miles run, weight moved, reps and active
 minutes are worth, and how lineups score), see every exercise their
 crate-mates log, and can dispute dubious numbers by majority vote. The log
-screen times the session itself, so logging is a few taps.
+screen times the session itself, so logging is a few taps, and shows the
+Peach's heart rate from Google Health (Fitbit, Pixel Watch) once they
+connect it.
 
 Built as an installable **Progressive Web App** with Angular 22 and Angular
 Material (Material 3), on a pure-TypeScript domain core that is unit tested
@@ -23,6 +25,7 @@ Android, iOS and desktop, and updates itself in the background.
 | Domain models and JSON | Done, tested |
 | Exercise catalog (440 exercises) | Done, tested |
 | Solo logging with a session clock, editable after, category scoring, plausibility checks | Done, tested |
+| Heart rate while logging, from Google Health (private to the Peach, never scored) | Done, tested; Firebase builds need an OAuth client id (docs/RELEASING.md) |
 | Weekly round-robin seasons, lineups (pledges and battles), rules voting, standings | Done, tested |
 | Exercises shared with Crates as they are logged; disputes by majority vote | Done, tested |
 | Angular UI (Material 3, light/dark, adaptive layout) | Done, unit + end-to-end tested |

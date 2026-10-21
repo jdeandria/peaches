@@ -14,6 +14,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
+import { HeartRateUpdate } from '../../../application/heart-rate';
 import { localDateOfLocal } from '../../../domain/core/local-date';
 import { LoggableExercise } from '../../../domain/exercises/loggable';
 import { CategoryWeights, SCORING_CATEGORIES } from '../../../domain/models/scoring';
@@ -28,6 +29,7 @@ import {
 import { lastEntry } from '../../../domain/services/last-entry';
 import { MetricExtractor } from '../../../domain/services/metric-extractor';
 import { AppState } from '../../../state/app-state';
+import { HeartRate } from '../../../state/heart-rate';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { Fmt } from '../../format';
 import { Card } from '../../layout/card';
@@ -43,6 +45,9 @@ import { openSetLogger } from './set-logger-sheet';
 
 /** How often the clock ticks while a workout is on. */
 const CLOCK_MS = 1000;
+
+/** How often heart rate is read while a workout is on; watches sync every few minutes. */
+const HEART_RATE_MS = 60_000;
 
 interface EntryView {
   readonly entry: ExerciseLogEntry;
@@ -84,6 +89,7 @@ export class LogPage {
   private readonly sheet = inject(MatBottomSheet);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
+  protected readonly heartRate = inject(HeartRate);
 
   protected readonly busy = signal(false);
 
@@ -113,6 +119,46 @@ export class LogPage {
     const log = this.log();
     return log ? Fmt.clock(elapsedSeconds(log, this.tick())) : '';
   });
+
+  /** The newest heart rate read on this screen, and the log it belongs to. */
+  private readonly heartReading = signal<{ logId: string; update: HeartRateUpdate } | null>(null);
+
+  /** The heart rate panel: live while the workout is on, its summary after. */
+  protected readonly heart = computed(() => {
+    const log = this.log();
+    const hr = this.heartRate;
+    if (!log || !this.mine() || (!hr.available && !log.heartRate)) return null;
+    const reading = this.heartReading();
+    const latest = reading?.logId === log.id ? reading.update.latest : null;
+    const summary = log.heartRate;
+    const connected = hr.available && hr.connected();
+    const live = this.draft() && connected;
+    let hint: string;
+    if (!hr.available) hint = 'During this workout';
+    else if (hr.problem()) hint = hr.problem()!;
+    else if (live && latest) hint = `${this.ago(latest.at)} · from ${hr.sourceName}`;
+    else if (live) hint = `Waiting for your watch to sync with ${hr.sourceName}`;
+    else if (this.draft()) hint = `See it while you log, from ${hr.sourceName}`;
+    else if (summary) hint = 'During this workout';
+    else hint = `Add it from ${hr.sourceName} once your watch has synced`;
+    let action: string | null = null;
+    if (hr.available && !connected) {
+      action = this.draft() ? 'Track heart rate' : summary ? 'Update' : 'Add heart rate';
+    } else if (connected && !this.draft()) action = summary ? 'Update' : 'Add heart rate';
+    return {
+      bpm: live ? (latest?.bpm ?? null) : null,
+      summary,
+      hint,
+      action,
+      live,
+      canStop: connected,
+    };
+  });
+
+  private ago(at: Date): string {
+    const minutes = Math.floor((this.tick().getTime() - at.getTime()) / 60_000);
+    return minutes < 1 ? 'Just now' : `${minutes} min ago`;
+  }
 
   protected readonly title = computed(() => {
     const log = this.log();
@@ -258,6 +304,13 @@ export class LogPage {
     const destroyRef = inject(DestroyRef);
     const timer = setInterval(() => this.tick.set(this.state.now()), CLOCK_MS);
     destroyRef.onDestroy(() => clearInterval(timer));
+    if (this.heartRate.available) {
+      this.heartRate.prepare();
+      const heartTimer = setInterval(() => {
+        if (this.draft() && document.visibilityState === 'visible') void this.readHeartRate();
+      }, HEART_RATE_MS);
+      destroyRef.onDestroy(() => clearInterval(heartTimer));
+    }
     if (this.logId()) return;
 
     // The draft's clock runs only while this page is open and visible.
@@ -275,7 +328,29 @@ export class LogPage {
     const me = this.me();
     if (!me) return;
     const log = await this.state.run((app) => app.loggingService.openDraft(me, this.state.now()));
-    if (log) this.draftId.set(log.id);
+    if (!log) return;
+    this.draftId.set(log.id);
+    void this.readHeartRate();
+  }
+
+  /** Reads the heart rate so far into this log, when connected. */
+  private async readHeartRate(): Promise<void> {
+    const logId = this.id();
+    if (!logId || !this.heartRate.connected()) return;
+    const update = await this.heartRate.refresh(logId);
+    if (update) this.heartReading.set({ logId, update });
+  }
+
+  /** Connects (from the tap) if need be, then reads the heart rate. */
+  protected async trackHeartRate(): Promise<void> {
+    if (!this.heartRate.connected() && !(await this.heartRate.connect())) return;
+    await this.readHeartRate();
+  }
+
+  protected async stopHeartRate(): Promise<void> {
+    await this.heartRate.disconnect();
+    this.heartReading.set(null);
+    this.state.toast(`Stopped reading heart rate from ${this.heartRate.sourceName}.`);
   }
 
   private async pause(): Promise<void> {
@@ -351,6 +426,8 @@ export class LogPage {
     const log = this.log();
     if (!log || this.busy()) return;
     this.busy.set(true);
+    // The heart rate up to the finish, as far as the watch has synced.
+    await this.readHeartRate();
     const done = await this.state.run(
       (app) => app.loggingService.submit(log.id, this.state.now()),
       'Workout logged. Nice work.',

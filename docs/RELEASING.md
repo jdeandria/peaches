@@ -134,6 +134,31 @@ blocked (common in installed iOS PWAs).
 Local emulators: `npx firebase emulators:start` (Auth 9099, Firestore 8080,
 Hosting 5000; see `firebase.json`) then `npm run start:emulator`.
 
+## Google Health (heart rate) in the app
+
+Heart rate tracking is off on Firebase builds until an OAuth client is
+configured. One-time setup, in the Google Cloud project behind the
+Firebase project:
+
+1. APIs & Services → Library → enable the **Google Health API**.
+2. OAuth consent screen (Google Auth Platform): add the scope
+   `https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly`.
+   It is a **restricted** scope: until the app passes Google's verification
+   (and, past 100 users, its annual security assessment), only the test
+   users listed there can connect.
+3. Credentials → Create OAuth client ID → **Web application**. Add every
+   Hosting domain (`https://<project-id>.web.app`, custom domains, any
+   preview channels to try it on) and `http://localhost:4200` as
+   **authorized JavaScript origins**. No redirect URI is needed.
+4. Put the client id in `src/app/data/google-health/google-health-config.ts`
+   and commit it (like the Firebase config, it is not a secret).
+
+The app loads `https://accounts.google.com/gsi/client` and calls
+`https://health.googleapis.com` from the browser; keep both allowed if a
+Content-Security-Policy is ever added. Hosting already sends
+`Cross-Origin-Opener-Policy: same-origin-allow-popups`, which the Google
+window needs.
+
 ## Not yet wired
 
 * Crash reporting and analytics.
