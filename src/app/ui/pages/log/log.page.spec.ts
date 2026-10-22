@@ -7,8 +7,8 @@ import { Router } from '@angular/router';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { AppState } from '../../../state/app-state';
-import { isSubmitted } from '../../../domain/models/workout-log';
-import { seededBackend, settle, TestBackend } from '../../../../testing/test-app';
+import { exerciseLogEntry, isSubmitted, setLog } from '../../../domain/models/workout-log';
+import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { LogPage } from './log.page';
 
 @Component({ template: '' })
@@ -168,6 +168,49 @@ describe('LogPage', () => {
     button(overlay(), 'Save')!.click();
     await stable(f);
     expect((await backend.container.logs.getById(latest.id))!.durationSeconds).toBe(3000);
+  });
+
+  it('resumes a finished workout, clock and all', async () => {
+    const [latest] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    const { f, el } = await render({ logId: latest.id });
+    button(el, 'Resume')!.click();
+    await stable(f);
+    expect(TestBed.inject(Router).url).toBe('/log');
+    expect((await backend.container.logs.getById(latest.id))!.status).toBe('inProgress');
+    f.destroy();
+
+    // The log screen picks it up where it stopped, as the workout under way.
+    const { el: resumed } = await render();
+    expect(text(resumed.querySelector('h1'))).toBe('Sun, Oct 11');
+    expect(text(resumed.querySelector('.subtitle'))).toContain('Resumed');
+    expect(text(resumed.querySelector('.clock'))).toContain('Runs while this screen is open');
+    expect(text(resumed)).toContain('Run');
+    expect(
+      Array.from(resumed.querySelectorAll('button')).some((b) => text(b)?.includes('Finish · ')),
+    ).toBe(true);
+    const log = (await backend.container.logs.getById(latest.id))!;
+    expect(log.timerStartedAt).not.toBeNull();
+    expect(log.durationSeconds).toBe(latest.durationSeconds);
+  });
+
+  it('counts a resumed workout toward this week’s pledges once', async () => {
+    const logging = backend.container.loggingService;
+    const log = await logging.startLog(DEMO_PEACH_ID, new Date(FIXED_NOW.getTime() - 3_600_000));
+    await logging.recordEntry(
+      log.id,
+      exerciseLogEntry({
+        exerciseId: 'bw-run',
+        distanceKind: 'runWalk',
+        sets: [setLog({ meters: 3000, seconds: 900 })],
+      }),
+    );
+    await logging.submit(log.id, FIXED_NOW);
+    await logging.resume(log.id);
+    const { el } = await render();
+    const run = Array.from(el.querySelectorAll('.pledge')).find((p) =>
+      text(p)?.includes('Run & walk'),
+    );
+    expect(text(run)).toContain('3 km of');
   });
 
   it('removes an exercise at once, with Undo to put it back', async () => {

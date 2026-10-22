@@ -168,13 +168,16 @@ service cloud.firestore {
     }
 
     // A Peach's own logs, drafts included, are private: Crates see the
-    // copies shared with them on submit. Only their Peach edits them.
+    // copies shared with them on submit. Only their Peach edits them, and
+    // deletes only a draft that was never submitted (never shared).
     match /workoutLogs/{logId} {
       allow read: if isSelf(resource.data.peachId);
       allow create: if isSelf(request.resource.data.peachId);
       allow update: if isSelf(resource.data.peachId)
                     && request.resource.data.peachId == resource.data.peachId;
-      allow delete: if false;
+      allow delete: if isSelf(resource.data.peachId)
+                    && resource.data.status == 'inProgress'
+                    && resource.data.completedAt == null;
     }
   }
 }

@@ -10,6 +10,7 @@ import {
   collection,
   collectionGroup,
   CollectionReference,
+  deleteDoc,
   doc,
   DocumentReference,
   DocumentSnapshot,
@@ -460,6 +461,10 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
 
   save(log: WorkoutLog): Promise<void> {
     return setDoc(doc(this.col, log.id), workoutLogToJson(log));
+  }
+
+  discardDraft(id: string): Promise<void> {
+    return deleteDoc(doc(this.col, id));
   }
 
   /**

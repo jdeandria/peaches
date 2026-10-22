@@ -22,7 +22,7 @@ Android, iOS and desktop, and updates itself in the background.
 | --- | --- |
 | Domain models and JSON | Done, tested |
 | Exercise catalog (440 exercises) | Done, tested |
-| Solo logging with a session clock, editable after, category scoring, plausibility checks | Done, tested |
+| Solo logging with a session clock, editable and resumable after, category scoring, plausibility checks | Done, tested |
 | Weekly round-robin seasons, lineups (pledges and battles), rules voting, standings | Done, tested |
 | Exercises shared with Crates as they are logged; disputes by majority vote | Done, tested |
 | Angular UI (Material 3, light/dark, adaptive layout) | Done, unit + end-to-end tested |

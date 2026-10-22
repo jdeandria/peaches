@@ -227,6 +227,49 @@ export function runLifecycleSuite(
         DomainError,
       );
     });
+
+    it('a finished workout can be resumed, and its Crates see it again once it is finished', async () => {
+      const crate = await crateWithMembers(['a', 'b']);
+      const log = await logSession('a', utc(10, 9, 7), run(5));
+      // An empty draft makes way for it.
+      const empty = await app.loggingService.openDraft('a', utc(10, 9, 9));
+      const resumed = await app.loggingService.resume(log.id);
+      expect(resumed).toMatchObject({ status: 'inProgress', completedAt: utc(10, 9, 8) });
+      expect(await app.logs.getById(empty.id)).toBeNull();
+      expect((await app.loggingService.currentLog('a'))?.id).toBe(log.id);
+      // Resuming again changes nothing.
+      expect(await app.loggingService.resume(log.id)).toEqual(resumed);
+
+      // The clock carries on from the hour it had, and it keeps its start.
+      const opened = await app.loggingService.openDraft('a', utc(10, 9, 10));
+      expect(opened).toMatchObject({ id: log.id, startedAt: utc(10, 9, 7), durationSeconds: 3600 });
+      await app.loggingService.recordEntry(log.id, squats(10, 60));
+      // It can't be emptied, and until it is finished the Crate sees it as it was.
+      await app.loggingService.removeEntry(log.id, 'bw-run');
+      await expect(app.loggingService.removeEntry(log.id, 'bb-back-squat')).rejects.toBeInstanceOf(
+        DomainError,
+      );
+      await app.loggingService.recordEntry(log.id, run(5));
+      const before = (await app.logs.getShared(crate.id, log.id))!;
+      expect(before.entries.map((e) => e.exerciseId)).toEqual(['bw-run']);
+      expect(isSubmitted(before)).toBe(true);
+
+      const done = await app.loggingService.submit(log.id, utc(10, 9, 11));
+      expect(done).toMatchObject({ durationSeconds: 7200, completedAt: utc(10, 9, 11) });
+      const after = (await app.logs.getShared(crate.id, log.id))!;
+      expect(after.entries.map((e) => e.exerciseId)).toEqual(['bb-back-squat', 'bw-run']);
+      expect(after.durationSeconds).toBe(7200);
+      expect(await app.loggingService.currentLog('a')).toBeNull();
+    });
+
+    it('a workout under way has to be finished before another is resumed', async () => {
+      const log = await logSession('a', utc(10, 9, 7), run(5));
+      const draft = await app.loggingService.openDraft('a', utc(10, 9, 9));
+      await app.loggingService.recordEntry(draft.id, squats(10, 60));
+      await expect(app.loggingService.resume(log.id)).rejects.toBeInstanceOf(DomainError);
+      expect(isSubmitted((await app.logs.getById(log.id))!)).toBe(true);
+      expect((await app.loggingService.currentLog('a'))?.id).toBe(draft.id);
+    });
   });
 
   describe(`${backend} VotingService`, () => {

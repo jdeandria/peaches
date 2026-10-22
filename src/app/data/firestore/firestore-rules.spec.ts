@@ -201,6 +201,25 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     ).rejects.toThrow();
   });
 
+  it('a Peach deletes only their own drafts that were never submitted', async () => {
+    const draft = (peachId: string, id: string) =>
+      workoutLogToJson(workoutLog({ id, peachId, startedAt: now }));
+    await seed(async (db) => {
+      await setDoc(doc(db, COLLECTIONS.workoutLogs, 'd1'), draft('b', 'd1'));
+      await setDoc(doc(db, COLLECTIONS.workoutLogs, 'd2'), draft('b', 'd2'));
+      await setDoc(doc(db, COLLECTIONS.workoutLogs, 'l1'), submitted('b'));
+      // Finished, then resumed: its copies are still shared.
+      await setDoc(doc(db, COLLECTIONS.workoutLogs, 'l2'), {
+        ...submitted('b', 'l2'),
+        status: 'inProgress',
+      });
+    });
+    await expect(deleteDoc(doc(client('a'), COLLECTIONS.workoutLogs, 'd2'))).rejects.toThrow();
+    await new FirestoreWorkoutLogRepository(client('b')).discardDraft('d1');
+    await expect(deleteDoc(doc(client('b'), COLLECTIONS.workoutLogs, 'l1'))).rejects.toThrow();
+    await expect(deleteDoc(doc(client('b'), COLLECTIONS.workoutLogs, 'l2'))).rejects.toThrow();
+  });
+
   it('members share their own submitted logs with the Crate and read each other’s', async () => {
     // b shares a submitted log; a reads it; c (not a member) can't.
     await setDoc(sharedRef(client('b')), submitted('b'));

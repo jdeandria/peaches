@@ -138,12 +138,17 @@ export type WorkoutLogStatus = (typeof WORKOUT_LOG_STATUSES)[number];
  * The session times itself: the clock runs while the log screen is open
  * (`timerStartedAt` is set) and pauses when it is not, banking the time in
  * `durationSeconds`.
+ *
+ * A submitted log can be resumed: it goes back to `inProgress` with its
+ * clock where it stopped, and its Crates keep the copies from when it was
+ * finished until it is finished again.
  */
 export interface WorkoutLog {
   readonly id: string;
   readonly peachId: string;
   /** When the session began; decides which week the log counts toward. */
   readonly startedAt: Date;
+  /** When it was last finished; kept while it is resumed. */
   readonly completedAt: Date | null;
   readonly status: WorkoutLogStatus;
   readonly entries: readonly ExerciseLogEntry[];
@@ -173,6 +178,11 @@ export function workoutLog(init: NewWorkoutLog): WorkoutLog {
 
 export function isSubmitted(log: WorkoutLog): boolean {
   return log.status === 'submitted';
+}
+
+/** Finished before and picked back up: in progress, but already shared. */
+export function isResumed(log: WorkoutLog): boolean {
+  return !isSubmitted(log) && log.completedAt !== null;
 }
 
 /** Seconds on the clock at `now`, including a running segment. */

@@ -17,10 +17,16 @@
         {{ draft() ? 'Runs while this screen is open' : 'Session time' }}
       </span>
       @if (!draft()) {
-        <button matButton type="button" class="edit-details" (click)="editDetails()">
-          <span class="material-symbols-rounded" aria-hidden="true">edit_calendar</span>
-          Edit details
-        </button>
+        <div class="clock-actions">
+          <button matButton type="button" [disabled]="busy()" (click)="resume()">
+            <span class="material-symbols-rounded" aria-hidden="true">play_arrow</span>
+            Resume
+          </button>
+          <button matButton type="button" (click)="editDetails()">
+            <span class="material-symbols-rounded" aria-hidden="true">edit_calendar</span>
+            Edit details
+          </button>
+        </div>
       }
     </div>
 

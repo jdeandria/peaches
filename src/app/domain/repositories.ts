@@ -75,6 +75,8 @@ export interface WorkoutLogRepository {
   forPeach(peachId: string): Promise<WorkoutLog[]>;
   /** Saves a log the Peach is still doing (never a submitted one). */
   save(log: WorkoutLog): Promise<void>;
+  /** Deletes a draft that was never submitted, so it was never shared. */
+  discardDraft(id: string): Promise<void>;
   /**
    * Saves a submitted log, its copy under every Crate in its `sharedWith`
    * and the exercises in it as each Crate's {@link SharedExercise}s, all at

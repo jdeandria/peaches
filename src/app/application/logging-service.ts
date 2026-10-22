@@ -3,6 +3,7 @@ import { isActiveMembership } from '../domain/models/crate';
 import { SharedExercise } from '../domain/models/crate-exercise';
 import {
   ExerciseLogEntry,
+  isResumed,
   isSubmitted,
   pauseTimer,
   elapsedSeconds,
@@ -70,6 +71,26 @@ export class LoggingService {
     return opened;
   }
 
+  /**
+   * Picks a finished workout back up: it becomes the Peach's draft again,
+   * and its clock carries on from where it stopped when the log screen
+   * opens. Its Crates keep the copies from when it was finished until it is
+   * finished again. An empty draft makes way for it; one with exercises in
+   * it has to be finished first.
+   */
+  async resume(logId: string): Promise<WorkoutLog> {
+    const log = await this.require(logId);
+    if (!isSubmitted(log)) return log;
+    const draft = await this.currentLog(log.peachId);
+    if (draft && draft.entries.length > 0) {
+      throw new DomainError('Finish the workout you’re logging first.');
+    }
+    if (draft) await this.deps.logs.discardDraft(draft.id);
+    const resumed: WorkoutLog = { ...log, status: 'inProgress' };
+    await this.deps.logs.save(resumed);
+    return resumed;
+  }
+
   /** Adds or replaces the entry for one exercise, before or after submitting. */
   async recordEntry(logId: string, entry: ExerciseLogEntry): Promise<WorkoutLog> {
     const problem = implausibility(entry);
@@ -80,7 +101,7 @@ export class LoggingService {
   async removeEntry(logId: string, exerciseId: string): Promise<WorkoutLog> {
     return this.update(logId, (log) => {
       const updated = removeEntry(log, exerciseId);
-      if (isSubmitted(log) && updated.entries.length === 0) {
+      if ((isSubmitted(log) || isResumed(log)) && updated.entries.length === 0) {
         throw new DomainError('A workout needs at least one exercise.');
       }
       return updated;

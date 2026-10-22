@@ -121,7 +121,11 @@ Matchup documents carry denormalised `peachIds` and `weekStart` fields so
 `workoutLogs` (drafts included) are readable only by them; submitting (or
 editing a submitted log) writes the log, a copy under each Crate it is
 shared with and each Crate's `exercises` in one batch, and Crate members
-read those copies to score matchups, show activity and dispute.
+read those copies to score matchups, show activity and dispute. Resuming a
+submitted log turns the private log back into a draft and leaves the copies
+as they were until it is finished again; the in-memory backend keeps
+separate copies too, so both behave alike. The only log ever deleted is an
+empty draft that was never submitted, which makes way for a resumed one.
 `firestore.rules` follows membership: a Peach reads a Crate's Seasons,
 shared logs, exercises, ballots and disputes only while their membership is
 active (memberships, rounds and matchups are found by collection-group

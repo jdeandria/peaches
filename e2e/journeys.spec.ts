@@ -129,6 +129,23 @@ test('edit a finished workout’s time', async ({ page }) => {
   await expect(page.getByText('1:15:00')).toBeVisible();
 });
 
+test('resume a finished workout and finish it again', async ({ page }) => {
+  await openApp(page);
+  const row = page.locator('a[pch-list-row][href^="/log/"]').first();
+  const href = (await row.getAttribute('href'))!;
+  await row.click();
+  await page.getByRole('button', { name: 'Resume' }).click();
+  await expect(page).toHaveURL(/\/log$/);
+  await expect(page.getByText('Runs while this screen is open')).toBeVisible();
+  // It is the workout under way until it is finished again.
+  await nav(page, 'Today').click();
+  await expect(page.getByText('Workout in progress')).toBeVisible();
+  await page.getByRole('link', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: /^Finish/ }).click();
+  await expect(page.getByText('Workout logged. Nice work.')).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${href}$`));
+});
+
 test('profile shows the seeded Peach and switches units', async ({ page }) => {
   await openApp(page);
   await nav(page, 'Profile').click();

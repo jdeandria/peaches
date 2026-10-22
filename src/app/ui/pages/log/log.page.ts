@@ -21,6 +21,7 @@ import {
   elapsedSeconds,
   entryFor,
   ExerciseLogEntry,
+  isResumed,
   isSubmitted,
   loggableFromEntry,
   WorkoutLog,
@@ -55,7 +56,7 @@ interface EntryView {
  * exercise (your recent ones and your crate-mates' come first), check the
  * sets it pre-filled from last time, save; Finish shares it with your
  * Crates. With an id it shows one of your logs, which you can keep editing
- * (exercises, when it happened, how long it took).
+ * (exercises, when it happened, how long it took) or resume, clock and all.
  */
 @Component({
   selector: 'pch-log-page',
@@ -116,7 +117,9 @@ export class LogPage {
 
   protected readonly title = computed(() => {
     const log = this.log();
-    if (log && isSubmitted(log)) return Fmt.day(localDateOfLocal(log.startedAt));
+    if (log && (isSubmitted(log) || isResumed(log))) {
+      return Fmt.day(localDateOfLocal(log.startedAt));
+    }
     return 'Log a workout';
   });
 
@@ -125,6 +128,7 @@ export class LogPage {
     if (log && isSubmitted(log)) {
       return `${Fmt.time(log.startedAt)}${log.notes ? ` · ${log.notes}` : ''}`;
     }
+    if (log && isResumed(log)) return `${Fmt.time(log.startedAt)} · Resumed`;
     const crates = this.state.myCrates.value()?.length ?? 0;
     return crates === 0 ? 'Just for you' : `Counts in ${Fmt.count(crates, 'Crate')}`;
   });
@@ -181,16 +185,22 @@ export class LogPage {
     }));
   });
 
-  /** While a workout is on: my pledges this week, counting it. */
+  /**
+   * While a workout is on: my pledges this week, counting it. A resumed
+   * workout already counts as it was finished, so only what changed since
+   * is added.
+   */
   protected readonly pledges = computed(() => {
     const log = this.log();
     if (!log || !this.draft()) return [];
     const extra = MetricExtractor.extract(log);
     const units = this.state.units();
     const boards = this.boards.value() ?? [];
-    return boards.flatMap(({ crate, side }) =>
-      side.score.pledges.map((p) => {
-        const done = p.amount + extra[p.category];
+    return boards.flatMap(({ crate, side }) => {
+      const shared = side.logs.find((l) => l.id === log.id);
+      const counted = shared ? MetricExtractor.extract(shared) : null;
+      return side.score.pledges.map((p) => {
+        const done = p.amount + extra[p.category] - (counted?.[p.category] ?? 0);
         return {
           key: `${crate.id}:${p.category}`,
           crate: boards.length > 1 ? crate.name : null,
@@ -199,8 +209,8 @@ export class LogPage {
           progress: `${Fmt.amount(p.category, done, units)} of ${Fmt.amount(p.category, p.target, units)}`,
           hit: done >= p.target,
         };
-      }),
-    );
+      });
+    });
   });
 
   /** Disputes crate-mates raised about this log, in every Crate it is shared with. */
@@ -357,6 +367,16 @@ export class LogPage {
     );
     this.busy.set(false);
     if (done) await this.router.navigate(['/log', done.id], { replaceUrl: true });
+  }
+
+  /** Picks the workout back up as the one being logged, its clock carrying on. */
+  protected async resume(): Promise<void> {
+    const log = this.log();
+    if (!log || this.busy()) return;
+    this.busy.set(true);
+    const resumed = await this.state.run((app) => app.loggingService.resume(log.id));
+    this.busy.set(false);
+    if (resumed) await this.router.navigate(['/log'], { replaceUrl: true });
   }
 
   /** Corrects when the workout happened, how long it took, and its notes. */

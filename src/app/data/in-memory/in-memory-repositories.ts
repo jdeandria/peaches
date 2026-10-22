@@ -12,7 +12,7 @@ import { Dispute, DisputeVote } from '../../domain/models/dispute';
 import { Lineup, lineupKey } from '../../domain/models/lineup';
 import { Peach } from '../../domain/models/peach';
 import { involves, Matchup, Round, Season } from '../../domain/models/season';
-import { isSubmitted, WorkoutLog } from '../../domain/models/workout-log';
+import { isResumed, isSubmitted, WorkoutLog } from '../../domain/models/workout-log';
 import {
   BallotRepository,
   CrateRepository,
@@ -175,6 +175,8 @@ export class InMemorySeasonRepository implements SeasonRepository {
 
 export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
   private readonly store = new InMemoryStore<WorkoutLog>((l) => l.id);
+  /** The copies shared with each Crate, as Firestore keeps them. */
+  private readonly copies = new InMemoryStore<SharedCopy>((c) => `${c.crateId}:${c.log.id}`);
   private readonly exercises = new InMemoryStore<SharedExercise>(
     (e) => `${e.crateId}:${sharedExerciseKey(e.exercise.id, e.peachId)}`,
   );
@@ -191,28 +193,30 @@ export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
     this.store.put(log);
   }
 
-  /** The shared copies are the log itself. */
+  async discardDraft(id: string): Promise<void> {
+    const log = this.store.get(id);
+    if (log && (isSubmitted(log) || isResumed(log))) throw new Error('Only drafts are discarded');
+    this.store.remove(id);
+  }
+
   async saveSubmitted(log: WorkoutLog): Promise<void> {
     this.store.put(log);
+    this.copies.putAll(log.sharedWith.map((crateId) => ({ crateId, log })));
     this.exercises.putAll(sharedExercisesOf(log));
   }
 
   async getShared(crateId: string, logId: string): Promise<WorkoutLog | null> {
-    const log = this.store.get(logId);
-    return log && this.isShared(log, crateId) ? log : null;
+    return this.copies.get(`${crateId}:${logId}`)?.log ?? null;
   }
 
   async sharedWith(crateId: string, from: Date, to: Date): Promise<WorkoutLog[]> {
-    return this.store
-      .where((l) => this.isShared(l, crateId) && l.startedAt >= from && l.startedAt < to)
+    return this.sharedLogs(crateId)
+      .filter((l) => l.startedAt >= from && l.startedAt < to)
       .sort(newestLogFirst);
   }
 
   async recentlySharedWith(crateId: string, limit: number): Promise<WorkoutLog[]> {
-    return this.store
-      .where((l) => this.isShared(l, crateId))
-      .sort(newestLogFirst)
-      .slice(0, limit);
+    return this.sharedLogs(crateId).sort(newestLogFirst).slice(0, limit);
   }
 
   async exercisesSharedWith(crateId: string): Promise<SharedExercise[]> {
@@ -227,9 +231,14 @@ export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
     return this.store.watch((all) => all.filter((l) => l.peachId === peachId).sort(newestLogFirst));
   }
 
-  private isShared(log: WorkoutLog, crateId: string): boolean {
-    return isSubmitted(log) && log.sharedWith.includes(crateId);
+  private sharedLogs(crateId: string): WorkoutLog[] {
+    return this.copies.where((c) => c.crateId === crateId).map((c) => c.log);
   }
+}
+
+interface SharedCopy {
+  readonly crateId: string;
+  readonly log: WorkoutLog;
 }
 
 export class InMemoryBallotRepository implements BallotRepository {
