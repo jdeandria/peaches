@@ -22,7 +22,7 @@
       (click)="select(i)"
     >
       <span class="chip-number pch-title-medium">{{ i + 1 }}</span>
-      <span class="chip-summary pch-label-small">{{ summary(s) }}</span>
+      <span class="chip-summary pch-label-small">{{ format.summary(s) }}</span>
     </button>
   }
 </div>
@@ -52,42 +52,18 @@
     </button>
   </div>
 
-  <div class="dials" [class.single]="dials().length === 1">
-    @for (d of dials(); track d.key; let first = $first) {
-      @if (!first && joiner) {
-        <span class="joiner" [class.word]="joiner === 'in'" aria-hidden="true">{{ joiner }}</span>
-      }
-      <div class="dial-column" [class.end]="!first">
-        @if (dials().length > 1) {
-          <span class="unit pch-label-large" aria-hidden="true">{{ d.unit }}</span>
-        }
-        <pch-dial
-          [side]="first ? 'start' : 'end'"
-          [label]="d.label"
-          [unit]="d.unit"
-          [step]="d.step"
-          [max]="d.max"
-          [format]="d.format"
-          [parse]="d.parse ?? parseNumber"
-          [value]="d.value"
-          [ghost]="d.ghost"
-          (valueChange)="d.change($event)"
-        />
-      </div>
-      @if (dials().length === 1) {
-        <span class="unit solo pch-headline-small" aria-hidden="true">{{ d.unit }}</span>
-      }
-    }
-  </div>
+  <pch-set-dials [dials]="dials()" [joiner]="format.joiner" />
 </section>
 
-<h3 id="pch-rpe-label" class="pch-title-small">How hard was it? (RPE)</h3>
-<pch-button-group
-  aria-labelledby="pch-rpe-label"
-  [options]="rpeOptions"
-  [(selected)]="rpe"
-  allowDeselect
-/>
+@if (!planning) {
+  <h3 id="pch-rpe-label" class="pch-title-small">How hard was it? (RPE)</h3>
+  <pch-button-group
+    aria-labelledby="pch-rpe-label"
+    [options]="rpeOptions"
+    [(selected)]="rpe"
+    allowDeselect
+  />
+}
 
 @if (problem(); as message) {
   <p class="problem pch-body-medium" role="alert">

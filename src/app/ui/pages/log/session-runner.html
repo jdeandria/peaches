@@ -1,0 +1,192 @@
+<header class="top">
+  <button
+    matIconButton
+    type="button"
+    matTooltip="Back to plan"
+    aria-label="Back to plan"
+    (click)="backToPlan.emit()"
+  >
+    <span class="material-symbols-rounded" aria-hidden="true">close</span>
+  </button>
+  <div class="clock pch-title-medium" [attr.aria-label]="'Session time ' + clock()">
+    <span class="material-symbols-rounded" aria-hidden="true">timer</span>{{ clock() }}
+  </div>
+  <button
+    matIconButton
+    type="button"
+    class="rest-toggle"
+    [class.on]="restTimer()"
+    [matTooltip]="restTimer() ? 'Rest timer on' : 'Rest timer off'"
+    aria-label="Rest timer"
+    [attr.aria-pressed]="restTimer()"
+    (click)="toggleRestTimer()"
+  >
+    <span class="material-symbols-rounded" aria-hidden="true">{{
+      restTimer() ? 'hourglass' : 'hourglass_disabled'
+    }}</span>
+  </button>
+</header>
+
+<div class="column">
+  <div class="progress">
+    <pch-wavy-progress [value]="fraction()" [flowing]="!!next()" label="Workout progress" />
+    <span class="pch-label-medium">{{ progress().done }} of {{ progress().total }} sets</span>
+  </div>
+
+  @if (!next()) {
+    <section class="finished" aria-labelledby="pch-runner-heading">
+      @if (progress().total === 0 && setsDone() === 0) {
+        <span class="peach" aria-hidden="true">🍑</span>
+        <h1 id="pch-runner-heading" #heading tabindex="-1" class="pch-headline-medium">
+          Nothing planned yet
+        </h1>
+        <p class="pch-body-large muted">Add exercises to your plan, then start.</p>
+        <button matButton="filled" type="button" class="big" (click)="backToPlan.emit()">
+          Back to plan
+        </button>
+      } @else {
+        <span class="peach pop" aria-hidden="true">🍑</span>
+        <h1 id="pch-runner-heading" #heading tabindex="-1" class="pch-headline-medium">
+          Workout complete
+        </h1>
+        <p class="pch-body-large muted">{{ setsDone() }} sets in {{ clock() }}. Nice work.</p>
+        @if (rest()?.finished; as finished) {
+          <ng-container
+            [ngTemplateOutlet]="rating"
+            [ngTemplateOutletContext]="{ name: finished.exerciseName }"
+          />
+        }
+        <button matButton="filled" type="button" class="big" (click)="finish.emit()">
+          <span class="material-symbols-rounded" aria-hidden="true">check</span>
+          Finish · {{ clock() }}
+        </button>
+        <div class="row">
+          <button matButton type="button" (click)="backToPlan.emit()">Add more</button>
+          @if (canUndo()) {
+            <button matButton type="button" [disabled]="busy()" (click)="undo()">
+              <span class="material-symbols-rounded" aria-hidden="true">undo</span>
+              Undo last set
+            </button>
+          }
+        </div>
+      }
+    </section>
+  } @else if (rest(); as r) {
+    <section class="resting" aria-labelledby="pch-runner-heading">
+      <h1 id="pch-runner-heading" #heading tabindex="-1" class="pch-title-large">
+        {{ r.endsAt === null ? 'Nice set' : 'Rest' }}
+      </h1>
+      @if (r.endsAt !== null) {
+        <div class="ring" role="timer" [attr.aria-label]="'Rest ' + remainingText()">
+          <svg viewBox="0 0 200 200" aria-hidden="true">
+            <circle class="track" cx="100" cy="100" r="88" />
+            <circle
+              class="left"
+              cx="100"
+              cy="100"
+              r="88"
+              [attr.stroke-dasharray]="ring"
+              [attr.stroke-dashoffset]="ringOffset()"
+            />
+          </svg>
+          <span class="time pch-display-large" aria-hidden="true">{{ remainingText() }}</span>
+        </div>
+        <div class="row">
+          <button
+            matButton="tonal"
+            type="button"
+            [attr.aria-label]="'Rest ' + restStep + ' seconds less'"
+            (click)="nudgeRest(-restStep)"
+          >
+            −{{ restStep }}s
+          </button>
+          <button
+            matButton="tonal"
+            type="button"
+            [attr.aria-label]="'Rest ' + restStep + ' seconds more'"
+            (click)="nudgeRest(restStep)"
+          >
+            +{{ restStep }}s
+          </button>
+        </div>
+      }
+      @if (r.finished; as finished) {
+        <ng-container
+          [ngTemplateOutlet]="rating"
+          [ngTemplateOutletContext]="{ name: finished.exerciseName }"
+        />
+      }
+      <div class="up-next">
+        <p class="pch-label-large muted">Up next</p>
+        <p class="pch-body-large">
+          <strong>{{ next()!.exercise.exerciseName }}</strong> · {{ upNextAfterRest() }}
+        </p>
+      </div>
+      <button matButton="filled" type="button" class="big" (click)="endRest()">
+        <span class="material-symbols-rounded" aria-hidden="true">skip_next</span>
+        {{ r.endsAt === null ? 'Next set' : 'Skip rest' }}
+      </button>
+      @if (canUndo()) {
+        <button matButton type="button" [disabled]="busy()" (click)="undo()">
+          <span class="material-symbols-rounded" aria-hidden="true">undo</span>
+          Undo last set
+        </button>
+      }
+    </section>
+  } @else {
+    @let pos = position()!;
+    <section class="set" aria-labelledby="pch-runner-heading">
+      @for (k of [pos.exercise + ':' + pos.set]; track k) {
+        <div class="title slide">
+          <h1 id="pch-runner-heading" #heading tabindex="-1" class="pch-headline-small">
+            {{ next()!.exercise.exerciseName }}
+          </h1>
+          <p class="pch-label-large muted">
+            Exercise {{ pos.exercise }} of {{ pos.exercises }} · Set {{ pos.set }} of {{ pos.sets }}
+          </p>
+        </div>
+      }
+      <div class="card">
+        <p class="target pch-label-large">
+          <span class="ghost-dot" aria-hidden="true"></span>Target {{ targetText() }}
+        </p>
+        <pch-set-dials [dials]="dials()" [joiner]="format()!.joiner" />
+      </div>
+      <div class="row">
+        <button matButton type="button" [disabled]="busy()" (click)="skip()">
+          <span class="material-symbols-rounded" aria-hidden="true">skip_next</span>
+          Skip set
+        </button>
+        <button matButton type="button" [disabled]="busy()" (click)="addSet()">
+          <span class="material-symbols-rounded" aria-hidden="true">add</span>
+          Add a set
+        </button>
+      </div>
+      <button
+        matButton="filled"
+        type="button"
+        class="big done"
+        [disabled]="busy()"
+        [attr.aria-label]="'Done: set ' + pos.set + ' of ' + next()!.exercise.exerciseName"
+        (click)="done()"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">check</span>
+        Done
+      </button>
+      <p class="up-next pch-body-medium muted">Then: {{ upNext() }}</p>
+    </section>
+  }
+</div>
+
+<ng-template #rating let-name="name">
+  <div class="rating">
+    <h2 id="pch-rate-label" class="pch-title-small">How hard was {{ name }}?</h2>
+    <pch-button-group
+      aria-labelledby="pch-rate-label"
+      [options]="rpeOptions"
+      [selected]="finishedRpe()"
+      allowDeselect
+      (selectionChange)="rate($event)"
+    />
+  </div>
+</ng-template>

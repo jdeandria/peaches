@@ -73,6 +73,8 @@ Peach ──< WorkoutLog (private; shared on submit) ──> copies under each C
 | `Matchup` | `id` | Home vs away for a week (away null = bye). Holds the `MatchupResult` once the week closes. |
 | `Lineup` | `(seasonId, roundId, peachId)` | A Peach's pledges for a week; `locksAt` is when the week starts. |
 | `WorkoutLog` | `id` | What a Peach did: entries per exercise (each with how it is logged copied in: name, track, load, distance kind), sets, the session clock, notes. Belongs to the Peach; `sharedWith` lists the Crates it is shared with. Custom exercises exist only in entries (ids start `custom-`). |
+| `WorkoutLog.plan` | (in the log) | While a draft: the exercises the Peach means to do, with target sets; the n-th set done of an exercise is its n-th planned set. Only done sets are `entries`; the plan is cleared on submit. |
+| `Routine` | `id` | A plan a Peach saved under a name: exercises with target sets. Private to the Peach. |
 
 Derived, never stored: category totals and points, week scores (pledges
 and battles), live matchup scores, the Crate's current rules (the tally of
@@ -114,11 +116,13 @@ seasons/{seasonId}/rounds/{roundId}
 seasons/{seasonId}/matchups/{matchupId}       (peachIds, weekStart; collectionGroup)
 seasons/{seasonId}/lineups/{roundId}_{peachId} (locksAt in epoch ms)
 workoutLogs/{logId}                           (peachId)
+routines/{routineId}                          (peachId)
 ```
 
 Matchup documents carry denormalised `peachIds` and `weekStart` fields so
 "my matchups" is a single collection-group query. A Peach's own
-`workoutLogs` (drafts included) are readable only by them; submitting (or
+`workoutLogs` (drafts included, with their plans) and `routines` are readable
+only by them; submitting (or
 editing a submitted log) writes the log, a copy under each Crate it is
 shared with and each Crate's `exercises` in one batch, and Crate members
 read those copies to score matchups, show activity and dispute.

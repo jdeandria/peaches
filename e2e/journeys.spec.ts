@@ -22,9 +22,9 @@ test('core journey: log solo, see it score, vote on the rules', async ({ page })
   await expect(page.getByRole('heading', { name: 'Log a workout' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'vs Cho' })).toBeVisible();
 
-  // Opening the log starts the clock; log a 5 km run.
+  // Plan a 5 km run: the clock waits for the workout to start.
   await page.getByRole('link', { name: 'Start' }).click();
-  await expect(page.getByText('Runs while this screen is open')).toBeVisible();
+  await expect(page.getByText('Starts when you start')).toBeVisible();
   await page.getByRole('button', { name: 'Add exercise' }).click();
   const picker = page.getByRole('dialog');
   await expect(picker.getByRole('heading', { name: 'Recent' })).toBeVisible();
@@ -33,7 +33,7 @@ test('core journey: log solo, see it score, vote on the rules', async ({ page })
     .getByRole('button', { name: /^Run\b/ })
     .first()
     .click();
-  // Sets are logged one at a time on dials: swipe one, or tap it to type.
+  // Sets are set out one at a time on dials: swipe one, or tap it to type.
   const sheet = page.getByRole('dialog');
   await sheet.getByRole('slider', { name: 'Distance in km' }).click();
   await sheet.getByRole('textbox', { name: 'Distance in km' }).fill('5');
@@ -44,12 +44,17 @@ test('core journey: log solo, see it score, vote on the rules', async ({ page })
   await sheet.getByRole('button', { name: 'Save' }).click();
   await expect(sheet).toBeHidden();
   await expect(page.getByText('1 set · 5 km · 25:00')).toBeVisible();
-  await expect(page.getByText(/pts in Weekend Warriors/)).toBeVisible();
 
-  // Finishing is one tap: the clock has the session time.
+  // Log mode: the set comes up with its target dialled in; Done, then Finish.
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.getByRole('heading', { name: 'Run' })).toBeVisible();
+  await expect(page.getByText('Target 5.0 km')).toBeVisible();
+  await page.getByRole('button', { name: 'Done: set 1 of Run' }).click();
+  await expect(page.getByRole('heading', { name: 'Workout complete' })).toBeVisible();
   await page.getByRole('button', { name: /^Finish/ }).click();
   await expect(page.getByText('Workout logged. Nice work.')).toBeVisible();
   await expect(page.getByText('Session time')).toBeVisible();
+  await expect(page.getByText(/pts in Weekend Warriors/)).toBeVisible();
 
   // It counts in this week's matchup, line by line.
   await nav(page, 'Today').click();
@@ -81,6 +86,11 @@ test('make up an exercise while logging; crate-mates see it came from you', asyn
   await picker.getByRole('button', { name: /Reps with weight/ }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Rucking')).toBeVisible();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  for (let set = 1; set <= 3; set++) {
+    await page.getByRole('button', { name: `Done: set ${set} of Rucking` }).click();
+    if (set < 3) await page.getByRole('button', { name: 'Skip rest' }).click();
+  }
   await page.getByRole('button', { name: /^Finish/ }).click();
   await expect(page.getByText('Workout logged. Nice work.')).toBeVisible();
 
@@ -88,6 +98,23 @@ test('make up an exercise while logging; crate-mates see it came from you', asyn
   await page.getByRole('link', { name: /Weekend Warriors/ }).click();
   const rucking = page.locator('.exercises pch-list-row', { hasText: 'Rucking' });
   await expect(rucking).toContainText('From you');
+});
+
+test('plan from a routine and tick it off, resting between sets', async ({ page }) => {
+  await openApp(page, '/log');
+  await page.getByRole('button', { name: /^Swing day/ }).click();
+  await expect(page.getByText('0 of 6 sets done')).toBeVisible();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.getByText('Exercise 1 of 2 · Set 1 of 3')).toBeVisible();
+  await page.getByRole('button', { name: /^Done: set 1/ }).click();
+  await expect(page.getByRole('timer')).toBeVisible();
+  await page.getByRole('button', { name: 'Skip rest' }).click();
+  await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
+  // Back to the plan, which shows the progress; Continue picks up there.
+  await page.getByRole('button', { name: 'Back to plan' }).click();
+  await expect(page.getByText('1 of 6 sets done')).toBeVisible();
+  await page.getByRole('button', { name: /^Continue/ }).click();
+  await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
 });
 
 test('set next week’s lineup', async ({ page }) => {

@@ -200,11 +200,10 @@ type Motion =
   `,
   styles: `
     :host {
-      --pch-dial-height: 200px;
       position: relative;
       display: block;
       min-width: 0;
-      height: var(--pch-dial-height);
+      height: var(--pch-dial-height, 200px);
       color: var(--mat-sys-on-surface);
     }
     .face {

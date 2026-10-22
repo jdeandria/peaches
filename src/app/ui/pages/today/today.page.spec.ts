@@ -120,6 +120,28 @@ describe('TodayPage', () => {
     ).toBe('/log');
   });
 
+  it('shows a planned workout, then how far through it you are', async () => {
+    const f = await render();
+    const { container } = backend;
+    const draft = await container.loggingService.openDraft(DEMO_PEACH_ID, FIXED_NOW);
+    const pushUps = exerciseLogEntry({
+      exerciseId: 'bw-push-up',
+      exerciseName: 'Push Up',
+      sets: [setLog({ reps: 20 }), setLog({ reps: 20 })],
+    });
+    await container.loggingService.planExercise(draft.id, pushUps);
+    await stable(f);
+    const card = () => f.nativeElement.querySelector('pch-card.log');
+    expect(text(card().querySelector('h2'))).toBe('Workout planned');
+    expect(text(card())).toContain('1 exercise lined up.');
+    expect(text(card().querySelector('a'))).toContain('Start');
+
+    await container.loggingService.logSet(draft.id, 'bw-push-up', setLog({ reps: 18 }), FIXED_NOW);
+    await stable(f);
+    expect(text(card().querySelector('h2'))).toBe('Workout in progress');
+    expect(text(card())).toContain('1 of 2 sets done.');
+  });
+
   it('invites a new Peach to log, with empty history', async () => {
     const f = await render({ seed: false });
     const el: HTMLElement = f.nativeElement;

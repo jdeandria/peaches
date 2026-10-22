@@ -10,6 +10,7 @@ import {
   collection,
   collectionGroup,
   CollectionReference,
+  deleteDoc,
   doc,
   DocumentReference,
   DocumentSnapshot,
@@ -53,6 +54,12 @@ import { Dispute, disputeFromJson, disputeToJson, DisputeVote } from '../../doma
 import { Lineup, lineupFromJson, lineupKey, lineupToJson } from '../../domain/models/lineup';
 import { Peach, peachFromJson, peachToJson } from '../../domain/models/peach';
 import {
+  byRoutineName,
+  Routine,
+  routineFromJson,
+  routineToJson,
+} from '../../domain/models/routine';
+import {
   Matchup,
   matchupFromJson,
   matchupPeachIds,
@@ -70,6 +77,7 @@ import {
   CrateRepository,
   DisputeRepository,
   PeachRepository,
+  RoutineRepository,
   SeasonRepository,
   WorkoutLogRepository,
 } from '../../domain/repositories';
@@ -93,6 +101,7 @@ export const COLLECTIONS = {
   matchups: 'matchups',
   lineups: 'lineups',
   workoutLogs: 'workoutLogs',
+  routines: 'routines',
 } as const;
 
 /** Firestore `in` filters accept at most 30 values. */
@@ -471,7 +480,9 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
     const json = workoutLogToJson(log);
     const batch = writeBatch(this.db);
     batch.set(doc(this.col, log.id), json);
-    for (const crateId of log.sharedWith) batch.set(doc(this.shared(crateId), log.id), json);
+    // A plan is the Peach's own; Crates see what was done.
+    const copy = { ...json, plan: [] };
+    for (const crateId of log.sharedWith) batch.set(doc(this.shared(crateId), log.id), copy);
     for (const e of sharedExercisesOf(log)) {
       batch.set(
         doc(this.exercises(e.crateId), sharedExerciseKey(e.exercise.id, e.peachId)),
@@ -579,6 +590,41 @@ export class FirestoreDisputeRepository implements DisputeRepository {
   }
 }
 
+/** Routines are top-level, keyed by id, found by `peachId`; sorted on the client. */
+export class FirestoreRoutineRepository implements RoutineRepository {
+  constructor(private readonly db: Firestore) {}
+
+  private get col(): CollectionReference {
+    return collection(this.db, COLLECTIONS.routines);
+  }
+
+  private peachQuery(peachId: string): Query {
+    return query(this.col, where('peachId', '==', peachId));
+  }
+
+  async getById(id: string): Promise<Routine | null> {
+    return decodeDoc(await getDoc(doc(this.col, id)), routineFromJson);
+  }
+
+  async forPeach(peachId: string): Promise<Routine[]> {
+    return decodeAll(await getDocs(this.peachQuery(peachId)), routineFromJson).sort(byRoutineName);
+  }
+
+  save(routine: Routine): Promise<void> {
+    return setDoc(doc(this.col, routine.id), routineToJson(routine));
+  }
+
+  delete(id: string): Promise<void> {
+    return deleteDoc(doc(this.col, id));
+  }
+
+  watchForPeach(peachId: string): Observable<Routine[]> {
+    return watchQuery(this.peachQuery(peachId), (snap) =>
+      decodeAll(snap, routineFromJson).sort(byRoutineName),
+    );
+  }
+}
+
 /** One of each repository, all on the same database. */
 export function firestoreRepositories(db: Firestore): Repositories {
   return {
@@ -588,5 +634,6 @@ export function firestoreRepositories(db: Firestore): Repositories {
     logs: new FirestoreWorkoutLogRepository(db),
     ballots: new FirestoreBallotRepository(db),
     disputes: new FirestoreDisputeRepository(db),
+    routines: new FirestoreRoutineRepository(db),
   };
 }

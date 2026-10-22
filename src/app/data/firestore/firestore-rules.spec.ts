@@ -28,6 +28,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { sharedExercisesOf, sharedExerciseToJson } from '../../domain/models/crate-exercise';
+import { routineFromJson, routineToJson } from '../../domain/models/routine';
 import { categoryWeights, DEFAULT_RULES, rulesToJson } from '../../domain/models/scoring';
 import {
   exerciseLogEntry,
@@ -38,6 +39,7 @@ import {
 import {
   COLLECTIONS,
   FirestoreCrateRepository,
+  FirestoreRoutineRepository,
   FirestoreSeasonRepository,
   FirestoreWorkoutLogRepository,
 } from './firestore-repositories';
@@ -227,6 +229,41 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
       setDoc(sharedRef(client('b'), 'l3'), { ...submitted('b', 'l3'), status: 'inProgress' }),
     ).rejects.toThrow();
     await expect(setDoc(sharedRef(client('c'), 'l4'), submitted('c', 'l4'))).rejects.toThrow();
+    // A session's plan stays private.
+    const planned = submitted('b', 'l5');
+    await expect(
+      setDoc(sharedRef(client('b'), 'l5'), { ...planned, plan: planned['entries'] }),
+    ).rejects.toThrow();
+  });
+
+  it('a Peach’s routines are theirs alone', async () => {
+    const routine = (peachId: string, id = 'r1') =>
+      routineToJson({
+        id,
+        peachId,
+        name: 'Leg day',
+        exercises: [exerciseLogEntry({ exerciseId: 'bb-back-squat', sets: [setLog({ reps: 5 })] })],
+        updatedAt: now,
+      });
+    const mine = new FirestoreRoutineRepository(client('b'));
+    await mine.save(routineFromJson(routine('b')));
+    expect((await mine.forPeach('b')).map((r) => r.name)).toEqual(['Leg day']);
+    await mine.save(routineFromJson({ ...routine('b'), name: 'Legs' }));
+    expect((await mine.getById('r1'))?.name).toBe('Legs');
+
+    // Nobody else reads, changes, takes over or deletes it.
+    const ref = (db: Firestore, id = 'r1') => doc(db, COLLECTIONS.routines, id);
+    await expect(getDoc(ref(client('a')))).rejects.toThrow();
+    await expect(new FirestoreRoutineRepository(client('a')).forPeach('b')).rejects.toThrow();
+    await expect(setDoc(ref(client('a')), routine('a'))).rejects.toThrow();
+    await expect(setDoc(ref(client('b')), routine('a'))).rejects.toThrow();
+    await expect(deleteDoc(ref(client('a')))).rejects.toThrow();
+    // Nor saves one in someone else's name, or under another id.
+    await expect(setDoc(ref(client('a'), 'r2'), routine('b', 'r2'))).rejects.toThrow();
+    await expect(setDoc(ref(client('b'), 'r3'), routine('b', 'r4'))).rejects.toThrow();
+
+    await mine.delete('r1');
+    expect(await mine.forPeach('b')).toEqual([]);
   });
 
   it('members vote with their own ballot only', async () => {

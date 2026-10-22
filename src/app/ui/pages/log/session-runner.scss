@@ -1,0 +1,248 @@
+// Full screen, over the navigation: the workout is the only thing on.
+:host {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  animation: rise var(--pch-spring-spatial-default-duration) var(--pch-spring-spatial-default) both;
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(32px);
+    opacity: 0;
+  }
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1:focus {
+  outline: none;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 8px 0;
+}
+
+.clock {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+
+  .material-symbols-rounded {
+    font-size: 20px;
+    color: var(--mat-sys-primary);
+  }
+}
+
+.rest-toggle {
+  color: var(--mat-sys-on-surface-variant);
+
+  &.on {
+    color: var(--mat-sys-primary);
+  }
+}
+
+.column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 4px 16px 16px;
+  box-sizing: border-box;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+
+  pch-wavy-progress {
+    flex: 1;
+  }
+
+  .pch-label-medium {
+    flex: none;
+    color: var(--mat-sys-on-surface-variant);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+section {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.title {
+  &.slide {
+    animation: slide-in var(--pch-spring-spatial-default-duration) var(--pch-spring-spatial-default)
+      both;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+}
+
+.card {
+  --pch-dial-height: clamp(200px, 36vh, 300px);
+  padding: 12px 8px 8px;
+  border-radius: var(--pch-radius-extra-large);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 4px;
+  color: var(--mat-sys-tertiary);
+}
+
+.ghost-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mat-sys-tertiary);
+}
+
+.row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.material-symbols-rounded {
+  font-size: 20px;
+}
+
+button .material-symbols-rounded {
+  margin-inline-end: 6px;
+}
+
+// The one thing to press between sets: big, at thumb height.
+.big {
+  --mat-button-filled-container-height: 72px;
+  width: 100%;
+  min-height: 72px;
+  margin-top: auto;
+  font: var(--mat-sys-title-large);
+
+  .material-symbols-rounded {
+    font-size: 28px;
+  }
+}
+
+.up-next {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: center;
+}
+
+.resting {
+  align-items: center;
+  text-align: center;
+
+  .big {
+    margin-top: auto;
+  }
+}
+
+.ring {
+  position: relative;
+  width: min(240px, 60vw);
+  aspect-ratio: 1;
+  margin: 8px 0;
+
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+
+  circle {
+    fill: none;
+    stroke-width: 14;
+  }
+
+  .track {
+    stroke: var(--mat-sys-secondary-container);
+  }
+
+  .left {
+    stroke: var(--mat-sys-primary);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 250ms linear;
+  }
+
+  .time {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.rating {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  text-align: start;
+}
+
+.finished {
+  align-items: center;
+  text-align: center;
+  padding-top: 24px;
+
+  .big {
+    margin-top: 24px;
+  }
+}
+
+.peach {
+  font-size: 64px;
+  line-height: 1;
+
+  &.pop {
+    animation: pop var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast) both;
+  }
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.3) rotate(-20deg);
+    opacity: 0;
+  }
+}

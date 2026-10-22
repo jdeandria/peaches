@@ -256,6 +256,8 @@ describe('model JSON round trips', () => {
     expect(workoutLogFromJson(viaJson(workoutLogToJson(log)))).toEqual(log);
     const running = { ...log, timerStartedAt: now };
     expect(workoutLogFromJson(viaJson(workoutLogToJson(running)))).toEqual(running);
+    const planned = { ...running, status: 'inProgress' as const, plan: [log.entries[1]] };
+    expect(workoutLogFromJson(viaJson(workoutLogToJson(planned)))).toEqual(planned);
     expect(isSubmitted(log)).toBe(true);
     expect(totalSets(log)).toBe(3);
     expect(entryFor(log, 'bw-run')?.distanceKind).toBe('runWalk');
@@ -455,6 +457,8 @@ describe('forward compatibility and garbage input', () => {
       entries: [{ exerciseId: 'e', distanceKind: 'teleport', sets: [] }],
     });
     expect(log.status).toBe('inProgress');
+    // Logs saved before plans existed have none.
+    expect(log.plan).toEqual([]);
     // A distance kind from a newer client simply doesn't score here.
     expect(log.entries[0].distanceKind).toBeNull();
     expect(

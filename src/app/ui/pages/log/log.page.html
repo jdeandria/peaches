@@ -6,16 +6,33 @@
   <pch-page title="Workout" showBack backLink="/">
     <pch-empty-state icon="search_off" title="Workout not found" />
   </pch-page>
+} @else if (running()) {
+  <pch-session-runner
+    [log]="log()!"
+    [clock]="clock()"
+    (backToPlan)="closeRunner()"
+    (finish)="finish()"
+  />
 } @else {
   <pch-page [title]="title()" [subtitle]="subtitle()" showBack backLink="/">
-    <div class="clock" [class.running]="draft()" [pchStagger]="0">
+    @if (draft() && planned().length > 0) {
+      <button
+        pageActions
+        matIconButton
+        type="button"
+        matTooltip="Save as routine"
+        aria-label="Save as routine"
+        (click)="saveRoutine()"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">bookmark_add</span>
+      </button>
+    }
+    <div class="clock" [class.running]="draft() && started()" [pchStagger]="0">
       <span class="material-symbols-rounded" aria-hidden="true">timer</span>
       <span class="pch-display-small time" [attr.aria-label]="'Session time ' + clock()">{{
         clock()
       }}</span>
-      <span class="pch-body-small hint">
-        {{ draft() ? 'Runs while this screen is open' : 'Session time' }}
-      </span>
+      <span class="pch-body-small hint">{{ clockHint() }}</span>
       @if (!draft()) {
         <button matButton type="button" class="edit-details" (click)="editDetails()">
           <span class="material-symbols-rounded" aria-hidden="true">edit_calendar</span>
@@ -65,7 +82,90 @@
       }
     }
 
-    @if (entries().length > 0) {
+    @if (draft()) {
+      @if (planned().length > 0) {
+        <pch-section title="Your workout">
+          <span sectionTrailing class="pch-label-large muted"
+            >{{ progress().done }} of {{ progress().total }} sets done</span
+          >
+        </pch-section>
+        <pch-list-card [pchStagger]="2">
+          @for (p of planned(); track p.entry.exerciseId) {
+            <!-- The row is a larger mouse target; keyboard and screen readers use its buttons. -->
+            <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+            <div class="item clickable" (click)="rowClick($event, p.entry)">
+              <div class="text">
+                <span class="pch-title-medium">{{ p.entry.exerciseName }}</span>
+                <span class="pch-body-medium muted">{{ p.summary }}</span>
+              </div>
+              <span
+                class="done-count pch-label-large"
+                [class.complete]="p.complete"
+                [attr.aria-label]="p.done + ' of ' + p.entry.sets.length + ' sets done'"
+              >
+                @if (p.complete) {
+                  <span class="material-symbols-rounded" aria-hidden="true">check</span>
+                } @else {
+                  {{ p.done }}/{{ p.entry.sets.length }}
+                }
+              </span>
+              <button
+                matIconButton
+                type="button"
+                matTooltip="Remove"
+                [attr.aria-label]="'Remove ' + p.entry.exerciseName"
+                (click)="removeEntry(p.entry)"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+              </button>
+              <button
+                matIconButton
+                type="button"
+                class="action filled"
+                matTooltip="Edit sets"
+                [attr.aria-label]="'Edit sets: ' + p.entry.exerciseName"
+                (click)="editEntry(p.entry)"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+              </button>
+            </div>
+          }
+        </pch-list-card>
+      } @else {
+        <pch-card variant="outlined" class="start" [pchStagger]="1">
+          <span class="peach" aria-hidden="true">🍑</span>
+          <div>
+            <h2 class="pch-title-large">What are you doing?</h2>
+            <p class="pch-body-medium muted">
+              Plan your sets, then tick them off one at a time.
+              {{ inCrates() ? 'It scores in every Crate you’re in.' : '' }}
+            </p>
+          </div>
+        </pch-card>
+        @if (routines().length > 0) {
+          <pch-section title="Start from a routine" />
+          <pch-list-card [pchStagger]="2">
+            @for (r of routines(); track r.routine.id) {
+              <div class="item routine">
+                <button type="button" class="routine-use" (click)="useRoutine(r.routine)">
+                  <span class="pch-title-medium">{{ r.routine.name }}</span>
+                  <span class="pch-body-medium muted">{{ r.summary }}</span>
+                </button>
+                <button
+                  matIconButton
+                  type="button"
+                  matTooltip="Delete routine"
+                  [attr.aria-label]="'Delete routine ' + r.routine.name"
+                  (click)="deleteRoutine(r.routine)"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                </button>
+              </div>
+            }
+          </pch-list-card>
+        }
+      }
+    } @else if (entries().length > 0) {
       <pch-section title="Exercises" />
       <pch-list-card [pchStagger]="2">
         @for (v of entries(); track v.entry.exerciseId) {
@@ -98,17 +198,6 @@
           </div>
         }
       </pch-list-card>
-    } @else {
-      <pch-card variant="outlined" class="start" [pchStagger]="1">
-        <span class="peach" aria-hidden="true">🍑</span>
-        <div>
-          <h2 class="pch-title-large">What are you doing?</h2>
-          <p class="pch-body-medium muted">
-            Runs, rides, lifts, yoga: log anything.
-            {{ inCrates() ? 'It scores in every Crate you’re in.' : '' }}
-          </p>
-        </div>
-      </pch-card>
     }
 
     <button matButton="tonal" type="button" class="add" (click)="addExercise()">
@@ -129,18 +218,43 @@
       </div>
     }
 
-    @if (draft() && entries().length > 0) {
-      <button
-        pageBottomBar
-        matButton="filled"
-        type="button"
-        class="submit"
-        [disabled]="busy()"
-        (click)="finish()"
-      >
-        <span class="material-symbols-rounded" aria-hidden="true">check</span>
-        Finish · {{ clock() }}
-      </button>
+    @if (draft() && (hasNext() || entries().length > 0)) {
+      <div pageBottomBar class="bottom-actions">
+        @if (hasNext()) {
+          @if (entries().length > 0) {
+            <button
+              matButton="tonal"
+              type="button"
+              class="finish-early"
+              [disabled]="busy()"
+              (click)="finish()"
+            >
+              Finish
+            </button>
+          }
+          <button
+            matButton="filled"
+            type="button"
+            class="submit"
+            [disabled]="busy()"
+            (click)="startWorkout()"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">play_arrow</span>
+            {{ started() ? 'Continue · ' + clock() : 'Start workout' }}
+          </button>
+        } @else {
+          <button
+            matButton="filled"
+            type="button"
+            class="submit"
+            [disabled]="busy()"
+            (click)="finish()"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">check</span>
+            Finish · {{ clock() }}
+          </button>
+        }
+      </div>
     }
   </pch-page>
 }

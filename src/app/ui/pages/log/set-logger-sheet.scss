@@ -172,62 +172,12 @@ h2:focus {
   color: var(--mat-sys-on-surface-variant);
 }
 
-.dials {
-  display: flex;
-  align-items: stretch;
-
-  // One dial: its rim just past the middle, the unit reading on from it ("12 reps").
-  &.single .dial-column {
-    flex: 0 0 calc(50% + 24px);
-  }
-
-  .solo {
-    align-self: center;
-    padding-inline-start: 4px;
-    color: var(--mat-sys-on-surface-variant);
-  }
-}
-
-.dial-column {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-
-  // Over the dial's faded top edge.
-  .unit {
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    inset-inline: 0;
-    padding-inline-end: 22px;
-    pointer-events: none;
-    color: var(--mat-sys-on-surface-variant);
-    text-align: end;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-
-  &.end .unit {
-    padding-inline: 22px 0;
-    text-align: start;
-  }
-}
-
-.joiner {
-  flex: none;
-  align-self: center;
-  width: 20px;
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-headline-small);
-  text-align: center;
-
-  &.word {
-    font: var(--mat-sys-label-large);
-  }
-}
-
 h3#pch-rpe-label {
   margin: 16px 0 8px;
+}
+
+.card + .actions {
+  margin-top: 20px;
 }
 
 .actions {

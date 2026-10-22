@@ -7,7 +7,12 @@ import { localDateOfLocal, startOfWeek } from '../../../domain/core/local-date';
 import { isLocked, LINEUP_OPENS_MS } from '../../../domain/models/lineup';
 import { isBye, Matchup, Round, winnerId } from '../../../domain/models/season';
 import { ScoringCategory } from '../../../domain/models/scoring';
-import { isSubmitted, totalSets, WorkoutLog } from '../../../domain/models/workout-log';
+import {
+  isSubmitted,
+  planProgress,
+  totalSets,
+  WorkoutLog,
+} from '../../../domain/models/workout-log';
 import { MetricExtractor } from '../../../domain/services/metric-extractor';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
@@ -132,16 +137,28 @@ export class TodayPage {
   protected readonly logCta = computed(() => {
     const draft = this.draft();
     if (draft && draft.entries.length > 0) {
+      const { done, total } = planProgress(draft);
       return {
         title: 'Workout in progress',
-        text: `${Fmt.count(draft.entries.length, 'exercise')} logged so far. The clock picks up where it left off.`,
+        text:
+          total > done
+            ? `${done} of ${total} sets done. The clock picks up where it left off.`
+            : `${Fmt.count(draft.entries.length, 'exercise')} logged so far. The clock picks up where it left off.`,
         action: 'Continue',
+        icon: 'play_arrow',
+      };
+    }
+    if (draft && draft.plan.length > 0) {
+      return {
+        title: 'Workout planned',
+        text: `${Fmt.count(draft.plan.length, 'exercise')} lined up. The clock starts when you do.`,
+        action: 'Start',
         icon: 'play_arrow',
       };
     }
     return {
       title: 'Log a workout',
-      text: 'Open it when you start: it times your session while you log.',
+      text: 'Plan it, then tick it off a set at a time. The clock starts when you do.',
       action: 'Start',
       icon: 'play_arrow',
     };

@@ -205,6 +205,33 @@ export class DemoSeeder {
       weeks: 4,
       now: created,
     });
+
+    await this.routines(created);
+  }
+
+  /** Two routines you saved, so planning a session can start from one. */
+  private async routines(at: Date): Promise<void> {
+    const { app } = this;
+    const plan = (ids: readonly string[]) =>
+      ids.flatMap((id) => {
+        const e = app.catalog.byId(id);
+        if (!e) return [];
+        const loadKg = takesLoad(e) ? workingWeightKg(e, DEMO_PEACH_ID, 1) : null;
+        const exercise = loggableFromCatalog(e);
+        return [entryOf(exercise, { sets: plausibleSets(exercise, 1, loadKg) })];
+      });
+    await app.routineService.create(
+      DEMO_PEACH_ID,
+      'Full body',
+      plan(['db-goblet-squat', 'db-bench-press', 'db-bent-over-row', 'bw-forearm-plank']),
+      at,
+    );
+    await app.routineService.create(
+      DEMO_PEACH_ID,
+      'Swing day',
+      plan(['kb-swing', 'bw-push-up']),
+      at,
+    );
   }
 
   /**

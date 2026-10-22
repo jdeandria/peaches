@@ -135,9 +135,15 @@ export type WorkoutLogStatus = (typeof WORKOUT_LOG_STATUSES)[number];
  * in every Crate, each with that Crate's own rules. The Peach can still edit
  * a submitted log, and the shared copies follow.
  *
- * The session times itself: the clock runs while the log screen is open
+ * The session times itself: the clock starts when the Peach starts the
+ * workout (or logs its first set), runs while the log screen is open
  * (`timerStartedAt` is set) and pauses when it is not, banking the time in
  * `durationSeconds`.
+ *
+ * While it is a draft, a log can carry a `plan`: the exercises the Peach
+ * means to do and their target sets, which they then tick off one set at a
+ * time. Only sets actually done go in `entries`, so only they score; the
+ * plan is private and is dropped on submit.
  */
 export interface WorkoutLog {
   readonly id: string;
@@ -154,6 +160,11 @@ export interface WorkoutLog {
   readonly notes: string | null;
   /** Crates the log is shared with. */
   readonly sharedWith: readonly string[];
+  /**
+   * What the Peach means to do, in order: per exercise, the target sets.
+   * The n-th set logged for an exercise is its n-th planned set.
+   */
+  readonly plan: readonly ExerciseLogEntry[];
 }
 
 export type NewWorkoutLog = Pick<WorkoutLog, 'id' | 'peachId' | 'startedAt'> & Partial<WorkoutLog>;
@@ -167,6 +178,7 @@ export function workoutLog(init: NewWorkoutLog): WorkoutLog {
     timerStartedAt: null,
     notes: null,
     sharedWith: [],
+    plan: [],
     ...init,
   };
 }
@@ -194,6 +206,20 @@ export function resumeTimer(log: WorkoutLog, now: Date): WorkoutLog {
   return log.timerStartedAt ? log : { ...log, timerStartedAt: now };
 }
 
+/** Whether the workout has started: its clock has run, or is running. */
+export function hasStarted(log: WorkoutLog): boolean {
+  return log.timerStartedAt !== null || log.durationSeconds > 0;
+}
+
+/**
+ * Starts the workout at `now`, which then decides the week it counts
+ * toward; once started, only resumes the clock.
+ */
+export function startSession(log: WorkoutLog, now: Date): WorkoutLog {
+  if (hasStarted(log)) return resumeTimer(log, now);
+  return { ...log, startedAt: now, timerStartedAt: now };
+}
+
 export function entryFor(log: WorkoutLog, exerciseId: string): ExerciseLogEntry | undefined {
   return log.entries.find((e) => e.exerciseId === exerciseId);
 }
@@ -214,6 +240,101 @@ export function removeEntry(log: WorkoutLog, exerciseId: string): WorkoutLog {
 
 export function totalSets(log: WorkoutLog): number {
   return log.entries.reduce((n, e) => n + e.sets.length, 0);
+}
+
+// ── The plan ──────────────────────────────────────────────────────────────
+
+export function plannedFor(log: WorkoutLog, exerciseId: string): ExerciseLogEntry | undefined {
+  return log.plan.find((e) => e.exerciseId === exerciseId);
+}
+
+/** Sets done so far of an exercise. */
+export function doneCount(log: WorkoutLog, exerciseId: string): number {
+  return entryFor(log, exerciseId)?.sets.length ?? 0;
+}
+
+/** The next set to do: the first planned exercise with sets left, and which set. */
+export interface NextSet {
+  readonly exercise: ExerciseLogEntry;
+  /** Index into `exercise.sets`. */
+  readonly index: number;
+}
+
+export function nextPlannedSet(log: WorkoutLog): NextSet | null {
+  for (const exercise of log.plan) {
+    const index = doneCount(log, exercise.exerciseId);
+    if (index < exercise.sets.length) return { exercise, index };
+  }
+  return null;
+}
+
+/** Planned sets done, and planned in all. */
+export function planProgress(log: WorkoutLog): { done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  for (const e of log.plan) {
+    total += e.sets.length;
+    done += Math.min(e.sets.length, doneCount(log, e.exerciseId));
+  }
+  return { done, total };
+}
+
+/** Adds an exercise to the plan, or replaces its target sets. */
+export function upsertPlanned(log: WorkoutLog, planned: ExerciseLogEntry): WorkoutLog {
+  const i = log.plan.findIndex((e) => e.exerciseId === planned.exerciseId);
+  const plan = [...log.plan];
+  if (i < 0) plan.push(planned);
+  else plan[i] = planned;
+  return { ...log, plan };
+}
+
+export function removePlanned(log: WorkoutLog, exerciseId: string): WorkoutLog {
+  return { ...log, plan: log.plan.filter((e) => e.exerciseId !== exerciseId) };
+}
+
+/**
+ * Puts every logged exercise in the plan (as done), so a draft logged
+ * before plans existed, or partly logged, reads as one list.
+ */
+export function planCoveringEntries(log: WorkoutLog): WorkoutLog {
+  const missing = log.entries.filter((e) => !plannedFor(log, e.exerciseId));
+  return missing.length === 0 ? log : { ...log, plan: [...log.plan, ...missing] };
+}
+
+/** Drops the next planned set of an exercise (and the exercise, if nothing is left of it). */
+export function skipPlannedSet(log: WorkoutLog, exerciseId: string): WorkoutLog {
+  const planned = plannedFor(log, exerciseId);
+  if (!planned) return log;
+  const index = doneCount(log, exerciseId);
+  if (index >= planned.sets.length) return log;
+  const sets = planned.sets.filter((_, i) => i !== index);
+  if (sets.length === 0) return removePlanned(log, exerciseId);
+  return upsertPlanned(log, { ...planned, sets });
+}
+
+/** Plans one more set of an exercise, like its last one. */
+export function addPlannedSet(log: WorkoutLog, exerciseId: string): WorkoutLog {
+  const planned = plannedFor(log, exerciseId);
+  const last = planned?.sets.at(-1) ?? entryFor(log, exerciseId)?.sets.at(-1);
+  if (!planned || !last) return log;
+  return upsertPlanned(log, { ...planned, sets: [...planned.sets, last] });
+}
+
+/** Records a set done of a planned exercise. */
+export function logPlannedSet(log: WorkoutLog, exerciseId: string, set: SetLog): WorkoutLog {
+  const planned = plannedFor(log, exerciseId);
+  const entry = entryFor(log, exerciseId);
+  const base = entry ?? (planned ? { ...planned, sets: [], rpe: null, notes: null } : undefined);
+  if (!base) return log;
+  return upsertEntry(log, { ...base, sets: [...base.sets, set] });
+}
+
+/** Takes back the last set done of an exercise. */
+export function unlogLastSet(log: WorkoutLog, exerciseId: string): WorkoutLog {
+  const entry = entryFor(log, exerciseId);
+  if (!entry) return log;
+  if (entry.sets.length <= 1) return removeEntry(log, exerciseId);
+  return upsertEntry(log, { ...entry, sets: entry.sets.slice(0, -1) });
 }
 
 function setFromJson(json: JsonMap): SetLog {
@@ -276,6 +397,7 @@ export function workoutLogFromJson(json: JsonMap): WorkoutLog {
     timerStartedAt: dateTimeOrNullFromJson(json['timerStartedAt']),
     notes: stringOrNull(json['notes']),
     sharedWith: stringListFromJson(json['sharedWith']),
+    plan: mapListFromJson(json['plan']).map(entryFromJson),
   };
 }
 
@@ -291,5 +413,6 @@ export function workoutLogToJson(log: WorkoutLog): JsonMap {
     timerStartedAt: log.timerStartedAt ? dateTimeToJson(log.timerStartedAt) : null,
     notes: log.notes,
     sharedWith: [...log.sharedWith],
+    plan: log.plan.map(entryToJson),
   };
 }

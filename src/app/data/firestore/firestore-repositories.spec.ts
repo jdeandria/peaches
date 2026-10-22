@@ -22,6 +22,7 @@ import { Crate, CrateMembership, crateSettings } from '../../domain/models/crate
 import { Dispute } from '../../domain/models/dispute';
 import { Lineup } from '../../domain/models/lineup';
 import { peach } from '../../domain/models/peach';
+import { Routine } from '../../domain/models/routine';
 import { categoryWeights, DEFAULT_LINEUP_RULES, DEFAULT_RULES } from '../../domain/models/scoring';
 import { matchup, Round, Season } from '../../domain/models/season';
 import { exerciseLogEntry, setLog, workoutLog } from '../../domain/models/workout-log';
@@ -31,6 +32,7 @@ import {
   FirestoreCrateRepository,
   FirestoreDisputeRepository,
   FirestorePeachRepository,
+  FirestoreRoutineRepository,
   FirestoreSeasonRepository,
   FirestoreWorkoutLogRepository,
 } from './firestore-repositories';
@@ -494,6 +496,14 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       expect(await repo.getShared('c9', 'l1')).toBeNull();
     });
 
+    it('keeps a draft’s plan, but never puts it in the Crates’ copies', async () => {
+      const plan = [full.entries[0]];
+      await repo.save({ ...full, status: 'inProgress', completedAt: null, plan });
+      expect((await repo.getById('l1'))?.plan).toEqual(plan);
+      await repo.saveSubmitted({ ...full, plan });
+      expect((await repo.getShared('c1', 'l1'))?.plan).toEqual([]);
+    });
+
     it('saveSubmitted shares each exercise, one per exercise per Peach, and edits overwrite', async () => {
       await repo.saveSubmitted(full);
       await repo.saveSubmitted({ ...full, id: 'l2', peachId: 'b', sharedWith: ['c1'] });
@@ -537,6 +547,38 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       await watched.next((l) => l?.status === 'inProgress');
       await repo.save(full);
       expect(await watched.next((l) => l?.status === 'submitted')).toEqual(full);
+      watched.stop();
+    });
+  });
+
+  describe('FirestoreRoutineRepository', () => {
+    const routine = (id: string, peachId: string, name: string): Routine => ({
+      id,
+      peachId,
+      name,
+      exercises: [
+        exerciseLogEntry({
+          exerciseId: 'bb-back-squat',
+          exerciseName: 'Back Squat',
+          sets: [setLog({ reps: 5, loadKg: 100 }), setLog({ reps: 5, loadKg: 100 })],
+        }),
+      ],
+      updatedAt: now,
+    });
+
+    it('round-trips, lists a Peach’s routines by name, follows changes and deletes', async () => {
+      const repo = new FirestoreRoutineRepository(db);
+      await repo.save(routine('r1', 'a', 'Push'));
+      await repo.save(routine('r2', 'a', 'legs'));
+      await repo.save(routine('r3', 'b', 'Arms'));
+      expect(await repo.getById('r1')).toEqual(routine('r1', 'a', 'Push'));
+      expect(await repo.getById('missing')).toBeNull();
+      expect((await repo.forPeach('a')).map((r) => r.name)).toEqual(['legs', 'Push']);
+
+      const watched = record(repo.watchForPeach('a'));
+      expect(ids(await watched.next())).toEqual(['r2', 'r1']);
+      await repo.delete('r2');
+      expect(ids(await watched.next((rs) => rs.length === 1))).toEqual(['r1']);
       watched.stop();
     });
   });

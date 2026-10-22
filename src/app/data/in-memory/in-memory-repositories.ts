@@ -11,6 +11,7 @@ import {
 import { Dispute, DisputeVote } from '../../domain/models/dispute';
 import { Lineup, lineupKey } from '../../domain/models/lineup';
 import { Peach } from '../../domain/models/peach';
+import { byRoutineName, Routine } from '../../domain/models/routine';
 import { involves, Matchup, Round, Season } from '../../domain/models/season';
 import { isSubmitted, WorkoutLog } from '../../domain/models/workout-log';
 import {
@@ -18,6 +19,7 @@ import {
   CrateRepository,
   DisputeRepository,
   PeachRepository,
+  RoutineRepository,
   SeasonRepository,
   WorkoutLogRepository,
 } from '../../domain/repositories';
@@ -274,6 +276,30 @@ export class InMemoryDisputeRepository implements DisputeRepository {
 }
 
 /** A fresh, empty set of in-memory repositories. */
+export class InMemoryRoutineRepository implements RoutineRepository {
+  private readonly store = new InMemoryStore<Routine>((r) => r.id);
+
+  async getById(id: string): Promise<Routine | null> {
+    return this.store.get(id);
+  }
+
+  async forPeach(peachId: string): Promise<Routine[]> {
+    return this.store.where((r) => r.peachId === peachId).sort(byRoutineName);
+  }
+
+  async save(routine: Routine): Promise<void> {
+    this.store.put(routine);
+  }
+
+  async delete(id: string): Promise<void> {
+    this.store.remove(id);
+  }
+
+  watchForPeach(peachId: string): Observable<Routine[]> {
+    return this.store.watch((all) => all.filter((r) => r.peachId === peachId).sort(byRoutineName));
+  }
+}
+
 export function inMemoryRepositories(): Repositories {
   return {
     peaches: new InMemoryPeachRepository(),
@@ -282,5 +308,6 @@ export function inMemoryRepositories(): Repositories {
     logs: new InMemoryWorkoutLogRepository(),
     ballots: new InMemoryBallotRepository(),
     disputes: new InMemoryDisputeRepository(),
+    routines: new InMemoryRoutineRepository(),
   };
 }

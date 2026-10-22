@@ -18,15 +18,15 @@ import {
 import { MatTooltip } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
-import { DistanceUnits, WeightUnits } from '../../../domain/core/units';
 import { LoggableExercise } from '../../../domain/exercises/loggable';
 import { UnitSystem } from '../../../domain/models/training';
 import { entryOf, ExerciseLogEntry, SetLog } from '../../../domain/models/workout-log';
 import { implausibility } from '../../../domain/services/plausibility';
 import { ReducedMotion } from '../../core/motion';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
-import { Dial, parseNumber } from '../../expressive/dial';
 import { Fmt } from '../../format';
+import { SetDials } from './set-dials';
+import { SetDraft, SetFormat } from './set-format';
 
 export interface SetLoggerData {
   readonly exercise: LoggableExercise;
@@ -35,6 +35,11 @@ export interface SetLoggerData {
   /** The last time the Peach logged this exercise, to start from. */
   readonly previous?: ExerciseLogEntry | null;
   readonly units?: UnitSystem;
+  /**
+   * `plan`: the sets are targets for a session, so there's no RPE yet.
+   * `log` (the default): the sets were done.
+   */
+  readonly mode?: 'plan' | 'log';
 }
 
 /**
@@ -62,62 +67,19 @@ const RPE_OPTIONS: ButtonGroupOption<number>[] = [5, 6, 7, 8, 9, 10].map((r) => 
 /** Most sets one entry can hold. */
 const MAX_SETS = 20;
 
-/** One set as dialled in, in display units; 0 means not entered. */
-interface SetDraft {
-  /** Reps (reps track) or seconds (time track). */
-  readonly value: number;
-  /** Weight, for exercises that take a load. */
-  readonly load: number;
-  /** Distance (km/mi, or metres for swimming and rowing). */
-  readonly distance: number;
-  /** Minutes, for distance sets. */
-  readonly minutes: number;
-}
-
-/** One dial on the set card. */
-interface DialSpec {
-  readonly key: string;
-  /** Accessible name. */
-  readonly label: string;
-  /** Caption above the dial, and read after its value. */
-  readonly unit: string;
-  readonly step: number;
-  readonly max: number;
-  readonly format: (v: number) => string;
-  readonly parse?: (text: string) => number | null;
-  readonly value: number;
-  /** Last time's value for this set. */
-  readonly ghost: number | null;
-  readonly change: (v: number) => void;
-}
-
-const round2 = (v: number) => Math.round(v * 100) / 100;
-const plain = (v: number) => String(round2(v));
-const twoDigits = (v: number) => String(v).padStart(2, '0');
-/** Minutes as "34" or "34:03". */
-const clockMinutes = (v: number) => {
-  const seconds = Math.round(v * 60);
-  return seconds % 60 === 0 ? String(seconds / 60) : Fmt.clock(seconds);
-};
-/** "34:03" or "34.05" as minutes. */
-const parseMinutes = (text: string) => {
-  const m = /^(\d+):([0-5]?\d)$/.exec(text.trim());
-  return m ? round2(Number(m[1]) + Number(m[2]) / 60) : parseNumber(text);
-};
-
 /**
- * Records one exercise a set at a time, however it is measured: reps (with
- * a weight for exercises that take a load, in the Peach's units, stored as
- * kg), minutes and seconds, or distance and time. Each set's numbers are
- * on two dials: swipe along one to turn it, fling it to cover ground, tap
- * it to type. It starts from last time's sets (marked on the dials), so
- * repeating a workout is one tap. Sets are picked from a strip, added and
- * removed; an optional RPE rates the whole exercise.
+ * Sets out one exercise a set at a time, however it is measured (see
+ * {@link SetFormat}): the targets when planning a session, or what was done
+ * when correcting a finished one. Each set's numbers are on dials: swipe
+ * along one to turn it, fling it to cover ground, tap it to type. It starts
+ * from last time's sets (marked on the dials), so repeating a workout is one
+ * tap. Sets are picked from a strip, added and removed; when logging, an
+ * optional RPE rates the whole exercise.
  */
 @Component({
   selector: 'pch-set-logger-sheet',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButton, MatIconButton, MatTooltip, ButtonGroup, Dial],
+  imports: [MatButton, MatIconButton, MatTooltip, ButtonGroup, SetDials],
   templateUrl: './set-logger-sheet.html',
   styleUrl: './set-logger-sheet.scss',
 })
@@ -131,18 +93,9 @@ export class SetLoggerSheet {
 
   protected readonly exercise = this.data.exercise;
   private readonly units: UnitSystem = this.data.units ?? 'metric';
-  protected readonly track = this.exercise.track;
-  protected readonly weighted = this.exercise.takesLoad && this.track === 'reps';
-  protected readonly weightUnit = WeightUnits.label(this.units);
-  /** Swimming and rowing count metres; travel on foot or wheels counts km or miles. */
-  private readonly inMetres =
-    this.exercise.distanceKind === 'swimRow' || this.exercise.distanceKind === null;
-  protected readonly distanceUnit = this.inMetres ? 'm' : DistanceUnits.label(this.units);
+  protected readonly planning = this.data.mode === 'plan';
+  protected readonly format = new SetFormat(this.exercise, this.units);
   protected readonly rpeOptions = RPE_OPTIONS;
-  protected readonly parseNumber = parseNumber;
-  /** What reads between the two dials: 8 × 60, 1:30, 5 km in 25 min. */
-  protected readonly joiner =
-    this.track === 'time' ? ':' : this.track === 'distance' ? 'in' : this.weighted ? '×' : null;
 
   protected readonly sets = signal<SetDraft[]>(this.initialSets());
   /** Sets there when the sheet opened; later ones pop in. */
@@ -166,11 +119,11 @@ export class SetLoggerSheet {
   private readonly ghost = computed<SetDraft | null>(() => {
     const sets = this.data.previous?.sets ?? [];
     const set = sets[this.selected()] ?? sets.at(-1);
-    return set ? this.draftFrom(set) : null;
+    return set ? this.format.draft(set) : null;
   });
   protected readonly ghostSummary = computed(() => {
     const ghost = this.ghost();
-    return ghost ? this.summary(ghost) : null;
+    return ghost ? this.format.summary(ghost) : null;
   });
 
   /** Why Save was refused, until the sets it was refused for change. */
@@ -183,95 +136,11 @@ export class SetLoggerSheet {
   protected readonly canAdd = computed(() => this.sets().length < MAX_SETS);
   protected readonly canRemove = computed(() => this.sets().length > 1);
 
-  private readonly formatWeight = (v: number) => WeightUnits.format(v);
-  private readonly formatDistance = (v: number) =>
-    this.inMetres || !Number.isInteger(round2(v * 10)) ? plain(v) : v.toFixed(1);
-
-  protected readonly dials = computed<DialSpec[]>(() => {
+  protected readonly dials = computed(() => {
     const i = this.selected();
-    const s = this.sets()[i];
-    const g = this.ghost();
-    switch (this.track) {
-      case 'distance':
-        return [
-          {
-            key: 'distance',
-            label: `Distance in ${this.distanceUnit}`,
-            unit: this.distanceUnit,
-            step: this.inMetres ? 50 : 0.1,
-            max: this.inMetres ? 99999 : 999,
-            format: this.formatDistance,
-            value: s.distance,
-            ghost: g?.distance || null,
-            change: (v) => this.update(i, { distance: v }),
-          },
-          {
-            key: 'minutes',
-            label: 'Time in minutes',
-            unit: 'min',
-            step: 1,
-            max: 9999,
-            format: clockMinutes,
-            parse: parseMinutes,
-            value: s.minutes,
-            ghost: g?.minutes || null,
-            change: (v) => this.update(i, { minutes: v }),
-          },
-        ];
-      case 'time':
-        return [
-          {
-            key: 'min',
-            label: 'Minutes',
-            unit: 'min',
-            step: 1,
-            max: 166,
-            format: String,
-            value: Math.floor(s.value / 60),
-            ghost: g ? Math.floor(g.value / 60) : null,
-            change: (v) => this.update(i, { value: Math.round(v) * 60 + (s.value % 60) }),
-          },
-          {
-            key: 'sec',
-            label: 'Seconds',
-            unit: 'sec',
-            step: 5,
-            max: 59,
-            format: twoDigits,
-            value: s.value % 60,
-            ghost: g ? g.value % 60 : null,
-            change: (v) => this.update(i, { value: Math.floor(s.value / 60) * 60 + Math.round(v) }),
-          },
-        ];
-      default: {
-        const reps: DialSpec = {
-          key: 'reps',
-          label: 'Reps',
-          unit: 'reps',
-          step: 1,
-          max: 9999,
-          format: String,
-          value: s.value,
-          ghost: g?.value ?? null,
-          change: (v) => this.update(i, { value: Math.round(v) }),
-        };
-        if (!this.weighted) return [reps];
-        return [
-          reps,
-          {
-            key: 'load',
-            label: `Weight in ${this.weightUnit}`,
-            unit: this.weightUnit,
-            step: WeightUnits.step(this.units),
-            max: 9999,
-            format: this.formatWeight,
-            value: s.load,
-            ghost: g?.load || null,
-            change: (v) => this.commitLoad(i, v),
-          },
-        ];
-      }
-    }
+    return this.format.dials(this.sets()[i], this.ghost(), (patch) =>
+      patch.load === undefined ? this.update(i, patch) : this.commitLoad(i, patch.load),
+    );
   });
 
   constructor() {
@@ -293,46 +162,13 @@ export class SetLoggerSheet {
 
   private initialSets(): SetDraft[] {
     const from = this.data.existing?.sets ?? this.data.previous?.sets ?? [];
-    if (from.length > 0) return from.map((s) => this.draftFrom(s));
-    const count = this.track === 'distance' ? 1 : 3;
-    return Array.from({ length: count }, () => this.draftFrom(null));
-  }
-
-  private draftFrom(set: SetLog | null): SetDraft {
-    const seconds = this.track === 'distance' ? (set?.seconds ?? null) : null;
-    return {
-      value: set?.reps ?? set?.seconds ?? (this.track === 'time' ? 30 : 10),
-      load:
-        this.weighted && set?.loadKg != null
-          ? WeightUnits.tidy(WeightUnits.toDisplay(set.loadKg, this.units))
-          : 0,
-      distance:
-        set?.meters == null
-          ? 0
-          : this.inMetres
-            ? set.meters
-            : round2(DistanceUnits.toDisplay(set.meters, this.units)),
-      minutes: seconds === null ? 0 : round2(seconds / 60),
-    };
-  }
-
-  /** A set in a few characters: "8 × 60", "12 reps", "1:30", "5 km". */
-  protected summary(s: SetDraft): string {
-    switch (this.track) {
-      case 'distance':
-        if (s.distance > 0) return `${this.formatDistance(s.distance)} ${this.distanceUnit}`;
-        return s.minutes > 0 ? `${clockMinutes(s.minutes)} min` : '–';
-      case 'time':
-        return `${Math.floor(s.value / 60)}:${twoDigits(s.value % 60)}`;
-      default:
-        if (!this.weighted) return `${s.value} reps`;
-        return s.load > 0 ? `${s.value} × ${this.formatWeight(s.load)}` : `${s.value} reps`;
-    }
+    if (from.length > 0) return from.map((s) => this.format.draft(s));
+    const count = this.exercise.track === 'distance' ? 1 : 3;
+    return Array.from({ length: count }, () => this.format.draft(null));
   }
 
   protected chipLabel(i: number, s: SetDraft): string {
-    const unit = this.weighted && s.load > 0 ? ` ${this.weightUnit}` : '';
-    return `Set ${i + 1}: ${this.summary(s)}${unit}`;
+    return `Set ${i + 1}: ${this.format.describe(s)}`;
   }
 
   private update(i: number, change: Partial<SetDraft>): void {
@@ -393,38 +229,15 @@ export class SetLoggerSheet {
   protected save(): void {
     const sets: SetLog[] = [];
     for (const draft of this.sets()) {
-      const set = this.toSet(draft);
+      const set = this.format.toSet(draft);
       if (set) sets.push(set);
     }
-    const entry = entryOf(this.exercise, { sets, rpe: this.rpe() });
+    const entry = entryOf(this.exercise, { sets, rpe: this.planning ? null : this.rpe() });
     const message = implausibility(entry);
     if (message) {
       this.refused.set({ sets: this.sets(), message });
       return;
     }
     this.ref.dismiss(entry);
-  }
-
-  /** A set as stored, or null if nothing was entered. */
-  private toSet(d: SetDraft): SetLog | null {
-    if (this.track === 'distance') {
-      const meters =
-        d.distance <= 0
-          ? null
-          : this.inMetres
-            ? Math.round(d.distance)
-            : DistanceUnits.toMeters(d.distance, this.units);
-      const seconds = d.minutes <= 0 ? null : Math.round(d.minutes * 60);
-      if (meters === null && seconds === null) return null;
-      return { reps: null, loadKg: null, seconds, meters };
-    }
-    if (d.value <= 0) return null;
-    if (this.track === 'time') return { reps: null, loadKg: null, seconds: d.value, meters: null };
-    return {
-      reps: d.value,
-      loadKg: this.weighted && d.load > 0 ? WeightUnits.toKg(d.load, this.units) : null,
-      seconds: null,
-      meters: null,
-    };
   }
 }

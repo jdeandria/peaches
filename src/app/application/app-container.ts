@@ -6,6 +6,7 @@ import {
   CrateRepository,
   DisputeRepository,
   PeachRepository,
+  RoutineRepository,
   SeasonRepository,
   WorkoutLogRepository,
 } from '../domain/repositories';
@@ -15,6 +16,7 @@ import { CrateService } from './crate-service';
 import { DisputeService } from './dispute-service';
 import { LineupService } from './lineup-service';
 import { LoggingService } from './logging-service';
+import { RoutineService } from './routine-service';
 import { SeasonService } from './season-service';
 import { SessionService } from './session-service';
 import { VotingService } from './voting-service';
@@ -27,6 +29,7 @@ export interface Repositories {
   readonly logs: WorkoutLogRepository;
   readonly ballots: BallotRepository;
   readonly disputes: DisputeRepository;
+  readonly routines: RoutineRepository;
 }
 
 /**
@@ -42,11 +45,13 @@ export class AppContainer implements Repositories {
   readonly logs: WorkoutLogRepository;
   readonly ballots: BallotRepository;
   readonly disputes: DisputeRepository;
+  readonly routines: RoutineRepository;
 
   readonly windows: RoundWindowService;
   readonly scoring = new ScoringService();
   readonly crateService: CrateService;
   readonly loggingService: LoggingService;
+  readonly routineService: RoutineService;
   readonly votingService: VotingService;
   readonly lineupService: LineupService;
   readonly disputeService: DisputeService;
@@ -66,10 +71,12 @@ export class AppContainer implements Repositories {
       logs: this.logs,
       ballots: this.ballots,
       disputes: this.disputes,
+      routines: this.routines,
     } = repositories);
     this.windows = new RoundWindowService(zone);
     this.crateService = new CrateService(this.crates, ids);
     this.loggingService = new LoggingService({ logs: this.logs, crates: this.crates, ids });
+    this.routineService = new RoutineService(this.routines, ids);
     this.votingService = new VotingService(this.ballots, this.crates);
     this.lineupService = new LineupService({
       seasons: this.seasons,

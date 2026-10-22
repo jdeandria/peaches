@@ -43,7 +43,7 @@ service cloud.firestore {
 
       // Copies of submitted logs, written by their Peach in the same batch
       // as the log itself, and again whenever they edit it. Members read
-      // them to score matchups.
+      // them to score matchups. A session's plan never leaves its Peach.
       match /logs/{logId} {
         allow read: if isMember(crateId);
         allow create, update: if isSelf(request.resource.data.peachId)
@@ -51,7 +51,8 @@ service cloud.firestore {
                               && isMember(crateId)
                               && request.resource.data.id == logId
                               && request.resource.data.status == 'submitted'
-                              && crateId in request.resource.data.sharedWith;
+                              && crateId in request.resource.data.sharedWith
+                              && request.resource.data.get('plan', []).size() == 0;
         allow delete: if false;
       }
 
@@ -175,6 +176,16 @@ service cloud.firestore {
       allow update: if isSelf(resource.data.peachId)
                     && request.resource.data.peachId == resource.data.peachId;
       allow delete: if false;
+    }
+
+    // A Peach's saved routines are theirs alone, to change or delete.
+    match /routines/{routineId} {
+      allow read, delete: if isSelf(resource.data.peachId);
+      allow create: if isSelf(request.resource.data.peachId)
+                    && request.resource.data.id == routineId;
+      allow update: if isSelf(resource.data.peachId)
+                    && request.resource.data.peachId == resource.data.peachId
+                    && request.resource.data.id == routineId;
     }
   }
 }

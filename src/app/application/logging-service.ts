@@ -2,13 +2,25 @@ import { IdGenerator } from '../domain/core/ids';
 import { isActiveMembership } from '../domain/models/crate';
 import { SharedExercise } from '../domain/models/crate-exercise';
 import {
+  addPlannedSet,
+  entryFor,
   ExerciseLogEntry,
+  hasStarted,
   isSubmitted,
+  logPlannedSet,
   pauseTimer,
   elapsedSeconds,
+  planCoveringEntries,
+  plannedFor,
   removeEntry,
+  removePlanned,
   resumeTimer,
+  SetLog,
+  skipPlannedSet,
+  startSession,
+  unlogLastSet,
   upsertEntry,
+  upsertPlanned,
   WorkoutLog,
   workoutLog,
 } from '../domain/models/workout-log';
@@ -40,8 +52,8 @@ export class LoggingService {
   }
 
   /**
-   * Starts a log with its clock running since `startedAt`, when the Peach
-   * opened the log screen.
+   * Starts a log with its clock already running since `startedAt`, for a
+   * workout recorded as it happens without a plan.
    */
   async startLog(peachId: string, startedAt: Date): Promise<WorkoutLog> {
     const log = workoutLog({
@@ -55,19 +67,35 @@ export class LoggingService {
   }
 
   /**
-   * The log screen opened: resumes the Peach's draft, or starts one. A
-   * draft with nothing in it yet starts afresh, so a log opened on Sunday
-   * but filled in on Tuesday counts as Tuesday's.
+   * The log screen opened: resumes the Peach's draft, or creates one. The
+   * clock doesn't run until the workout starts (`startSession`); once it
+   * has, opening the screen resumes it. A draft not started yet takes
+   * today's date, so a plan made on Sunday but done on Tuesday counts as
+   * Tuesday's.
    */
   async openDraft(peachId: string, now: Date): Promise<WorkoutLog> {
     const draft = await this.currentLog(peachId);
-    if (!draft) return this.startLog(peachId, now);
-    const opened =
-      draft.entries.length === 0
-        ? { ...draft, startedAt: now, durationSeconds: 0, timerStartedAt: now }
-        : resumeTimer(draft, now);
+    if (!draft) {
+      const log = workoutLog({ id: this.deps.ids.newId(), peachId, startedAt: now });
+      await this.deps.logs.save(log);
+      return log;
+    }
+    const covered = planCoveringEntries(draft);
+    const opened = hasStarted(covered)
+      ? resumeTimer(covered, now)
+      : covered.entries.length === 0
+        ? { ...covered, startedAt: now }
+        : startSession(covered, now);
     if (opened !== draft) await this.deps.logs.save(opened);
     return opened;
+  }
+
+  /** Starts the workout's clock (or resumes it): the Peach is about to do their sets. */
+  async startSession(logId: string, now: Date): Promise<WorkoutLog> {
+    return this.update(logId, (log) => {
+      if (isSubmitted(log)) throw new DomainError('This workout is already finished.');
+      return startSession(log, now);
+    });
   }
 
   /** Adds or replaces the entry for one exercise, before or after submitting. */
@@ -77,9 +105,67 @@ export class LoggingService {
     return this.update(logId, (log) => upsertEntry(log, entry));
   }
 
+  /** Plans an exercise for the session, or changes its target sets. */
+  async planExercise(logId: string, planned: ExerciseLogEntry): Promise<WorkoutLog> {
+    const problem = implausibility(planned);
+    if (problem) throw new DomainError(problem);
+    if (planned.sets.length === 0) throw new DomainError('Plan at least one set.');
+    return this.updateDraft(logId, (log) => upsertPlanned(log, planned));
+  }
+
+  /** Plans these exercises after the ones already planned (a routine, say), skipping repeats. */
+  async addToPlan(logId: string, exercises: readonly ExerciseLogEntry[]): Promise<WorkoutLog> {
+    return this.updateDraft(logId, (log) =>
+      exercises
+        .filter((e) => e.sets.length > 0 && !plannedFor(log, e.exerciseId))
+        .reduce(upsertPlanned, log),
+    );
+  }
+
+  /**
+   * Records a set done of a planned exercise, starting the workout's clock
+   * if it hasn't started.
+   */
+  async logSet(logId: string, exerciseId: string, set: SetLog, now: Date): Promise<WorkoutLog> {
+    return this.updateDraft(logId, (log) => {
+      if (!plannedFor(log, exerciseId)) throw new DomainError('That exercise isn’t planned.');
+      const logged = logPlannedSet(startSession(log, now), exerciseId, set);
+      const problem = implausibility(entryFor(logged, exerciseId)!);
+      if (problem) throw new DomainError(problem);
+      return logged;
+    });
+  }
+
+  /** Takes back the last set logged of an exercise. */
+  async undoSet(logId: string, exerciseId: string): Promise<WorkoutLog> {
+    return this.updateDraft(logId, (log) => unlogLastSet(log, exerciseId));
+  }
+
+  /** Drops the next planned set of an exercise. */
+  async skipSet(logId: string, exerciseId: string): Promise<WorkoutLog> {
+    return this.updateDraft(logId, (log) => skipPlannedSet(log, exerciseId));
+  }
+
+  /** Plans one more set of an exercise, like its last. */
+  async addSet(logId: string, exerciseId: string): Promise<WorkoutLog> {
+    return this.updateDraft(logId, (log) => addPlannedSet(log, exerciseId));
+  }
+
+  /** How hard an exercise was, once its sets are done (null clears it). */
+  async rateExercise(logId: string, exerciseId: string, rpe: number | null): Promise<WorkoutLog> {
+    if (rpe !== null && (!Number.isInteger(rpe) || rpe < 1 || rpe > 10)) {
+      throw new DomainError('RPE is 1 to 10.');
+    }
+    return this.update(logId, (log) => {
+      const entry = entryFor(log, exerciseId);
+      return entry ? upsertEntry(log, { ...entry, rpe }) : log;
+    });
+  }
+
+  /** Removes an exercise: what was done of it and, on a draft, its plan. */
   async removeEntry(logId: string, exerciseId: string): Promise<WorkoutLog> {
     return this.update(logId, (log) => {
-      const updated = removeEntry(log, exerciseId);
+      const updated = removePlanned(removeEntry(log, exerciseId), exerciseId);
       if (isSubmitted(log) && updated.entries.length === 0) {
         throw new DomainError('A workout needs at least one exercise.');
       }
@@ -111,6 +197,8 @@ export class LoggingService {
       durationSeconds: Math.min(MAX_SESSION_SECONDS, elapsedSeconds(log, now)),
       timerStartedAt: null,
       sharedWith: await this.activeCrateIds(log.peachId),
+      // The plan was for doing the workout; Crates see what was done.
+      plan: [],
     };
     await this.deps.logs.saveSubmitted(submitted);
     return submitted;
@@ -168,6 +256,14 @@ export class LoggingService {
     const updated = { ...changed, sharedWith: changed.sharedWith.filter((id) => active.has(id)) };
     await this.deps.logs.saveSubmitted(updated);
     return updated;
+  }
+
+  /** Like `update`, for changes only a draft can take. */
+  private updateDraft(logId: string, change: (log: WorkoutLog) => WorkoutLog): Promise<WorkoutLog> {
+    return this.update(logId, (log) => {
+      if (isSubmitted(log)) throw new DomainError('This workout is already finished.');
+      return change(log);
+    });
   }
 
   private async require(logId: string): Promise<WorkoutLog> {

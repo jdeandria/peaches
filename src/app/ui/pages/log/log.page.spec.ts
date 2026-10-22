@@ -7,7 +7,8 @@ import { Router } from '@angular/router';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { AppState } from '../../../state/app-state';
-import { isSubmitted } from '../../../domain/models/workout-log';
+import { loggableFromCatalog } from '../../../domain/exercises/loggable';
+import { entryOf, isSubmitted, setLog } from '../../../domain/models/workout-log';
 import { seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { LogPage } from './log.page';
 
@@ -18,6 +19,7 @@ describe('LogPage', () => {
   let backend: TestBackend;
 
   beforeEach(async () => {
+    localStorage.clear();
     backend = await seededBackend({ routes: [{ path: '**', component: Blank }] });
     TestBed.configureTestingModule({
       providers: [
@@ -76,27 +78,35 @@ describe('LogPage', () => {
     await stable(f);
   };
   const rows = () => Array.from(overlay().querySelectorAll<HTMLButtonElement>('button.row'));
+  const radio = (root: ParentNode, label: string) =>
+    Array.from(root.querySelectorAll<HTMLButtonElement>('[role=radio]')).find(
+      (b) => text(b) === label,
+    )!;
+  const doneButton = (root: ParentNode) =>
+    Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find((b) =>
+      b.getAttribute('aria-label')?.startsWith('Done: set'),
+    );
 
-  it('times the session, logs a run and finishes in one tap', async () => {
+  it('plans a run, starts the clock with the workout, logs it set by set and finishes', async () => {
     const { f, el } = await render();
     expect(text(el.querySelector('h1'))).toBe('Log a workout');
     expect(text(el.querySelector('.subtitle'))).toBe('Counts in 2 Crates');
     expect(text(el.querySelector('.clock'))).toContain('0:00');
-    expect(text(el.querySelector('.clock'))).toContain('Runs while this screen is open');
+    expect(text(el.querySelector('.clock'))).toContain('Starts when you start');
     expect(text(el)).toContain('What are you doing?');
-    expect(button(el, 'Finish · 0:00')).toBeUndefined();
-    // The clock started when the screen opened.
+    expect(button(el, 'Start workout')).toBeUndefined();
+    // Planning doesn't count: the clock waits.
     const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    expect(draft.timerStartedAt).not.toBeNull();
+    expect(draft.timerStartedAt).toBeNull();
 
-    // Pick "Run" from the catalog.
+    // Plan "Run" from the catalog: five kilometres in 25 minutes.
     await pick(f, el, 'run');
     rows()
       .find((b) => text(b.querySelector('.pch-body-large')) === 'Run')!
       .click();
     await stable(f);
-
-    // Last time's run is already on the dials; make it five kilometres in 25 minutes.
+    // Planning sets has no RPE: that's for after.
+    expect(overlay().querySelector('[role=radio]')).toBeNull();
     await dial(f, 'Distance in km', '5');
     await dial(f, 'Time in minutes', '25');
     button(overlay(), 'Save')!.click();
@@ -104,17 +114,27 @@ describe('LogPage', () => {
 
     expect(text(el.querySelector('.item'))).toContain('Run');
     expect(text(el.querySelector('.item'))).toContain('1 set · 5 km · 25:00');
-    const totals = Array.from(el.querySelectorAll('.total')).map((t) =>
-      Array.from(t.querySelectorAll('.pch-title-medium, .pch-label-small')).map(text),
-    );
-    expect(totals).toEqual([
-      ['5 km', 'Run & walk'],
-      ['25 min', 'Active minutes'],
-    ]);
-    // Weekend Warriors' Season is under way: 5 km at 23 + 25 min at 25 per 45.
-    expect(text(el.querySelector('.points'))).toBe('36.9 pts in Weekend Warriors');
-    // This week's pledges, counting the run.
-    expect(text(el.querySelector('.pledges'))).toContain('Run & walk');
+    expect(text(el.querySelector('.done-count'))).toBe('0/1');
+    // Nothing is done yet, so nothing adds up yet.
+    expect(el.querySelector('.total')).toBeNull();
+
+    button(el, 'Start workout')!.click();
+    await stable(f);
+    expect((await backend.container.logs.getById(draft.id))!.timerStartedAt).not.toBeNull();
+    expect(TestBed.inject(Router).url).toContain('mode=log');
+    f.componentRef.setInput('mode', 'log');
+    await stable(f);
+
+    // Log mode: one set, its target on the dials, and Done.
+    expect(el.querySelector('pch-page')).toBeNull();
+    expect(text(el.querySelector('h1'))).toBe('Run');
+    expect(text(el)).toContain('Exercise 1 of 1 · Set 1 of 1');
+    expect(text(el.querySelector('.target'))).toBe('Target 5.0 km');
+    button(el, 'Done: set 1 of Run')!.click();
+    await stable(f);
+    expect(text(el.querySelector('h1'))).toBe('Workout complete');
+    radio(el, '7').click();
+    await stable(f);
 
     button(el, 'Finish · 0:00')!.click();
     await stable(f);
@@ -122,7 +142,150 @@ describe('LogPage', () => {
     expect(isSubmitted(log)).toBe(true);
     expect(log.timerStartedAt).toBeNull();
     expect(log.sharedWith).toHaveLength(2);
+    expect(log.plan).toEqual([]);
+    expect(log.entries).toEqual([
+      expect.objectContaining({
+        exerciseName: 'Run',
+        rpe: 7,
+        sets: [{ reps: null, loadKg: null, meters: 5000, seconds: 1500 }],
+      }),
+    ]);
     expect(TestBed.inject(Router).url).toBe(`/log/${draft.id}`);
+  });
+
+  it('plans from a routine, saves a plan as one, and deletes one with Undo', async () => {
+    const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
+    const { f, el } = await render();
+    const routines = () =>
+      Array.from(el.querySelectorAll('.routine-use .pch-title-medium')).map(text);
+    expect(routines()).toEqual(['Full body', 'Swing day']);
+
+    el.querySelectorAll<HTMLButtonElement>('.routine-use')[0].click();
+    await stable(f);
+    expect(Array.from(el.querySelectorAll('.item .pch-title-medium')).map(text)).toEqual([
+      'Goblet Squat',
+      'Dumbbell Bench Press',
+      'Dumbbell Bent Over Row',
+      'Forearm Plank',
+    ]);
+    expect(text(el)).toContain('0 of 12 sets done');
+
+    button(el, 'Save as routine')!.click();
+    await stable(f);
+    const name = overlay().querySelector<HTMLInputElement>('mat-dialog-content input')!;
+    expect(name.value).toBe('Goblet Squat, Dumbbell Bench Press & mor');
+    type(name, 'full BODY');
+    await stable(f);
+    // Same name: it replaces that one.
+    expect(text(overlay().querySelector('mat-hint'))).toBe('Replaces your “Full body” routine');
+    type(name, 'Upper & lower');
+    await stable(f);
+    button(overlay(), 'Save')!.click();
+    await stable(f);
+    const saved = await backend.container.routines.forPeach(DEMO_PEACH_ID);
+    expect(saved.map((r) => r.name)).toEqual(['Full body', 'Swing day', 'Upper & lower']);
+    expect(saved[2].exercises).toHaveLength(4);
+    expect(toast).toHaveBeenCalledWith('Saved “Upper & lower”.');
+
+    // Back to an empty plan to see the routines again, and delete one.
+    for (const id of saved[2].exercises.map((e) => e.exerciseId)) {
+      const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+      await backend.container.loggingService.removeEntry(draft.id, id);
+    }
+    await stable(f);
+    expect(routines()).toEqual(['Full body', 'Swing day', 'Upper & lower']);
+    button(el, 'Delete routine Swing day')!.click();
+    await stable(f);
+    expect(routines()).toEqual(['Full body', 'Upper & lower']);
+    const undo = toast.mock.calls.find(([m]) => m === 'Deleted “Swing day”.')![1]!;
+    undo();
+    await stable(f);
+    expect(routines()).toEqual(['Full body', 'Swing day', 'Upper & lower']);
+  });
+
+  it('log mode rests between sets, and skips, adds and takes back sets', async () => {
+    const { f, el } = await render();
+    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    const exercise = (id: string) => loggableFromCatalog(backend.container.catalog.require(id));
+    const squat = exercise('bb-back-squat');
+    await backend.container.loggingService.planExercise(
+      draft.id,
+      entryOf(squat, { sets: [1, 2].map(() => setLog({ reps: 5, loadKg: 100 })) }),
+    );
+    await backend.container.loggingService.planExercise(
+      draft.id,
+      entryOf(exercise('bw-forearm-plank'), { sets: [setLog({ seconds: 60 })] }),
+    );
+    f.componentRef.setInput('mode', 'log');
+    await stable(f);
+    const heading = () => text(el.querySelector('h1'));
+    const where = () => text(el.querySelector('.title p'));
+    const done = () => doneButton(el)!.click();
+    const squats = async () =>
+      (await backend.container.logs.getById(draft.id))!.entries.find(
+        (e) => e.exerciseId === squat.id,
+      )?.sets ?? [];
+
+    expect(heading()).toBe(squat.name);
+    expect(text(el.querySelector('.target'))).toBe('Target 5 × 100 kg');
+    // A rep short of the target: dial it down, then Done.
+    key(el.querySelector<HTMLElement>('[role=slider][aria-label="Reps"]')!, 'ArrowDown');
+    await stable(f);
+    done();
+    await stable(f);
+    expect((await squats()).map((s) => s.reps)).toEqual([4]);
+    // The first set started the clock.
+    expect((await backend.container.logs.getById(draft.id))!.timerStartedAt).not.toBeNull();
+
+    // A rest, which can be stretched or skipped.
+    expect(heading()).toBe('Rest');
+    expect(el.querySelector('[role=timer]')?.getAttribute('aria-label')).toBe('Rest 1:30');
+    button(el, 'Rest 15 seconds more')!.click();
+    await stable(f);
+    expect(el.querySelector('[role=timer]')?.getAttribute('aria-label')).toBe('Rest 1:45');
+    expect(text(el.querySelector('.up-next'))).toContain('Set 2 · 5 × 100 kg');
+    button(el, 'Skip rest')!.click();
+    await stable(f);
+    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
+
+    button(el, 'Add a set')!.click();
+    await stable(f);
+    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 3');
+    button(el, 'Skip set')!.click();
+    await stable(f);
+    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
+
+    // Its last set: how hard was it?
+    done();
+    await stable(f);
+    expect(text(el)).toContain(`How hard was ${squat.name}?`);
+    expect(text(el.querySelector('.up-next'))).toContain('Forearm Plank');
+    button(el, 'Undo last set')!.click();
+    await stable(f);
+    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
+    expect(await squats()).toHaveLength(1);
+
+    // Without the rest timer, finishing an exercise still asks how it went.
+    const restToggle = button(el, 'Rest timer')!;
+    expect(restToggle.getAttribute('aria-pressed')).toBe('true');
+    restToggle.click();
+    await stable(f);
+    expect(restToggle.getAttribute('aria-pressed')).toBe('false');
+    done();
+    await stable(f);
+    expect(heading()).toBe('Nice set');
+    expect(el.querySelector('[role=timer]')).toBeNull();
+    radio(el, '9').click();
+    await stable(f);
+    expect((await backend.container.logs.getById(draft.id))!.entries[0].rpe).toBe(9);
+    button(el, 'Next set')!.click();
+    await stable(f);
+    expect(heading()).toBe('Forearm Plank');
+
+    button(el, 'Skip set')!.click();
+    await stable(f);
+    expect(heading()).toBe('Workout complete');
+    expect(text(el)).toContain('2 sets in');
   });
 
   it('leads with recent exercises and crate-mates’ ones, tagged with who', async () => {
@@ -149,12 +312,12 @@ describe('LogPage', () => {
     button(overlay(), 'Save')!.click();
     await stable(f);
     const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    expect(draft.entries[0]).toMatchObject({
+    expect(draft.plan[0]).toMatchObject({
       exerciseName: 'Rucking',
       track: 'reps',
       takesLoad: true,
     });
-    expect(draft.entries[0].exerciseId.startsWith('custom-')).toBe(true);
+    expect(draft.plan[0].exerciseId.startsWith('custom-')).toBe(true);
   });
 
   it('a finished workout stays editable, time included', async () => {

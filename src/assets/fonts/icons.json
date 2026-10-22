@@ -3,9 +3,11 @@
   "add_circle",
   "arrow_back",
   "block",
+  "bookmark_add",
   "check",
   "check_circle",
   "checklist",
+  "close",
   "delete",
   "directions_bike",
   "directions_run",
@@ -17,6 +19,8 @@
   "fitness_center",
   "flag",
   "history",
+  "hourglass",
+  "hourglass_disabled",
   "how_to_vote",
   "install_mobile",
   "inventory_2",
@@ -36,6 +40,8 @@
   "search",
   "search_off",
   "share",
+  "skip_next",
   "timer",
-  "today"
+  "today",
+  "undo"
 ]

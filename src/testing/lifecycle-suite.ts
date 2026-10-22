@@ -118,6 +118,57 @@ export function runLifecycleSuite(
     });
   });
 
+  describe(`${backend} RoutineService`, () => {
+    const squat = squats(5, 100);
+
+    it('saves a plan as a routine, renames, updates and deletes it', async () => {
+      const rated = { ...squat, rpe: 8, notes: 'heavy' };
+      const legs = await app.routineService.create('a', '  Leg   day ', [rated, run(5)], now);
+      expect(legs.name).toBe('Leg day');
+      // Only what to do is kept.
+      expect(legs.exercises[0]).toMatchObject({ rpe: null, notes: null });
+      await app.routineService.create('a', 'arms', [squat], now);
+      await app.routineService.create('b', 'Theirs', [squat], now);
+      expect((await app.routines.forPeach('a')).map((r) => r.name)).toEqual(['arms', 'Leg day']);
+      const watched = await firstValueFrom(app.routines.watchForPeach('a'));
+      expect(watched).toHaveLength(2);
+
+      const renamed = await app.routineService.update('a', legs.id, { name: 'Legs' }, utc(10, 11));
+      expect(renamed).toMatchObject({ name: 'Legs', updatedAt: utc(10, 11) });
+      const replaced = await app.routineService.update('a', legs.id, { exercises: [run(10)] }, now);
+      expect(replaced.exercises).toEqual([run(10)]);
+      // Someone else's routine is out of reach.
+      await expect(app.routineService.update('b', legs.id, { name: 'Mine' }, now)).rejects.toThrow(
+        DomainError,
+      );
+
+      const removed = await app.routineService.remove('a', legs.id);
+      expect((await app.routines.forPeach('a')).map((r) => r.name)).toEqual(['arms']);
+      await app.routineService.restore(removed);
+      expect(await app.routines.getById(legs.id)).toEqual(removed);
+    });
+
+    it('needs a name and at least one sensible exercise', async () => {
+      await expect(app.routineService.create('a', ' ', [squat], now)).rejects.toThrow(DomainError);
+      await expect(app.routineService.create('a', 'x'.repeat(41), [squat], now)).rejects.toThrow(
+        DomainError,
+      );
+      await expect(app.routineService.create('a', 'Empty', [], now)).rejects.toThrow(DomainError);
+      await expect(
+        app.routineService.create('a', 'Silly', [squats(5000, 20)], now),
+      ).rejects.toThrow(DomainError);
+    });
+
+    it('plans a session from a routine', async () => {
+      const routine = await app.routineService.create('a', 'Legs', [squat, run(5)], now);
+      const draft = await app.loggingService.openDraft('a', now);
+      await app.loggingService.planExercise(draft.id, run(3));
+      const planned = await app.loggingService.addToPlan(draft.id, routine.exercises);
+      // Already-planned exercises keep their targets.
+      expect(planned.plan).toEqual([run(3), squat]);
+    });
+  });
+
   describe(`${backend} LoggingService`, () => {
     it('logs solo and shares the submitted log, and its exercises, with every active crate', async () => {
       const one = await crateWithMembers(['a', 'b'], 'One');
@@ -159,13 +210,19 @@ export function runLifecycleSuite(
       expect(await app.loggingService.crateExercises('c')).toEqual([]);
     });
 
-    it('the clock runs while the log screen is open', async () => {
+    it('the clock starts with the workout and runs while the log screen is open', async () => {
       const opened = await app.loggingService.openDraft('a', utc(10, 6, 7));
-      expect(opened.timerStartedAt).toEqual(utc(10, 6, 7));
-      // Reopening an empty draft days later starts afresh.
+      // Planning doesn't count: the clock waits for the workout to start.
+      expect(opened.timerStartedAt).toBeNull();
+      await app.loggingService.planExercise(opened.id, run(3));
+      // Reopening a draft not started yet, days later, takes the new day.
       const reopened = await app.loggingService.openDraft('a', utc(10, 8, 18));
       expect(reopened.id).toBe(opened.id);
       expect(reopened.startedAt).toEqual(utc(10, 8, 18));
+      expect(reopened.plan).toEqual([run(3)]);
+      expect(reopened.timerStartedAt).toBeNull();
+      const started = await app.loggingService.startSession(opened.id, utc(10, 8, 18));
+      expect(started.timerStartedAt).toEqual(utc(10, 8, 18));
       await app.loggingService.recordEntry(opened.id, run(3));
       // Leaving the screen for an hour pauses it; coming back resumes it.
       const paused = await app.loggingService.pauseTimer(
@@ -180,6 +237,83 @@ export function runLifecycleSuite(
         new Date(utc(10, 8, 20).getTime() + 300_000),
       );
       expect(done.durationSeconds).toBe(900);
+    });
+
+    it('plans a session, then ticks it off a set at a time', async () => {
+      const draft = await app.loggingService.openDraft('a', utc(10, 10, 8));
+      const plan = exerciseLogEntry({
+        exerciseId: 'bb-back-squat',
+        exerciseName: 'Back Squat',
+        sets: [setLog({ reps: 5, loadKg: 100 }), setLog({ reps: 5, loadKg: 100 })],
+      });
+      await app.loggingService.planExercise(draft.id, plan);
+      await app.loggingService.addToPlan(draft.id, [plan, run(5)]);
+      expect((await app.logs.getById(draft.id))!.plan.map((e) => e.exerciseId)).toEqual([
+        'bb-back-squat',
+        'bw-run',
+      ]);
+      await expect(
+        app.loggingService.planExercise(draft.id, { ...plan, sets: [] }),
+      ).rejects.toBeInstanceOf(DomainError);
+
+      // The first set logged starts the clock.
+      const first = await app.loggingService.logSet(
+        draft.id,
+        'bb-back-squat',
+        setLog({ reps: 5, loadKg: 100 }),
+        utc(10, 10, 9),
+      );
+      expect(first.startedAt).toEqual(utc(10, 10, 9));
+      expect(first.timerStartedAt).toEqual(utc(10, 10, 9));
+      await app.loggingService.logSet(
+        draft.id,
+        'bb-back-squat',
+        setLog({ reps: 3, loadKg: 100 }),
+        now,
+      );
+      await app.loggingService.undoSet(draft.id, 'bb-back-squat');
+      await app.loggingService.addSet(draft.id, 'bb-back-squat');
+      await app.loggingService.logSet(
+        draft.id,
+        'bb-back-squat',
+        setLog({ reps: 4, loadKg: 100 }),
+        now,
+      );
+      await app.loggingService.rateExercise(draft.id, 'bb-back-squat', 9);
+      await app.loggingService.skipSet(draft.id, 'bb-back-squat');
+      await app.loggingService.skipSet(draft.id, 'bw-run');
+      await expect(
+        app.loggingService.logSet(draft.id, 'bw-run', setLog({ reps: 1 }), now),
+      ).rejects.toBeInstanceOf(DomainError);
+      await expect(
+        app.loggingService.logSet(draft.id, 'bb-back-squat', setLog({ reps: 5000 }), now),
+      ).rejects.toBeInstanceOf(DomainError);
+
+      const log = (await app.logs.getById(draft.id))!;
+      expect(log.entries).toHaveLength(1);
+      expect(log.entries[0].sets.map((s) => s.reps)).toEqual([5, 4]);
+      expect(log.entries[0].rpe).toBe(9);
+      expect(log.plan.map((e) => [e.exerciseId, e.sets.length])).toEqual([['bb-back-squat', 2]]);
+
+      // Only what was done is shared; the plan stays behind.
+      await crateWithMembers(['a', 'b']);
+      const submitted = await app.loggingService.submit(draft.id, utc(10, 10, 10));
+      expect(submitted.plan).toEqual([]);
+      const [shared] = await app.logs.recentlySharedWith(submitted.sharedWith[0], 1);
+      expect(shared.plan).toEqual([]);
+      expect(shared.entries[0].sets).toHaveLength(2);
+      await expect(app.loggingService.skipSet(draft.id, 'bb-back-squat')).rejects.toBeInstanceOf(
+        DomainError,
+      );
+    });
+
+    it('removing an exercise from a draft takes its plan too', async () => {
+      const draft = await app.loggingService.openDraft('a', now);
+      await app.loggingService.planExercise(draft.id, run(5));
+      await app.loggingService.logSet(draft.id, 'bw-run', run(5).sets[0], now);
+      const removed = await app.loggingService.removeEntry(draft.id, 'bw-run');
+      expect(removed.plan).toEqual([]);
+      expect(removed.entries).toEqual([]);
     });
 
     it('rejects implausible entries and empty logs', async () => {

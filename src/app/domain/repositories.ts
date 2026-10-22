@@ -18,6 +18,7 @@ import { SharedExercise } from './models/crate-exercise';
 import { Dispute, DisputeVote } from './models/dispute';
 import { Lineup } from './models/lineup';
 import { Peach } from './models/peach';
+import { Routine } from './models/routine';
 import { Matchup, Round, Season } from './models/season';
 import { WorkoutLog } from './models/workout-log';
 
@@ -92,6 +93,17 @@ export interface WorkoutLogRepository {
   watch(id: string): Observable<WorkoutLog | null>;
   /** Newest first by start time. */
   watchForPeach(peachId: string): Observable<WorkoutLog[]>;
+}
+
+/** A Peach's saved workouts, private to them. */
+export interface RoutineRepository {
+  getById(id: string): Promise<Routine | null>;
+  /** In name order. */
+  forPeach(peachId: string): Promise<Routine[]>;
+  save(routine: Routine): Promise<void>;
+  delete(id: string): Promise<void>;
+  /** In name order. */
+  watchForPeach(peachId: string): Observable<Routine[]>;
 }
 
 /** Each member's vote on the Crate's scoring rules, one per member. */
