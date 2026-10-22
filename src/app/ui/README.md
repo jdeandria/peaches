@@ -293,6 +293,37 @@ Inputs: `options: readonly { value: T; label: string }[]` (required),
 <pch-button-group label="Range" [options]="ranges" [(selected)]="range" />
 ```
 
+### `pch-dial` — `Dial`
+
+A number picker drawn as the rim of a large wheel whose hub is off the edge
+of the screen (`side="start"` curves like `)`, `"end"` like `(`): values run
+along the rim, biggest at the apex and fading away, with a tick per step.
+Swipe along it to turn it (up for more); a fling glides on, further than in
+proportion to its speed, decelerating evenly, then lands on a step; past
+either end it rubber-bands. Tap (or Enter, or a digit) to type an exact
+value, which needn't be on a step. Arrows step, Page Up/Down jump ten,
+Home/End, mouse wheel. Outside value changes spin it on the spatial spring.
+A `slider`; `valueChange` fires as each step is crossed.
+
+| Input          | Type                                | Default        |
+| -------------- | ----------------------------------- | -------------- |
+| `value`        | `number`                            | req.           |
+| `label`        | `string` (accessible name)          | req.           |
+| `step`         | `number`                            | `1`            |
+| `min` / `max`  | `number`                            | `0` / `9999`   |
+| `side`         | `'start' \| 'end'`                  | `'start'`      |
+| `format`       | `(v: number) => string`             | `String`       |
+| `parse`        | `(text: string) => number \| null`  | `parseNumber`  |
+| `unit`         | `string` (read after the value)     | `''`           |
+| `ghost`        | `number \| null` (dot on the rim)   | `null`         |
+
+`--pch-dial-height` (200px). Pure helpers: `flingPlan`, `springStep`,
+`dialOffset`.
+
+```html
+<pch-dial label="Weight in kg" unit="kg" [step]="2.5" side="end" [value]="kg()" (valueChange)="kg.set($event)" />
+```
+
 ## Motion helpers
 
 ### `[pchStagger]` — `Stagger` directive

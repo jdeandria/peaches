@@ -33,9 +33,14 @@ test('core journey: log solo, see it score, vote on the rules', async ({ page })
     .getByRole('button', { name: /^Run\b/ })
     .first()
     .click();
+  // Sets are logged one at a time on dials: swipe one, or tap it to type.
   const sheet = page.getByRole('dialog');
-  await sheet.getByLabel('Set 1 distance in km').fill('5');
-  await sheet.getByLabel('Set 1 time in minutes').fill('25');
+  await sheet.getByRole('slider', { name: 'Distance in km' }).click();
+  await sheet.getByRole('textbox', { name: 'Distance in km' }).fill('5');
+  await page.keyboard.press('Enter');
+  await sheet.getByRole('slider', { name: 'Time in minutes' }).click();
+  await sheet.getByRole('textbox', { name: 'Time in minutes' }).fill('25');
+  await page.keyboard.press('Enter');
   await sheet.getByRole('button', { name: 'Save' }).click();
   await expect(sheet).toBeHidden();
   await expect(page.getByText('1 set · 5 km · 25:00')).toBeVisible();

@@ -10,128 +10,76 @@
   </p>
 }
 
-<ol class="sets">
+<div class="chips" role="group" aria-label="Sets">
   @for (s of sets(); track $index; let i = $index) {
-    <li class="set" [class.weighted]="weighted" [class.travel]="track === 'distance'">
-      <span class="set-label pch-title-small">{{ setLabel(i) }}</span>
-      @if (track === 'distance') {
-        <div class="pair">
-          <label class="field boxed">
-            <input
-              class="pch-title-large"
-              inputmode="decimal"
-              autocomplete="off"
-              placeholder="0"
-              [value]="s.distance"
-              [attr.aria-label]="setLabel(i) + ' distance in ' + distanceUnit"
-              (input)="setDistance(i, $any($event.target).value)"
-            />
-            <span class="unit pch-label-small" aria-hidden="true">{{ distanceUnit }}</span>
-          </label>
-          <label class="field boxed">
-            <input
-              class="pch-title-large"
-              inputmode="decimal"
-              autocomplete="off"
-              placeholder="0"
-              [value]="s.minutes"
-              [attr.aria-label]="setLabel(i) + ' time in minutes'"
-              (input)="setMinutes(i, $any($event.target).value)"
-            />
-            <span class="unit pch-label-small" aria-hidden="true">min</span>
-          </label>
-        </div>
-      } @else {
-        <div class="steppers">
-          <div class="stepper">
-            <button
-              matIconButton
-              class="outlined"
-              type="button"
-              [matTooltip]="'Fewer ' + unit"
-              [attr.aria-label]="'Fewer ' + unit + ': ' + setLabel(i)"
-              (click)="nudgeValue(i, -1)"
-            >
-              <span class="material-symbols-rounded" aria-hidden="true">remove</span>
-            </button>
-            <label class="field">
-              <input
-                class="pch-title-large"
-                inputmode="numeric"
-                autocomplete="off"
-                placeholder="0"
-                [value]="s.value"
-                [attr.aria-label]="setLabel(i) + ' ' + unit"
-                (input)="setValue(i, $any($event.target).value)"
-              />
-              <span class="unit pch-label-small" aria-hidden="true">{{ unit }}</span>
-            </label>
-            <button
-              matIconButton
-              class="tonal"
-              type="button"
-              [matTooltip]="'More ' + unit"
-              [attr.aria-label]="'More ' + unit + ': ' + setLabel(i)"
-              (click)="nudgeValue(i, 1)"
-            >
-              <span class="material-symbols-rounded" aria-hidden="true">add</span>
-            </button>
-          </div>
-          @if (weighted) {
-            <div class="divider" aria-hidden="true"></div>
-            <div class="stepper">
-              <button
-                matIconButton
-                class="outlined"
-                type="button"
-                matTooltip="Lighter"
-                [attr.aria-label]="'Lighter: ' + setLabel(i)"
-                (click)="nudgeLoad(i, -1)"
-              >
-                <span class="material-symbols-rounded" aria-hidden="true">remove</span>
-              </button>
-              <label class="field">
-                <input
-                  class="pch-title-large weight"
-                  inputmode="decimal"
-                  autocomplete="off"
-                  placeholder="–"
-                  [value]="s.load"
-                  [attr.aria-label]="setLabel(i) + ' weight in ' + weightUnit"
-                  (input)="setLoad(i, $any($event.target).value)"
-                  (blur)="commitLoad(i, $any($event.target).value.trim())"
-                  (keydown.enter)="commitLoad(i, $any($event.target).value.trim())"
-                />
-                <span class="unit pch-label-small" aria-hidden="true">{{ weightUnit }}</span>
-              </label>
-              <button
-                matIconButton
-                class="tonal"
-                type="button"
-                matTooltip="Heavier"
-                [attr.aria-label]="'Heavier: ' + setLabel(i)"
-                (click)="nudgeLoad(i, 1)"
-              >
-                <span class="material-symbols-rounded" aria-hidden="true">add</span>
-              </button>
-            </div>
-          }
-        </div>
-      }
-    </li>
+    <button
+      type="button"
+      class="chip"
+      [class.selected]="i === selected()"
+      [class.new]="i >= openedWith"
+      [attr.aria-current]="i === selected() ? 'true' : null"
+      [attr.aria-label]="chipLabel(i, s)"
+      (click)="select(i)"
+    >
+      <span class="chip-number pch-title-medium">{{ i + 1 }}</span>
+      <span class="chip-summary pch-label-small">{{ summary(s) }}</span>
+    </button>
   }
-</ol>
-
-<div class="set-count">
-  <button matButton type="button" [disabled]="!canRemove()" (click)="removeSet()">
-    <span class="material-symbols-rounded" aria-hidden="true">remove</span>
-    Remove set
-  </button>
-  <button matButton="tonal" type="button" [disabled]="!canAdd()" (click)="addSet()">
-    <span class="material-symbols-rounded" aria-hidden="true">add</span>
-    Add set
-  </button>
 </div>
+
+<section class="card" [style.--dir]="direction()" aria-labelledby="pch-set-heading">
+  <div class="card-header">
+    @for (k of [selected()]; track k) {
+      <div class="card-title" [class.slide]="moved()">
+        <h3 id="pch-set-heading" class="set-label pch-title-medium">Set {{ k + 1 }}</h3>
+        @if (ghostSummary(); as ghost) {
+          <p class="ghost-note pch-label-medium">
+            <span class="ghost-dot" aria-hidden="true"></span>Last time {{ ghost }}
+          </p>
+        }
+      </div>
+    }
+    <button
+      matIconButton
+      type="button"
+      class="remove"
+      [disabled]="!canRemove()"
+      [matTooltip]="'Remove set ' + (selected() + 1)"
+      [attr.aria-label]="'Remove set ' + (selected() + 1)"
+      (click)="removeSet()"
+    >
+      <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+    </button>
+  </div>
+
+  <div class="dials" [class.single]="dials().length === 1">
+    @for (d of dials(); track d.key; let first = $first) {
+      @if (!first && joiner) {
+        <span class="joiner" [class.word]="joiner === 'in'" aria-hidden="true">{{ joiner }}</span>
+      }
+      <div class="dial-column" [class.end]="!first">
+        @if (dials().length > 1) {
+          <span class="unit pch-label-large" aria-hidden="true">{{ d.unit }}</span>
+        }
+        <pch-dial
+          [side]="first ? 'start' : 'end'"
+          [label]="d.label"
+          [unit]="d.unit"
+          [step]="d.step"
+          [max]="d.max"
+          [format]="d.format"
+          [parse]="d.parse ?? parseNumber"
+          [value]="d.value"
+          [ghost]="d.ghost"
+          (valueChange)="d.change($event)"
+        />
+      </div>
+      @if (dials().length === 1) {
+        <span class="unit solo pch-headline-small" aria-hidden="true">{{ d.unit }}</span>
+      }
+    }
+  </div>
+</section>
 
 <h3 id="pch-rpe-label" class="pch-title-small">How hard was it? (RPE)</h3>
 <pch-button-group
@@ -148,5 +96,13 @@
 }
 
 <div class="actions">
+  @if (isLast()) {
+    <button matButton="tonal" type="button" [disabled]="!canAdd()" (click)="addSet()">
+      <span class="material-symbols-rounded" aria-hidden="true">add</span>
+      Add set
+    </button>
+  } @else {
+    <button matButton="tonal" type="button" (click)="next()">Next set</button>
+  }
   <button matButton="filled" type="button" class="save" (click)="save()">Save</button>
 </div>

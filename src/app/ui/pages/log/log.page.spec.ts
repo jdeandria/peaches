@@ -57,6 +57,17 @@ describe('LogPage', () => {
     input.value = value;
     input.dispatchEvent(new Event('input'));
   };
+  const key = (target: HTMLElement, name: string) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
+  /** Types a value into one of the set logger's dials (Enter opens its entry). */
+  async function dial(f: ComponentFixture<unknown>, label: string, value: string) {
+    key(overlay().querySelector<HTMLElement>(`[role=slider][aria-label="${label}"]`)!, 'Enter');
+    await stable(f);
+    const input = overlay().querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+    type(input, value);
+    key(input, 'Enter');
+    await stable(f);
+  }
 
   const pick = async (f: ComponentFixture<unknown>, el: HTMLElement, search: string) => {
     button(el, 'Add exercise')!.click();
@@ -85,13 +96,9 @@ describe('LogPage', () => {
       .click();
     await stable(f);
 
-    // Last time's run is already filled in; make it five kilometres in 25 minutes.
-    const [distance, minutes] = Array.from(
-      overlay().querySelectorAll<HTMLInputElement>('input[inputmode=decimal]'),
-    );
-    type(distance, '5');
-    type(minutes, '25');
-    await stable(f);
+    // Last time's run is already on the dials; make it five kilometres in 25 minutes.
+    await dial(f, 'Distance in km', '5');
+    await dial(f, 'Time in minutes', '25');
     button(overlay(), 'Save')!.click();
     await stable(f);
 

@@ -7,6 +7,7 @@ export * from './expressive/shaped-avatar';
 export * from './expressive/wavy-progress';
 export * from './expressive/loading-indicator';
 export * from './expressive/button-group';
+export * from './expressive/dial';
 export * from './layout/page';
 export * from './layout/section';
 export * from './layout/status-label';

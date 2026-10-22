@@ -15,7 +15,7 @@ import {
 import { settle } from '../../../../testing/test-app';
 import { openSetLogger } from './set-logger-sheet';
 
-/** Recording sets, weights and RPE for one exercise. */
+/** Recording sets, one at a time on dials, with weights and RPE, for one exercise. */
 describe('SetLoggerSheet', () => {
   const catalog = ExerciseCatalog.standard();
   const loggable = (id: string) => loggableFromCatalog(catalog.require(id));
@@ -65,14 +65,23 @@ describe('SetLoggerSheet', () => {
     return { dialog, result };
   }
 
+  const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim();
   const buttons = (root: HTMLElement, prefix: string) =>
     Array.from(root.querySelectorAll<HTMLButtonElement>('button')).filter((b) =>
       (b.getAttribute('aria-label') ?? b.querySelector('.mdc-button__label')?.textContent ?? '')
         .trim()
         .startsWith(prefix),
     );
-  const weightFields = (root: HTMLElement) =>
-    Array.from(root.querySelectorAll<HTMLInputElement>('input.weight'));
+  const dials = (root: HTMLElement) =>
+    Array.from(root.querySelectorAll<HTMLElement>('[role="slider"]'));
+  const dial = (root: HTMLElement, label: string) =>
+    dials(root).find((d) => d.getAttribute('aria-label') === label)!;
+  const valueOf = (root: HTMLElement, label: string) =>
+    Number(dial(root, label).getAttribute('aria-valuenow'));
+  const chips = (root: HTMLElement) =>
+    Array.from(root.querySelectorAll('.chip')).map((c) =>
+      Array.from(c.children).map(text).join(' '),
+    );
   const units = (root: HTMLElement, label: string) =>
     Array.from(root.querySelectorAll('.unit')).filter((u) => u.textContent?.trim() === label);
 
@@ -80,6 +89,35 @@ describe('SetLoggerSheet', () => {
     button.click();
     TestBed.tick();
     await settle();
+  }
+
+  async function press(target: HTMLElement, key: string): Promise<void> {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    TestBed.tick();
+    await settle();
+  }
+
+  /** Types an exact value into a dial: Enter opens its entry field. */
+  async function type(
+    root: HTMLElement,
+    label: string,
+    value: string,
+    commit: 'Enter' | 'blur' = 'Enter',
+  ): Promise<void> {
+    await press(dial(root, label), 'Enter');
+    const input = root.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+    expect(input).not.toBeNull();
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+    if (commit === 'Enter') await press(input, 'Enter');
+    else input.dispatchEvent(new Event('blur'));
+    TestBed.tick();
+    await settle();
+  }
+
+  async function goToSet(root: HTMLElement, n: number): Promise<void> {
+    await click(buttons(root, `Set ${n}`)[0]);
+    expect(text(root.querySelector('.set-label'))).toBe(`Set ${n}`);
   }
 
   async function save(dialog: HTMLElement, result: Promise<ExerciseLogEntry | undefined>) {
@@ -102,31 +140,55 @@ describe('SetLoggerSheet', () => {
     expect(await result).toBeUndefined();
   });
 
-  it('bodyweight exercises have no weight stepper', async () => {
+  it('shows one set at a time, with every set in a strip above', async () => {
+    const { dialog } = await open(squat, { previous: lifts(50, 60, 60) });
+    expect(chips(dialog)).toEqual(['1 8 × 50', '2 8 × 60', '3 8 × 60']);
+    expect(buttons(dialog, 'Set 1')[0].getAttribute('aria-current')).toBe('true');
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 1');
+    expect(valueOf(dialog, 'Weight in kg')).toBe(50);
+
+    await click(buttons(dialog, 'Next set')[0]);
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 2');
+    expect(valueOf(dialog, 'Weight in kg')).toBe(60);
+    expect(buttons(dialog, 'Set 2')[0].getAttribute('aria-current')).toBe('true');
+    expect(buttons(dialog, 'Set 1')[0].getAttribute('aria-current')).toBeNull();
+
+    // On the last set, Next becomes Add.
+    await goToSet(dialog, 3);
+    expect(buttons(dialog, 'Next set')).toHaveLength(0);
+    expect(buttons(dialog, 'Add set')).toHaveLength(1);
+  });
+
+  it('bodyweight exercises have just a reps dial', async () => {
     const { dialog, result } = await open(pushUp);
-    expect(buttons(dialog, 'Heavier')).toHaveLength(0);
+    expect(dials(dialog).map((d) => d.getAttribute('aria-label'))).toEqual(['Reps']);
     expect(units(dialog, 'kg')).toHaveLength(0);
+    expect(dial(dialog, 'Reps').getAttribute('aria-valuetext')).toBe('10 reps');
     const entry = await save(dialog, result);
     expect(entry.sets.map((s) => s.loadKg)).toEqual([null, null, null]);
     expect(entry.sets.map((s) => s.reps)).toEqual([10, 10, 10]);
     expect(entry).toMatchObject({ track: 'reps', takesLoad: false });
   });
 
-  it('weighted exercises get a weight per set', async () => {
+  it('weighted exercises dial reps and weight', async () => {
     const { dialog, result } = await open(squat);
-    expect(buttons(dialog, 'Heavier')).toHaveLength(3);
-    expect(units(dialog, 'kg')).toHaveLength(3);
+    expect(dials(dialog).map((d) => d.getAttribute('aria-label'))).toEqual([
+      'Reps',
+      'Weight in kg',
+    ]);
+    expect(units(dialog, 'kg')).toHaveLength(1);
 
-    // Blank until set: one press from zero is a single 2.5 kg step.
-    await click(buttons(dialog, 'Heavier')[0]);
+    // Empty until set: one step from zero is 2.5 kg.
+    await press(dial(dialog, 'Weight in kg'), 'ArrowUp');
+    expect(chips(dialog)[0]).toBe('1 10 × 2.5');
     const entry = await save(dialog, result);
-    // Carried forward to the later, still-blank sets.
+    // Carried forward to the later, still-empty sets.
     expect(entry.sets.map((s) => s.loadKg)).toEqual([2.5, 2.5, 2.5]);
     expect(entry.sets.map((s) => s.reps)).toEqual([10, 10, 10]);
     expect(entry.takesLoad).toBe(true);
   });
 
-  it('starts from last time’s sets and says what they were', async () => {
+  it('starts from last time’s sets, says what they were and marks them on the dials', async () => {
     const previous = last(squat, [
       { reps: 5, loadKg: 60 },
       { reps: 5, loadKg: 62.5 },
@@ -135,6 +197,9 @@ describe('SetLoggerSheet', () => {
     expect(dialog.querySelector('.last-time')?.textContent?.trim()).toContain(
       'Last time: 2 sets · 10 reps · 60–62.5 kg',
     );
+    expect(text(dialog.querySelector('.ghost-note'))).toBe('Last time 5 × 60');
+    await goToSet(dialog, 2);
+    expect(text(dialog.querySelector('.ghost-note'))).toBe('Last time 5 × 62.5');
     // Repeating it is one tap.
     const entry = await save(dialog, result);
     expect(entry.sets).toEqual(previous.sets);
@@ -143,30 +208,25 @@ describe('SetLoggerSheet', () => {
   it('changing a weight carries to later matching sets only', async () => {
     const { dialog, result } = await open(squat, { previous: lifts(50, 60, 60) });
     // Raise set 2 from 60 to 62.5: set 3 (also 60) follows, set 1 stays.
-    await click(buttons(dialog, 'Heavier')[1]);
+    await goToSet(dialog, 2);
+    await press(dial(dialog, 'Weight in kg'), 'ArrowUp');
+    expect(chips(dialog)).toEqual(['1 8 × 50', '2 8 × 62.5', '3 8 × 62.5']);
     const entry = await save(dialog, result);
     expect(entry.sets.map((s) => s.loadKg)).toEqual([50, 62.5, 62.5]);
   });
 
-  it('typed weights carry forward too', async () => {
+  it('typed weights carry forward too, and needn’t be on a step', async () => {
     const { dialog, result } = await open(squat, { previous: lifts(40, 40, 40) });
-    const field = weightFields(dialog)[0];
-    expect(field.value).toBe('40');
-    field.value = '45';
-    field.dispatchEvent(new Event('input'));
-    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-    TestBed.tick();
+    await type(dialog, 'Weight in kg', '43.75');
+    expect(valueOf(dialog, 'Weight in kg')).toBe(43.75);
     const entry = await save(dialog, result);
-    expect(entry.sets.map((s) => s.loadKg)).toEqual([45, 45, 45]);
+    expect(entry.sets.map((s) => s.loadKg)).toEqual([43.75, 43.75, 43.75]);
   });
 
   it('commits typed weights on blur', async () => {
     const { dialog, result } = await open(squat, { previous: lifts(40, 40, 40) });
-    const field = weightFields(dialog)[1];
-    field.value = '42.5';
-    field.dispatchEvent(new Event('input'));
-    field.dispatchEvent(new Event('blur'));
-    TestBed.tick();
+    await goToSet(dialog, 2);
+    await type(dialog, 'Weight in kg', '42.5', 'blur');
     const entry = await save(dialog, result);
     expect(entry.sets.map((s) => s.loadKg)).toEqual([40, 42.5, 42.5]);
   });
@@ -176,10 +236,10 @@ describe('SetLoggerSheet', () => {
       units: 'imperial',
       previous: lifts(...[1, 2, 3].map(() => WeightUnits.toKg(135, 'imperial'))),
     });
-    expect(units(dialog, 'lb')).toHaveLength(3);
-    expect(weightFields(dialog).map((f) => f.value)).toEqual(['135', '135', '135']);
-    await click(buttons(dialog, 'Heavier')[0]);
-    expect(weightFields(dialog).map((f) => f.value)).toEqual(['140', '140', '140']);
+    expect(units(dialog, 'lb')).toHaveLength(1);
+    expect(valueOf(dialog, 'Weight in lb')).toBe(135);
+    await press(dial(dialog, 'Weight in lb'), 'ArrowUp');
+    expect(chips(dialog)).toEqual(['1 8 × 140', '2 8 × 140', '3 8 × 140']);
     const entry = await save(dialog, result);
     expect(entry.sets[0].loadKg).toBeCloseTo(WeightUnits.toKg(140, 'imperial'), 9);
   });
@@ -198,18 +258,18 @@ describe('SetLoggerSheet', () => {
     expect(entry.sets.map((s) => s.reps)).toEqual([6, 6, 5]);
   });
 
-  it('steps values and records RPE', async () => {
+  it('dials reps per set and records RPE', async () => {
     const { dialog, result } = await open(pushUp);
-    await click(buttons(dialog, 'Fewer reps')[0]);
-    await click(buttons(dialog, 'More reps')[2]);
-    const valueFields = () =>
-      Array.from(dialog.querySelectorAll<HTMLInputElement>('input[inputmode="numeric"]'));
-    expect(valueFields().map((f) => f.value)).toEqual(['9', '10', '11']);
+    await press(dial(dialog, 'Reps'), 'ArrowDown');
+    await goToSet(dialog, 3);
+    await press(dial(dialog, 'Reps'), 'PageUp');
+    expect(chips(dialog)).toEqual(['1 9 reps', '2 10 reps', '3 20 reps']);
     const rpe8 = Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find(
       (b) => b.textContent?.trim() === '8',
     )!;
     await click(rpe8);
     const entry = await save(dialog, result);
+    expect(entry.sets.map((s) => s.reps)).toEqual([9, 10, 20]);
     expect(entry.rpe).toBe(8);
     expect(entry.exerciseName).toBe(pushUp.name);
     expect(entry.distanceKind).toBeNull();
@@ -226,44 +286,54 @@ describe('SetLoggerSheet', () => {
       'more than 1000 reps in one set',
     );
     // Changing the sets clears the complaint until the next Save.
-    await click(buttons(dialog, 'Fewer reps')[0]);
+    await press(dial(dialog, 'Reps'), 'ArrowDown');
     expect(dialog.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it('adds and removes sets', async () => {
+  it('adds a set like the one shown, and removes the one shown', async () => {
     const { dialog, result } = await open(pushUp, {
-      previous: last(pushUp, [{ reps: 12 }, { reps: 12 }]),
+      previous: last(pushUp, [{ reps: 12 }, { reps: 8 }]),
     });
+    await press(dial(dialog, 'Reps'), 'ArrowUp');
+    await goToSet(dialog, 2);
     await click(buttons(dialog, 'Add set')[0]);
-    await click(buttons(dialog, 'Add set')[0]);
-    await click(buttons(dialog, 'Remove set')[0]);
-    const labels = Array.from(dialog.querySelectorAll('.set-label')).map((l) => l.textContent);
-    expect(labels).toEqual(['Set 1', 'Set 2', 'Set 3']);
+    // The new set is a copy of set 2, and it's the one shown.
+    expect(chips(dialog)).toEqual(['1 13 reps', '2 8 reps', '3 8 reps']);
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 3');
+
+    await goToSet(dialog, 1);
+    await click(buttons(dialog, 'Remove set 1')[0]);
+    expect(chips(dialog)).toEqual(['1 8 reps', '2 8 reps']);
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 1');
+
+    await click(buttons(dialog, 'Remove set 1')[0]);
+    // The last one can't go.
+    expect(buttons(dialog, 'Remove set 1')[0].disabled).toBe(true);
     const entry = await save(dialog, result);
-    expect(entry.sets.map((s) => s.reps)).toEqual([12, 12, 12]);
+    expect(entry.sets.map((s) => s.reps)).toEqual([8]);
   });
 
-  it('timed exercises record seconds', async () => {
+  it('timed exercises dial minutes and seconds', async () => {
     const { dialog, result } = await open(plank, {
       previous: last(plank, [{ seconds: 45 }, { seconds: 45 }]),
     });
-    await click(buttons(dialog, 'More sec')[0]);
+    expect(dials(dialog).map((d) => d.getAttribute('aria-label'))).toEqual(['Minutes', 'Seconds']);
+    expect(dial(dialog, 'Seconds').getAttribute('aria-valuetext')).toBe('45 sec');
+    await press(dial(dialog, 'Seconds'), 'ArrowUp');
+    await press(dial(dialog, 'Minutes'), 'ArrowUp');
+    expect(chips(dialog)).toEqual(['1 1:50', '2 0:45']);
     const entry = await save(dialog, result);
-    expect(entry.sets.map((s) => s.seconds)).toEqual([50, 45]);
+    expect(entry.sets.map((s) => s.seconds)).toEqual([110, 45]);
     expect(entry.sets.every((s) => s.reps === null)).toBe(true);
   });
 
   it('cardio records distance and time, in km or miles', async () => {
     const { dialog, result } = await open(run, { units: 'imperial' });
     expect(units(dialog, 'mi')).toHaveLength(1);
-    const [distance, minutes] = Array.from(
-      dialog.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]'),
-    );
-    distance.value = '3.1';
-    distance.dispatchEvent(new Event('input'));
-    minutes.value = '27.5';
-    minutes.dispatchEvent(new Event('input'));
-    TestBed.tick();
+    await type(dialog, 'Distance in mi', '3.1');
+    await type(dialog, 'Time in minutes', '27:30');
+    expect(chips(dialog)).toEqual(['1 3.1 mi']);
+    expect(dial(dialog, 'Time in minutes').getAttribute('aria-valuetext')).toBe('27:30 min');
     const entry = await save(dialog, result);
     expect(entry.distanceKind).toBe('runWalk');
     expect(entry.sets).toEqual([
@@ -275,16 +345,13 @@ describe('SetLoggerSheet', () => {
     const { dialog, result } = await open(row, {
       previous: last(row, [{ meters: 500 }, { meters: 500 }]),
     });
-    expect(units(dialog, 'm')).toHaveLength(2);
-    const fields = Array.from(
-      dialog.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]'),
-    );
-    expect(fields.map((f) => f.value)).toEqual(['500', '', '500', '']);
-    fields[2].value = '';
-    fields[2].dispatchEvent(new Event('input'));
-    TestBed.tick();
+    expect(units(dialog, 'm')).toHaveLength(1);
+    expect(valueOf(dialog, 'Distance in m')).toBe(500);
+    await press(dial(dialog, 'Distance in m'), 'ArrowUp');
+    await goToSet(dialog, 2);
+    await press(dial(dialog, 'Distance in m'), 'Home');
     const entry = await save(dialog, result);
-    expect(entry.sets).toEqual([{ reps: null, loadKg: null, seconds: null, meters: 500 }]);
+    expect(entry.sets).toEqual([{ reps: null, loadKg: null, seconds: null, meters: 550 }]);
     expect(entry.distanceKind).toBe('swimRow');
   });
 });
