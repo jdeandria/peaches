@@ -27,6 +27,18 @@
         <span class="material-symbols-rounded" aria-hidden="true">bookmark_add</span>
       </button>
     }
+    @if (!draft()) {
+      <button
+        pageActions
+        matIconButton
+        type="button"
+        matTooltip="Delete workout"
+        aria-label="Delete workout"
+        (click)="deleteWorkout()"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+      </button>
+    }
     <div class="clock" [class.running]="draft() && started()" [pchStagger]="0">
       <span class="material-symbols-rounded" aria-hidden="true">timer</span>
       <span class="pch-display-small time" [attr.aria-label]="'Session time ' + clock()">{{

@@ -561,6 +561,20 @@ export class LogPage {
     if (done) await this.router.navigate(['/log', done.id], { replaceUrl: true });
   }
 
+  /** Deletes this finished workout, with Undo, and goes back. */
+  protected async deleteWorkout(): Promise<void> {
+    const log = this.log();
+    const me = this.me();
+    if (!log || !me || this.busy()) return;
+    const day = this.title();
+    const removed = await this.state.run((app) => app.loggingService.deleteLog(log.id, me));
+    if (!removed) return;
+    this.state.toast(`Deleted ${day}’s workout.`, () => {
+      void this.state.run((app) => app.loggingService.restoreLog(removed));
+    });
+    await this.router.navigate(['/'], { replaceUrl: true });
+  }
+
   /** Corrects when the workout happened, how long it took, and its notes. */
   protected async editDetails(): Promise<void> {
     const log = this.log();

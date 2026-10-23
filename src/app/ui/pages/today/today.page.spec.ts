@@ -1,7 +1,10 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { Router } from '@angular/router';
+
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
+import { AppState } from '../../../state/app-state';
 import { exerciseLogEntry, setLog } from '../../../domain/models/workout-log';
 import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { TodayPage } from './today.page';
@@ -140,6 +143,47 @@ describe('TodayPage', () => {
     await stable(f);
     expect(text(card().querySelector('h2'))).toBe('Workout in progress');
     expect(text(card())).toContain('1 of 2 sets done.');
+  });
+
+  it('swipes a workout left to delete it (with Undo), right to edit it', async () => {
+    const f = await render();
+    const el: HTMLElement = f.nativeElement;
+    const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
+    const rows = () => Array.from(el.querySelectorAll<HTMLElement>('pch-swipe-row'));
+    const hrefs = () => rows().map((r) => r.querySelector('a')!.getAttribute('href'));
+    const before = hrefs();
+    const swipe = (row: HTMLElement, to: number) => {
+      const content = row.querySelector<HTMLElement>('.content')!;
+      let t = 0;
+      const fire = (type: string, x: number) => {
+        const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: 10 });
+        Object.defineProperties(e, {
+          pointerId: { value: 1 },
+          pointerType: { value: 'touch' },
+          timeStamp: { value: (t += 16) },
+        });
+        content.dispatchEvent(e);
+      };
+      fire('pointerdown', 200);
+      for (let i = 1; i <= 10; i++) fire('pointermove', 200 + (to * i) / 10);
+      fire('pointerup', 200 + to);
+    };
+
+    swipe(rows()[0], -200);
+    await settle(400);
+    await stable(f);
+    const id = before[0]!.split('/').pop()!;
+    expect(await backend.container.logs.getById(id)).toBeNull();
+    expect(hrefs()).not.toContain(before[0]);
+    const [message, undo] = toast.mock.calls[0];
+    expect(message).toMatch(/^Deleted .+’s workout\.$/);
+    undo!();
+    await stable(f);
+    expect(hrefs()).toEqual(before);
+
+    swipe(rows()[1], 200);
+    await stable(f);
+    expect(TestBed.inject(Router).url).toBe(before[1]);
   });
 
   it('invites a new Peach to log, with empty history', async () => {

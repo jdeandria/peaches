@@ -1,6 +1,6 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatButton } from '@angular/material/button';
 
 import { localDateOfLocal, startOfWeek } from '../../../domain/core/local-date';
@@ -24,6 +24,7 @@ import { ListRow } from '../../layout/list-row';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
+import { SwipeRow } from '../../layout/swipe-row';
 import { TwoPane } from '../../layout/two-pane';
 import { MatchupHeroCard, MatchupListRow } from './matchup-card';
 
@@ -67,12 +68,33 @@ const HEADLINE_CATEGORIES: readonly ScoringCategory[] = [
     LoadingIndicator,
     MatchupHeroCard,
     MatchupListRow,
+    SwipeRow,
   ],
   templateUrl: './today.page.html',
   styleUrl: './today.page.scss',
 })
 export class TodayPage {
   protected readonly state = inject(AppState);
+  private readonly router = inject(Router);
+
+  /** Opens a workout to change it: a finished one's page, or the one going. */
+  protected openLog(r: LogRowView): void {
+    void this.router.navigate(r.submitted ? ['/log', r.log.id] : ['/log']);
+  }
+
+  /** Deletes a workout at once, with Undo to put it back. */
+  protected async deleteLog(r: LogRowView): Promise<void> {
+    const me = this.state.peachId();
+    if (!me) return;
+    const removed = await this.state.run((app) => app.loggingService.deleteLog(r.log.id, me));
+    if (!removed) return;
+    this.state.toast(
+      r.submitted ? `Deleted ${r.day}’s workout.` : 'Discarded the workout in progress.',
+      () => {
+        void this.state.run((app) => app.loggingService.restoreLog(removed));
+      },
+    );
+  }
 
   protected readonly subtitle = computed(() => Fmt.headerDay(this.state.today()));
   protected readonly refreshing = signal(false);

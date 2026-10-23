@@ -199,6 +199,11 @@ export class InMemoryWorkoutLogRepository implements WorkoutLogRepository {
     this.exercises.putAll(sharedExercisesOf(log));
   }
 
+  /** The shared copies are the log itself, so they go with it. */
+  async delete(log: WorkoutLog): Promise<void> {
+    this.store.remove(log.id);
+  }
+
   async getShared(crateId: string, logId: string): Promise<WorkoutLog | null> {
     const log = this.store.get(logId);
     return log && this.isShared(log, crateId) ? log : null;

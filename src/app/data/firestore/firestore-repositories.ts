@@ -492,6 +492,13 @@ export class FirestoreWorkoutLogRepository implements WorkoutLogRepository {
     await batch.commit();
   }
 
+  async delete(log: WorkoutLog): Promise<void> {
+    const batch = writeBatch(this.db);
+    batch.delete(doc(this.col, log.id));
+    for (const crateId of log.sharedWith) batch.delete(doc(this.shared(crateId), log.id));
+    await batch.commit();
+  }
+
   async getShared(crateId: string, logId: string): Promise<WorkoutLog | null> {
     return decodeDoc(await getDoc(doc(this.shared(crateId), logId)), workoutLogFromJson);
   }

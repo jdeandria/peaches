@@ -34,6 +34,7 @@ import {
   exerciseLogEntry,
   setLog,
   workoutLog,
+  workoutLogFromJson,
   workoutLogToJson,
 } from '../../domain/models/workout-log';
 import {
@@ -216,13 +217,14 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     );
     expect(week.size).toBe(1);
 
-    // Only their Peach edits shared copies, and nobody deletes them.
+    // Only their Peach edits shared copies, and only they delete them.
     await setDoc(sharedRef(client('b')), { ...submitted('b'), notes: 'edited' });
     await expect(
       setDoc(sharedRef(client('a')), { ...submitted('b'), notes: 'hacked' }),
     ).rejects.toThrow();
     await expect(setDoc(sharedRef(client('a')), submitted('a'))).rejects.toThrow();
-    await expect(deleteDoc(sharedRef(client('b')))).rejects.toThrow();
+    // Others can't delete it (its Peach can: see below).
+    await expect(deleteDoc(sharedRef(client('a')))).rejects.toThrow();
     // Nobody shares in someone else's name, a draft, or into a Crate they're not in.
     await expect(setDoc(sharedRef(client('a'), 'l2'), submitted('b', 'l2'))).rejects.toThrow();
     await expect(
@@ -234,6 +236,21 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     await expect(
       setDoc(sharedRef(client('b'), 'l5'), { ...planned, plan: planned['entries'] }),
     ).rejects.toThrow();
+  });
+
+  it('a Peach deletes their own workouts and their Crate copies, nobody else’s', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, COLLECTIONS.workoutLogs, 'l1'), submitted('b'));
+      await setDoc(sharedRef(db), submitted('b'));
+    });
+    await expect(deleteDoc(doc(client('a'), COLLECTIONS.workoutLogs, 'l1'))).rejects.toThrow();
+    await expect(deleteDoc(sharedRef(client('a')))).rejects.toThrow();
+    const repo = new FirestoreWorkoutLogRepository(client('b'));
+    await repo.delete(workoutLogFromJson(submitted('b')));
+    // Gone reads as missing, not refused, so screens watching it can say so.
+    expect(await repo.getById('l1')).toBeNull();
+    expect((await getDoc(sharedRef(client('a')))).exists()).toBe(false);
+    await expect(getDoc(doc(client(null), COLLECTIONS.workoutLogs, 'l1'))).rejects.toThrow();
   });
 
   it('a Peach’s routines are theirs alone', async () => {

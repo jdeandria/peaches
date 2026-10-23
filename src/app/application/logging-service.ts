@@ -170,6 +170,33 @@ export class LoggingService {
     });
   }
 
+  /**
+   * Deletes one of the Peach's workouts, a draft or a finished one, with
+   * its copies in their Crates: a week still open stops counting it, while
+   * a closed week keeps its result. Returns it, to put back with `restore`.
+   */
+  async deleteLog(logId: string, peachId: string): Promise<WorkoutLog> {
+    const log = await this.require(logId);
+    if (log.peachId !== peachId) throw new DomainError('That isn’t your workout.');
+    await this.deps.logs.delete(log);
+    return log;
+  }
+
+  /**
+   * Puts back a workout just deleted: a draft as it was, a finished one
+   * shared again with those of its Crates the Peach is still in.
+   */
+  async restoreLog(log: WorkoutLog): Promise<WorkoutLog> {
+    if (!isSubmitted(log)) {
+      await this.deps.logs.save(log);
+      return log;
+    }
+    const active = new Set(await this.activeCrateIds(log.peachId));
+    const restored = { ...log, sharedWith: log.sharedWith.filter((id) => active.has(id)) };
+    await this.deps.logs.saveSubmitted(restored);
+    return restored;
+  }
+
   /** Stops the clock while the log screen is closed; a no-op once submitted. */
   async pauseTimer(logId: string, now: Date): Promise<WorkoutLog> {
     const log = await this.require(logId);

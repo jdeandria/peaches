@@ -473,6 +473,20 @@ describe('LogPage', () => {
     expect(saved.entries.find((e) => e.exerciseId === first.exerciseId)).toEqual(first);
   });
 
+  it('deletes a finished workout, with Undo', async () => {
+    const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
+    const [latest] = (await backend.container.logs.forPeach(DEMO_PEACH_ID)).filter(isSubmitted);
+    const { f, el } = await render({ logId: latest.id });
+    button(el, 'Delete workout')!.click();
+    await stable(f);
+    expect(await backend.container.logs.getById(latest.id)).toBeNull();
+    expect(TestBed.inject(Router).url).toBe('/');
+    expect(toast).toHaveBeenCalledWith('Deleted Sun, Oct 11’s workout.', expect.any(Function));
+    toast.mock.calls[0][1]!();
+    await stable(f);
+    expect((await backend.container.logs.getById(latest.id))?.entries).toEqual(latest.entries);
+  });
+
   it('says when a workout does not exist', async () => {
     const { el } = await render({ logId: 'nope' });
     expect(text(el)).toContain('Workout not found');

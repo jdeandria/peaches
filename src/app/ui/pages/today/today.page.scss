@@ -109,3 +109,14 @@
     margin: 0;
   }
 }
+
+// Only where swiping is how you'd do it.
+.swipe-hint {
+  display: none;
+  margin: 0 4px 8px;
+  color: var(--mat-sys-on-surface-variant);
+
+  @media (pointer: coarse) {
+    display: block;
+  }
+}

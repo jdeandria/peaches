@@ -72,22 +72,33 @@
           } @else if (recent().length === 0) {
             <pch-card variant="outlined">Nothing logged yet.</pch-card>
           } @else {
+            <p class="swipe-hint pch-body-small">
+              Swipe a workout right to edit it, left to delete it.
+            </p>
             <pch-list-card>
               @for (r of recent(); track r.log.id) {
-                <a pch-list-row [routerLink]="r.submitted ? ['/log', r.log.id] : ['/log']">
-                  <ng-container
-                    ngProjectAs="[rowLeading]"
-                    [ngTemplateOutlet]="logLeading"
-                    [ngTemplateOutletContext]="{ $implicit: r }"
-                  />
-                  {{ r.day }}
-                  <span rowSubtitle class="one-line">{{ r.names }}</span>
-                  <ng-container
-                    ngProjectAs="[rowTrailing]"
-                    [ngTemplateOutlet]="logTrailing"
-                    [ngTemplateOutletContext]="{ $implicit: r }"
-                  />
-                </a>
+                <pch-swipe-row
+                  editable
+                  removable
+                  removeLabel="Delete"
+                  (edit)="openLog(r)"
+                  (remove)="deleteLog(r)"
+                >
+                  <a pch-list-row [routerLink]="r.submitted ? ['/log', r.log.id] : ['/log']">
+                    <ng-container
+                      ngProjectAs="[rowLeading]"
+                      [ngTemplateOutlet]="logLeading"
+                      [ngTemplateOutletContext]="{ $implicit: r }"
+                    />
+                    {{ r.day }}
+                    <span rowSubtitle class="one-line">{{ r.names }}</span>
+                    <ng-container
+                      ngProjectAs="[rowTrailing]"
+                      [ngTemplateOutlet]="logTrailing"
+                      [ngTemplateOutletContext]="{ $implicit: r }"
+                    />
+                  </a>
+                </pch-swipe-row>
               }
             </pch-list-card>
           }

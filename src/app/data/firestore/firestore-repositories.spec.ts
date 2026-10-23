@@ -527,6 +527,16 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
       expect((await repo.getShared('c1', 'l1'))?.notes).toBe('edited');
     });
 
+    it('delete removes the log and every Crate copy at once', async () => {
+      await repo.saveSubmitted(full);
+      await repo.delete(full);
+      expect(await repo.getById('l1')).toBeNull();
+      expect(await repo.getShared('c1', 'l1')).toBeNull();
+      expect(await repo.getShared('c2', 'l1')).toBeNull();
+      // Its exercises stay shared: they say what a member has logged.
+      expect(await repo.exercisesSharedWith('c1')).toHaveLength(2);
+    });
+
     it('forPeach and watchForPeach list newest first', async () => {
       await repo.save(workoutLog({ id: 'old', peachId: 'a', startedAt: now }));
       await repo.save(workoutLog({ id: 'new', peachId: 'a', startedAt: later(60) }));

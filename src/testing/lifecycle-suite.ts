@@ -306,6 +306,37 @@ export function runLifecycleSuite(
       );
     });
 
+    it('deletes a workout with its Crate copies, and puts it back', async () => {
+      const one = await crateWithMembers(['a', 'b'], 'One');
+      const log = await logSession('a', utc(10, 9, 7), run(5));
+      const week = () =>
+        app.logs.sharedWith(one.id, utc(10, 5), utc(10, 12)).then((ls) => ls.map((l) => l.id));
+      expect(await week()).toEqual([log.id]);
+      await expect(app.loggingService.deleteLog(log.id, 'b')).rejects.toBeInstanceOf(DomainError);
+
+      const deleted = await app.loggingService.deleteLog(log.id, 'a');
+      expect(await app.logs.getById(log.id)).toBeNull();
+      expect(await app.logs.getShared(one.id, log.id)).toBeNull();
+      expect(await week()).toEqual([]);
+      expect(await app.logs.forPeach('a')).toEqual([]);
+
+      // Undo: shared again, but only with Crates the Peach is still in.
+      const two = await crateWithMembers(['b', 'a'], 'Two');
+      await app.crateService.leave(two.id, 'a');
+      await app.loggingService.restoreLog({ ...deleted, sharedWith: [one.id, two.id] });
+      expect(await week()).toEqual([log.id]);
+      expect(await app.logs.getShared(two.id, log.id)).toBeNull();
+      expect((await app.logs.getById(log.id))?.sharedWith).toEqual([one.id]);
+
+      // A draft goes and comes back as it was.
+      const draft = await app.loggingService.openDraft('a', now);
+      await app.loggingService.planExercise(draft.id, run(3));
+      const gone = await app.loggingService.deleteLog(draft.id, 'a');
+      expect(await app.loggingService.currentLog('a')).toBeNull();
+      await app.loggingService.restoreLog(gone);
+      expect((await app.loggingService.currentLog('a'))?.plan).toEqual([run(3)]);
+    });
+
     it('removing an exercise from a draft takes its plan too', async () => {
       const draft = await app.loggingService.openDraft('a', now);
       await app.loggingService.planExercise(draft.id, run(5));

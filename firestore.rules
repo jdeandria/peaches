@@ -53,7 +53,8 @@ service cloud.firestore {
                               && request.resource.data.status == 'submitted'
                               && crateId in request.resource.data.sharedWith
                               && request.resource.data.get('plan', []).size() == 0;
-        allow delete: if false;
+        // Deleting a workout takes its copies with it.
+        allow delete: if isSelf(resource.data.peachId);
       }
 
       // The exercises each member has logged, shared in the same batch as
@@ -169,13 +170,14 @@ service cloud.firestore {
     }
 
     // A Peach's own logs, drafts included, are private: Crates see the
-    // copies shared with them on submit. Only their Peach edits them.
+    // copies shared with them on submit. Only their Peach edits or deletes them.
     match /workoutLogs/{logId} {
-      allow read: if isSelf(resource.data.peachId);
+      // A deleted log reads as missing (that reveals nothing) rather than refused.
+      allow get: if signedIn() && resource == null || isSelf(resource.data.peachId);
+      allow list, delete: if isSelf(resource.data.peachId);
       allow create: if isSelf(request.resource.data.peachId);
       allow update: if isSelf(resource.data.peachId)
                     && request.resource.data.peachId == resource.data.peachId;
-      allow delete: if false;
     }
 
     // A Peach's saved routines are theirs alone, to change or delete.

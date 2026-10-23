@@ -82,6 +82,11 @@ export interface WorkoutLogRepository {
    * once. Used again whenever the Peach edits it, so the copies follow.
    */
   saveSubmitted(log: WorkoutLog): Promise<void>;
+  /**
+   * Deletes a log and its copy under every Crate in its `sharedWith`, all at
+   * once. The exercises it shared stay: they say what a member has logged.
+   */
+  delete(log: WorkoutLog): Promise<void>;
   /** A log as shared with `crateId`, for its crate-mates. */
   getShared(crateId: string, logId: string): Promise<WorkoutLog | null>;
   /** Logs shared with `crateId` that were started in `[from, to)`. */
