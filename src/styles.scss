@@ -23,3 +23,12 @@ html {
 @include meta.load-css('./app/ui/theme/palette');
 
 @include tokens.globals;
+
+// The exercise picker is a fixed height and scrolls its results itself,
+// under a search box that stays put while you type.
+.pch-picker-panel .mat-bottom-sheet-container {
+  box-sizing: border-box;
+  height: 100%;
+  max-height: none;
+  overflow: hidden;
+}

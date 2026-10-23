@@ -272,7 +272,6 @@ export function runLifecycleSuite(
         now,
       );
       await app.loggingService.undoSet(draft.id, 'bb-back-squat');
-      await app.loggingService.addSet(draft.id, 'bb-back-squat');
       await app.loggingService.logSet(
         draft.id,
         'bb-back-squat',

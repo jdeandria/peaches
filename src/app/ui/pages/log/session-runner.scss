@@ -115,18 +115,17 @@ section {
   }
 }
 
-.card {
-  --pch-dial-height: clamp(200px, 36vh, 300px);
-  padding: 12px 8px 8px;
-  border-radius: var(--pch-radius-extra-large);
-  background: var(--mat-sys-surface-container-low);
+// The dials take the room there is, edge to edge.
+.dials {
+  flex: 1 1 auto;
+  min-height: 240px;
+  margin: 0 -16px;
 }
 
 .target {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 12px 4px;
   color: var(--mat-sys-tertiary);
 }
 
@@ -162,6 +161,24 @@ button .material-symbols-rounded {
   .material-symbols-rounded {
     font-size: 28px;
   }
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+
+  .big {
+    flex: 1;
+    margin-top: 0;
+  }
+}
+
+// Skipping is the exception: a small button beside Done, the same height.
+.skip {
+  --mat-button-tonal-container-height: 72px;
+  flex: none;
+  min-height: 72px;
+  padding: 0 16px;
 }
 
 .up-next {

@@ -149,33 +149,34 @@
           </p>
         </div>
       }
-      <div class="card">
-        <p class="target pch-label-large">
-          <span class="ghost-dot" aria-hidden="true"></span>Target {{ targetText() }}
-        </p>
-        <pch-set-dials [dials]="dials()" [joiner]="format()!.joiner" />
-      </div>
-      <div class="row">
-        <button matButton type="button" [disabled]="busy()" (click)="skip()">
+      <p class="target pch-label-large">
+        <span class="ghost-dot" aria-hidden="true"></span>Target {{ targetText() }}
+      </p>
+      <pch-set-dials class="dials" fill [dials]="dials()" [joiner]="format()!.joiner" />
+      <div class="actions">
+        <button
+          matButton="tonal"
+          type="button"
+          class="skip"
+          [disabled]="busy()"
+          [attr.aria-label]="'Skip set ' + pos.set"
+          (click)="skip()"
+        >
           <span class="material-symbols-rounded" aria-hidden="true">skip_next</span>
-          Skip set
+          Skip
         </button>
-        <button matButton type="button" [disabled]="busy()" (click)="addSet()">
-          <span class="material-symbols-rounded" aria-hidden="true">add</span>
-          Add a set
+        <button
+          matButton="filled"
+          type="button"
+          class="big done"
+          [disabled]="busy()"
+          [attr.aria-label]="'Done: set ' + pos.set + ' of ' + next()!.exercise.exerciseName"
+          (click)="done()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">check</span>
+          Done
         </button>
       </div>
-      <button
-        matButton="filled"
-        type="button"
-        class="big done"
-        [disabled]="busy()"
-        [attr.aria-label]="'Done: set ' + pos.set + ' of ' + next()!.exercise.exerciseName"
-        (click)="done()"
-      >
-        <span class="material-symbols-rounded" aria-hidden="true">check</span>
-        Done
-      </button>
       <p class="up-next pch-body-medium muted">Then: {{ upNext() }}</p>
     </section>
   }

@@ -312,14 +312,6 @@ export function skipPlannedSet(log: WorkoutLog, exerciseId: string): WorkoutLog 
   return upsertPlanned(log, { ...planned, sets });
 }
 
-/** Plans one more set of an exercise, like its last one. */
-export function addPlannedSet(log: WorkoutLog, exerciseId: string): WorkoutLog {
-  const planned = plannedFor(log, exerciseId);
-  const last = planned?.sets.at(-1) ?? entryFor(log, exerciseId)?.sets.at(-1);
-  if (!planned || !last) return log;
-  return upsertPlanned(log, { ...planned, sets: [...planned.sets, last] });
-}
-
 /**
  * Records a set done of a planned exercise. A different weight than planned
  * becomes the working weight: the sets still to come that were planned at

@@ -143,7 +143,7 @@
           </div>
         </pch-card>
         @if (routines().length > 0) {
-          <pch-section title="Start from a routine" />
+          <pch-section title="Your routines" />
           <pch-list-card [pchStagger]="2">
             @for (r of routines(); track r.routine.id) {
               <div class="item routine">
@@ -164,6 +164,33 @@
             }
           </pch-list-card>
         }
+        <pch-section title="Or try one of these" />
+        <pch-list-card [pchStagger]="3">
+          @for (t of templates(); track t.template.id) {
+            <div class="item routine">
+              <button
+                type="button"
+                class="routine-use template-use"
+                (click)="useTemplate(t.exercises)"
+              >
+                <span class="pch-title-medium"
+                  >{{ t.template.name }}
+                  <span class="kit pch-label-medium">{{ t.template.kit }}</span></span
+                >
+                <span class="pch-body-medium muted">{{ t.summary }}</span>
+              </button>
+              <button
+                matIconButton
+                type="button"
+                matTooltip="Shuffle"
+                [attr.aria-label]="'Shuffle ' + t.template.name"
+                (click)="shuffle(t.template)"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">shuffle</span>
+              </button>
+            </div>
+          }
+        </pch-list-card>
       }
     } @else if (entries().length > 0) {
       <pch-section title="Exercises" />

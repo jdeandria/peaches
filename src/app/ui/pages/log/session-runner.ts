@@ -83,7 +83,8 @@ interface Rest {
  * one-handed. The dials start on the target; Done records what's on them
  * (adjust them first if the set went differently), then a rest countdown
  * runs (optional, remembered per device) before the next set. Finishing an
- * exercise asks how hard it was. Sets can be skipped, added and taken back.
+ * exercise asks how hard it was. Sets can be skipped and taken back; what
+ * the plan holds is changed back in plan mode.
  * Keeps the screen awake while open.
  */
 @Component({
@@ -156,7 +157,11 @@ export class SessionRunner {
   });
   protected readonly targetText = computed(() => {
     const target = this.target();
-    return target ? this.format()!.describe(target) : '';
+    const format = this.format();
+    if (!target || !format) return '';
+    // A weighted exercise with no weight yet (a template, say): ask for one.
+    const ask = format.weighted && target.load === 0 ? ' · set the weight' : '';
+    return `${format.describe(target)}${ask}`;
   });
 
   /** What's on the dials: the target, until the Peach turns them (or moves on). */
@@ -306,15 +311,6 @@ export class SessionRunner {
     if (!next || this.busy()) return;
     await this.state.run((app) =>
       app.loggingService.skipSet(this.log().id, next.exercise.exerciseId),
-    );
-  }
-
-  /** One more set of this exercise, like its last. */
-  protected async addSet(): Promise<void> {
-    const next = this.next();
-    if (!next || this.busy()) return;
-    await this.state.run((app) =>
-      app.loggingService.addSet(this.log().id, next.exercise.exerciseId),
     );
   }
 

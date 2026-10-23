@@ -157,10 +157,12 @@ describe('LogPage', () => {
     const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
     const { f, el } = await render();
     const routines = () =>
-      Array.from(el.querySelectorAll('.routine-use .pch-title-medium')).map(text);
+      Array.from(el.querySelectorAll('.routine-use:not(.template-use) .pch-title-medium')).map(
+        text,
+      );
     expect(routines()).toEqual(['Full body', 'Swing day']);
 
-    el.querySelectorAll<HTMLButtonElement>('.routine-use')[0].click();
+    el.querySelectorAll<HTMLButtonElement>('.routine-use:not(.template-use)')[0].click();
     await stable(f);
     expect(Array.from(el.querySelectorAll('.item .pch-title-medium')).map(text)).toEqual([
       'Goblet Squat',
@@ -203,7 +205,34 @@ describe('LogPage', () => {
     expect(routines()).toEqual(['Full body', 'Swing day', 'Upper & lower']);
   });
 
-  it('log mode rests between sets, and skips, adds and takes back sets', async () => {
+  it('offers template workouts, reshuffled on demand, to plan in a tap', async () => {
+    const { f, el } = await render();
+    const template = (name: string) =>
+      Array.from(el.querySelectorAll<HTMLButtonElement>('.template-use')).find((b) =>
+        text(b.querySelector('.pch-title-medium'))?.startsWith(name),
+      )!;
+    expect(text(el)).toContain('Or try one of these');
+    expect(text(template('Full body').querySelector('.kit'))).toBe('Dumbbells');
+    expect(text(template('Easy run'))).toMatch(/1 exercise · (Run|Easy Jog)/);
+
+    // Shuffling draws another mix; some shuffle soon differs.
+    const before = text(template('Upper body'));
+    let after = before;
+    for (let i = 0; i < 5 && after === before; i++) {
+      button(el, 'Shuffle Upper body')!.click();
+      await stable(f);
+      after = text(template('Upper body'));
+    }
+    expect(after).not.toBe(before);
+
+    template('Upper body').click();
+    await stable(f);
+    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    expect(draft.plan).toHaveLength(5);
+    expect(text(el)).toContain('0 of 15 sets done');
+  });
+
+  it('log mode rests between sets, and skips and takes back sets', async () => {
     const { f, el } = await render();
     const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
     const exercise = (id: string) => loggableFromCatalog(backend.container.catalog.require(id));
@@ -248,12 +277,8 @@ describe('LogPage', () => {
     await stable(f);
     expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
 
-    button(el, 'Add a set')!.click();
-    await stable(f);
-    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 3');
-    button(el, 'Skip set')!.click();
-    await stable(f);
-    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
+    // Changing the plan is for plan mode: here sets are only done or skipped.
+    expect(button(el, 'Add a set')).toBeUndefined();
 
     // Its last set: how hard was it?
     done();
@@ -282,7 +307,7 @@ describe('LogPage', () => {
     await stable(f);
     expect(heading()).toBe('Forearm Plank');
 
-    button(el, 'Skip set')!.click();
+    button(el, 'Skip set 1')!.click();
     await stable(f);
     expect(heading()).toBe('Workout complete');
     expect(text(el)).toContain('2 sets in');
@@ -328,6 +353,33 @@ describe('LogPage', () => {
     expect(groups).toEqual(['Recent', 'From your Crates', 'All exercises']);
     expect(text(overlay())).toContain('Last time:');
     expect(text(overlay())).toContain('From Ada');
+  });
+
+  it('the picker: Enter takes the top match, Escape clears, arrows move through results', async () => {
+    const { f, el } = await render();
+    await pick(f, el, 'pushups');
+    const search = overlay().querySelector<HTMLInputElement>('input[type=search]')!;
+    expect(text(rows()[0].querySelector('.pch-body-large'))).toBe('Push Up');
+
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(rows()[0]);
+    rows()[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(document.activeElement).toBe(search);
+
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    search.dispatchEvent(escape);
+    await stable(f);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(search.value).toBe('');
+    // The sheet stays open for another search.
+    expect(overlay().querySelector('input[type=search]')).not.toBeNull();
+
+    type(search, 'bodyweight squat');
+    await stable(f);
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await stable(f);
+    // Straight on to planning its sets.
+    expect(text(overlay().querySelector('h2'))).toBe('Bodyweight Squat');
   });
 
   it('makes up an exercise on the spot', async () => {

@@ -279,3 +279,12 @@
     outline-offset: -2px;
   }
 }
+
+.kit {
+  margin-inline-start: 6px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  vertical-align: 2px;
+}

@@ -1,5 +1,4 @@
 import {
-  addPlannedSet,
   doneCount,
   elapsedSeconds,
   entryFor,
@@ -119,18 +118,12 @@ describe('a session plan', () => {
     expect(logPlannedSet(timed, 'plank', setLog({ seconds: 50 })).plan).toBe(timed.plan);
   });
 
-  it('skips, adds and takes back sets', () => {
+  it('skips and takes back sets', () => {
     let log = skipPlannedSet(planned, 'squat');
     expect(plannedFor(log, 'squat')?.sets).toHaveLength(1);
     log = skipPlannedSet(log, 'squat');
     // Nothing left of it, so it leaves the plan.
     expect(plannedFor(log, 'squat')).toBeUndefined();
-
-    log = addPlannedSet(planned, 'plank');
-    expect(plannedFor(log, 'plank')?.sets).toEqual([
-      setLog({ seconds: 45 }),
-      setLog({ seconds: 45 }),
-    ]);
 
     log = logPlannedSet(planned, 'squat', setLog({ reps: 5, loadKg: 60 }));
     log = logPlannedSet(log, 'squat', setLog({ reps: 4, loadKg: 60 }));

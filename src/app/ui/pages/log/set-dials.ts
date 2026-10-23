@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { booleanAttribute, ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import { Dial } from '../../expressive/dial';
 import { DialSpec } from './set-format';
@@ -6,13 +6,14 @@ import { DialSpec } from './set-format';
 /**
  * A set's numbers on dials: two side by side, reading as one quantity with
  * `joiner` between them (8 × 60, 1 : 30), or one with its unit beside it
- * ("12 reps"). Captions sit over each dial's faded top edge.
+ * ("12 reps"). Captions sit over each dial's faded top edge. With `fill`
+ * the dials grow to whatever space they're given.
  */
 @Component({
   selector: 'pch-set-dials',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Dial],
-  host: { '[class.single]': 'dials().length === 1' },
+  host: { '[class.single]': 'dials().length === 1', '[class.fill]': 'fill()' },
   template: `@for (d of dials(); track d.key; let first = $first) {
     @if (!first && joiner()) {
       <span class="joiner" [class.word]="joiner() === 'in'" aria-hidden="true">{{ joiner() }}</span>
@@ -84,9 +85,20 @@ import { DialSpec } from './set-format';
     .joiner.word {
       font: var(--mat-sys-label-large);
     }
+    :host(.fill) .dial-column {
+      display: flex;
+      flex-direction: column;
+    }
+    :host(.fill) pch-dial {
+      flex: 1 1 0;
+      min-height: 0;
+      height: auto;
+    }
   `,
 })
 export class SetDials {
   readonly dials = input.required<readonly DialSpec[]>();
   readonly joiner = input<string | null>(null);
+  /** Grow to fill the space given, rather than the dials' own height. */
+  readonly fill = input(false, { transform: booleanAttribute });
 }

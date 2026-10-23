@@ -32,7 +32,13 @@ import {
   planProgress,
   WorkoutLog,
 } from '../../../domain/models/workout-log';
+import { stableHash } from '../../../domain/core/stable-hash';
 import { lastEntry } from '../../../domain/services/last-entry';
+import {
+  templateWorkout,
+  WORKOUT_TEMPLATES,
+  WorkoutTemplate,
+} from '../../../domain/services/workout-templates';
 import { MetricExtractor } from '../../../domain/services/metric-extractor';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
@@ -184,12 +190,39 @@ export class LogPage {
   protected readonly routines = computed(() =>
     (this.routineList.value() ?? []).map((routine) => ({
       routine,
-      summary: `${Fmt.count(routine.exercises.length, 'exercise')} · ${routine.exercises
-        .slice(0, 3)
-        .map((e) => e.exerciseName)
-        .join(', ')}${routine.exercises.length > 3 ? '…' : ''}`,
+      summary: exercisesSummary(routine.exercises),
     })),
   );
+
+  /** Times each template was shuffled, so a reshuffle draws a fresh mix. */
+  private readonly shuffles = signal<Readonly<Record<string, number>>>({});
+  /**
+   * Ready-made workouts, filled with exercises at random: the mix changes
+   * each day and on Shuffle, with weights from last time.
+   */
+  protected readonly templates = computed(() => {
+    const day = localDateOfLocal(this.state.now());
+    const shuffles = this.shuffles();
+    const logs = this.myLogs() ?? [];
+    return WORKOUT_TEMPLATES.map((template) => {
+      const seed = stableHash(`${day}:${template.id}:${shuffles[template.id] ?? 0}`);
+      const exercises = templateWorkout(template, this.state.catalog, seed, (id) =>
+        lastEntry(logs, id, null),
+      );
+      return { template, exercises, summary: exercisesSummary(exercises) };
+    });
+  });
+
+  protected shuffle(template: WorkoutTemplate): void {
+    this.shuffles.update((s) => ({ ...s, [template.id]: (s[template.id] ?? 0) + 1 }));
+  }
+
+  /** Plans a template's exercises, as shuffled. */
+  protected async useTemplate(exercises: readonly ExerciseLogEntry[]): Promise<void> {
+    const log = this.log();
+    if (!log) return;
+    await this.state.run((app) => app.loggingService.addToPlan(log.id, exercises));
+  }
 
   protected readonly subtitle = computed(() => {
     const log = this.log();
@@ -557,4 +590,11 @@ function suggestRoutineName(plan: readonly ExerciseLogEntry[]): string {
   const names = plan.map((e) => e.exerciseName);
   if (names.length <= 2) return names.join(' & ').slice(0, 40);
   return `${names.slice(0, 2).join(', ')} & more`.slice(0, 40);
+}
+
+/** "4 exercises · Goblet Squat, Push Up, Row…" */
+function exercisesSummary(exercises: readonly ExerciseLogEntry[]): string {
+  const names = exercises.slice(0, 3).map((e) => e.exerciseName);
+  const more = exercises.length > 3 ? '…' : '';
+  return `${Fmt.count(exercises.length, 'exercise')} · ${names.join(', ')}${more}`;
 }

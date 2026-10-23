@@ -2,7 +2,6 @@ import { IdGenerator } from '../domain/core/ids';
 import { isActiveMembership } from '../domain/models/crate';
 import { SharedExercise } from '../domain/models/crate-exercise';
 import {
-  addPlannedSet,
   entryFor,
   ExerciseLogEntry,
   hasStarted,
@@ -144,11 +143,6 @@ export class LoggingService {
   /** Drops the next planned set of an exercise. */
   async skipSet(logId: string, exerciseId: string): Promise<WorkoutLog> {
     return this.updateDraft(logId, (log) => skipPlannedSet(log, exerciseId));
-  }
-
-  /** Plans one more set of an exercise, like its last. */
-  async addSet(logId: string, exerciseId: string): Promise<WorkoutLog> {
-    return this.updateDraft(logId, (log) => addPlannedSet(log, exerciseId));
   }
 
   /** How hard an exercise was, once its sets are done (null clears it). */

@@ -1,4 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  Injector,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import {
   MAT_BOTTOM_SHEET_DATA,
   MatBottomSheet,
@@ -37,6 +49,12 @@ export interface ExercisePickerData {
   readonly units: UnitSystem;
   /** A fresh id for an exercise the Peach makes up. */
   readonly newId: () => string;
+}
+
+const PICKER_HEIGHT = 'min(88dvh, 860px)';
+
+function finePointer(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 }
 
 /** How many matches per group to list before asking for a narrower search. */
@@ -89,9 +107,19 @@ export function openExercisePicker(
   sheet: MatBottomSheet,
   data: ExercisePickerData,
 ): Promise<LoggableExercise | undefined> {
+  // A fixed height, so the search box stays put while the results change
+  // under it; the keyboard only comes up by itself where there's a real one.
   const ref = sheet.open<ExercisePickerSheet, ExercisePickerData, LoggableExercise>(
     ExercisePickerSheet,
-    { data, ariaLabel: 'Add an exercise', ariaModal: true, autoFocus: 'input' },
+    {
+      data,
+      ariaLabel: 'Add an exercise',
+      ariaModal: true,
+      autoFocus: finePointer() ? 'input' : 'first-heading',
+      height: PICKER_HEIGHT,
+      maxHeight: PICKER_HEIGHT,
+      panelClass: 'pch-picker-panel',
+    },
   );
   return firstValueFrom(ref.afterDismissed());
 }
@@ -100,6 +128,11 @@ export function openExercisePicker(
  * Search everything a Peach can log: what they logged before (with last
  * time's numbers), what crate-mates logged (tagged with who), then the
  * whole catalog. Anything else they can make up on the spot.
+ *
+ * The title and search stay at the top while the results scroll. Enter
+ * picks the top match (or makes up the exercise if nothing matches),
+ * Escape clears the search before it closes the sheet, and the arrow keys
+ * move between the search and the results.
  */
 @Component({
   selector: 'pch-exercise-picker-sheet',
@@ -123,56 +156,126 @@ export function openExercisePicker(
         <span class="pch-body-large">Back to search</span>
       </button>
     } @else {
-      <h2 class="pch-headline-small">Add an exercise</h2>
-      <label class="search">
-        <span class="material-symbols-rounded" aria-hidden="true">search</span>
-        <input
-          type="search"
-          class="pch-body-large"
-          autocomplete="off"
-          aria-label="Search exercises"
-          placeholder="Run, squat, yoga…"
-          [value]="query()"
-          (input)="query.set($any($event.target).value)"
-        />
-      </label>
-      @for (group of groups(); track group.title) {
-        <h3 class="pch-title-small group">{{ group.title }}</h3>
-        <ul class="rows">
-          @for (r of group.rows; track r.exercise.id) {
-            <li>
-              <button type="button" class="row" (click)="pick(r.exercise)">
-                <span class="text">
-                  <span class="pch-body-large">{{ r.exercise.name }}</span>
-                  <span class="pch-body-small muted one-line">{{ r.subtitle }}</span>
-                </span>
-                @if (r.logged) {
-                  <span class="pch-label-medium logged">Logged</span>
-                }
-              </button>
-            </li>
+      <header class="top">
+        <h2 class="pch-headline-small" tabindex="-1">Add an exercise</h2>
+        <label class="search">
+          <span class="material-symbols-rounded" aria-hidden="true">search</span>
+          <input
+            #search
+            type="search"
+            class="pch-body-large"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            enterkeyhint="go"
+            aria-label="Search exercises"
+            placeholder="Run, squat, yoga…"
+            [value]="query()"
+            (input)="query.set($any($event.target).value)"
+            (keydown)="onSearchKey($event)"
+          />
+          @if (query()) {
+            <button
+              type="button"
+              class="clear"
+              aria-label="Clear search"
+              (mousedown)="$event.preventDefault()"
+              (click)="clear()"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">close</span>
+            </button>
           }
-        </ul>
-      }
-      @if (truncated()) {
-        <p class="pch-body-small muted empty">Keep typing to narrow it down.</p>
-      }
-      @if (newName(); as name) {
-        <button type="button" class="row create" (click)="creating.set(name)">
-          <span class="material-symbols-rounded" aria-hidden="true">add_circle</span>
-          <span class="text">
-            <span class="pch-body-large">Create “{{ name }}”</span>
-            <span class="pch-body-small muted">Your crate-mates will see it came from you</span>
-          </span>
-        </button>
-      }
+        </label>
+      </header>
+      <div #results class="results">
+        @for (group of groups(); track group.title) {
+          <h3 class="pch-title-small group">{{ group.title }}</h3>
+          <ul class="rows">
+            @for (r of group.rows; track r.exercise.id) {
+              <li>
+                <button
+                  type="button"
+                  class="row"
+                  (mousedown)="$event.preventDefault()"
+                  (keydown)="onResultsKey($event)"
+                  (click)="pick(r.exercise)"
+                >
+                  <span class="text">
+                    <span class="pch-body-large">{{ r.exercise.name }}</span>
+                    <span class="pch-body-small muted one-line">{{ r.subtitle }}</span>
+                  </span>
+                  @if (r.logged) {
+                    <span class="pch-label-medium logged">Logged</span>
+                  }
+                </button>
+              </li>
+            }
+          </ul>
+        }
+        @if (truncated()) {
+          <p class="pch-body-small muted empty">Keep typing to narrow it down.</p>
+        }
+        @if (newName(); as name) {
+          <button
+            type="button"
+            class="row create"
+            (mousedown)="$event.preventDefault()"
+            (keydown)="onResultsKey($event)"
+            (click)="creating.set(name)"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">add_circle</span>
+            <span class="text">
+              <span class="pch-body-large">Create “{{ name }}”</span>
+              <span class="pch-body-small muted">Your crate-mates will see it came from you</span>
+            </span>
+          </button>
+        }
+        @if (groups().length === 0 && !newName()) {
+          <p class="pch-body-medium muted empty">Nothing matches that.</p>
+        }
+      </div>
     }`,
   styles: `
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      height: 100%;
       max-width: 560px;
       margin: 0 auto;
+      padding: 0 8px;
+    }
+    .top {
+      flex: none;
+    }
+    h2:focus {
+      outline: none;
+    }
+    .results {
+      flex: 1 1 auto;
+      min-height: 0;
+      margin: 0 -8px;
       padding: 0 8px 16px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .clear {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      margin-inline-end: -8px;
+      border: 0;
+      border-radius: 50%;
+      background: none;
+      color: inherit;
+      cursor: pointer;
+    }
+    .clear:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+    }
+    .search input::-webkit-search-cancel-button {
+      display: none;
     }
     .handle {
       width: 32px;
@@ -277,8 +380,11 @@ export class ExercisePickerSheet {
   private readonly ref =
     inject<MatBottomSheetRef<ExercisePickerSheet, LoggableExercise>>(MatBottomSheetRef);
   private readonly data = inject<ExercisePickerData>(MAT_BOTTOM_SHEET_DATA);
+  private readonly injector = inject(Injector);
 
   protected readonly kinds = CREATE_KINDS;
+  private readonly searchRef = viewChild<ElementRef<HTMLInputElement>>('search');
+  private readonly resultsRef = viewChild<ElementRef<HTMLElement>>('results');
   readonly query = signal('');
   /** The name of the exercise being made up, while choosing how it's logged. */
   readonly creating = signal<string | null>(null);
@@ -340,6 +446,56 @@ export class ExercisePickerSheet {
     const taken = groups.some((g) => g.rows.some((r) => r.exercise.name.toLowerCase() === lower));
     return taken ? null : name;
   });
+
+  constructor() {
+    // A new search starts at the top of its results.
+    effect(() => {
+      this.query();
+      untracked(() => {
+        const results = this.resultsRef()?.nativeElement;
+        if (results) results.scrollTop = 0;
+      });
+    });
+  }
+
+  protected onSearchKey(e: KeyboardEvent): void {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const top = this.groups()[0]?.rows[0];
+      if (top) this.pick(top.exercise);
+      else if (this.newName()) this.creating.set(this.newName());
+    } else if (e.key === 'Escape' && this.query()) {
+      // Clear first; a second Escape closes the sheet.
+      e.preventDefault();
+      e.stopPropagation();
+      this.clear();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.rows()[0]?.focus();
+    }
+  }
+
+  /** Arrow keys move through the results, and up from the first back to the search. */
+  protected onResultsKey(e: KeyboardEvent): void {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const rows = this.rows();
+    const i = rows.indexOf(document.activeElement as HTMLButtonElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const next = i + (e.key === 'ArrowDown' ? 1 : -1);
+    if (next < 0) this.searchRef()?.nativeElement.focus();
+    else rows[Math.min(next, rows.length - 1)].focus();
+  }
+
+  protected clear(): void {
+    this.query.set('');
+    afterNextRender(() => this.searchRef()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  private rows(): HTMLButtonElement[] {
+    const results = this.resultsRef()?.nativeElement;
+    return results ? Array.from(results.querySelectorAll<HTMLButtonElement>('button.row')) : [];
+  }
 
   protected pick(exercise: LoggableExercise): void {
     this.ref.dismiss(exercise);

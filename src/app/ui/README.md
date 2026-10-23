@@ -317,8 +317,9 @@ A `slider`; `valueChange` fires as each step is crossed.
 | `unit`         | `string` (read after the value)     | `''`           |
 | `ghost`        | `number \| null` (dot on the rim)   | `null`         |
 
-`--pch-dial-height` (200px). Pure helpers: `flingPlan`, `springStep`,
-`dialOffset`.
+`--pch-dial-height` (200px; `auto` to fill a flex parent). Taller dials space
+their labels out and draw them bigger (`dialScale`), as far as the width
+allows. Pure helpers: `flingPlan`, `springStep`, `dialOffset`, `dialScale`.
 
 ```html
 <pch-dial label="Weight in kg" unit="kg" [step]="2.5" side="end" [value]="kg()" (valueChange)="kg.set($event)" />

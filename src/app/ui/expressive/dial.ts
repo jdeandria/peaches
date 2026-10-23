@@ -43,10 +43,16 @@ const HALF_PI = Math.PI / 2;
 /**
  * Where a label `d` steps from the selected one sits along the rim, in px:
  * spread out around the selection (a magnifier) and evenly beyond it.
+ * `scale` grows the spacing with the dial (1 at 200px tall).
  */
-export function dialOffset(d: number): number {
+export function dialOffset(d: number, scale = 1): number {
   const near = Math.sin(Math.max(-1, Math.min(1, d)) * HALF_PI);
-  return FAR_PX * d + (NEAR_PX - FAR_PX) * near;
+  return (FAR_PX * d + (NEAR_PX - FAR_PX) * near) * scale;
+}
+
+/** How much bigger than the 200px design a dial of `height` draws: 1 to 2. */
+export function dialScale(height: number): number {
+  return Math.min(2, Math.max(1, height / 200));
 }
 
 /** How a fling plays out: glide to `target` (in steps) over `ms`, slowing evenly. */
@@ -234,7 +240,6 @@ type Motion =
     .band {
       fill: none;
       stroke: var(--mat-sys-surface-container-high);
-      stroke-width: ${BAND}px;
       transition: stroke var(--pch-spring-effects-default-duration) linear;
     }
     .edge {
@@ -265,8 +270,8 @@ type Motion =
     }
     .label {
       font-family: var(--mat-sys-display-small-font);
-      font-size: 40px;
-      line-height: 44px;
+      font-size: var(--pch-dial-label-size, 40px);
+      line-height: 1.1;
       font-weight: 500;
       letter-spacing: -0.5px;
       font-variant-numeric: tabular-nums;
@@ -536,7 +541,7 @@ export class Dial {
     const angle = this.angleOf(e.clientX, e.clientY, p.hubX, p.hubY);
     const { radius } = this.geometry();
     // Content follows the finger: dragging up brings bigger values in.
-    p.raw -= ((angle - p.angle) * radius) / DRAG_PX;
+    p.raw -= ((angle - p.angle) * radius) / (DRAG_PX * dialScale(this.size.height));
     p.angle = angle;
     p.samples.push({ t: e.timeStamp, p: p.raw });
     while (p.samples.length > 2 && e.timeStamp - p.samples[0].t > 100) p.samples.shift();
@@ -747,8 +752,15 @@ export class Dial {
       const x = end ? hubX - reach : hubX + reach;
       return `M${x} 0 A${r} ${r} 0 0 ${end ? 0 : 1} ${x} ${height}`;
     };
+    // Bigger dials space their labels out and draw them bigger, as far as the width allows.
+    const scale = dialScale(height);
+    const band = BAND * Math.min(scale, 1.4);
+    const label = Math.max(40, Math.min(40 * scale, (width - INSET - LABEL_GAP) / 2.9));
+    face.style.setProperty('--pch-dial-label-size', `${Math.round(label)}px`);
     face.querySelector('.edge')?.setAttribute('d', arc(radius));
-    face.querySelector('.band')?.setAttribute('d', arc(radius - BAND / 2));
+    const bandPath = face.querySelector<SVGPathElement>('.band');
+    bandPath?.setAttribute('d', arc(radius - band / 2));
+    bandPath?.style.setProperty('stroke-width', `${band}px`);
     const pointer = face.querySelector<HTMLElement>('.pointer');
     if (pointer) {
       const px = end ? apexX + 6 : apexX - 6;
@@ -776,13 +788,14 @@ export class Dial {
     const { width, height } = this.size;
     if (width === 0 || height === 0 || this.labelEls.length === 0) return;
     const { hubX, radius } = this.geometry();
+    const scale = dialScale(height);
     const end = this.side() === 'end';
     const cy = height / 2;
     const p = this.position;
     const base = Math.round(p);
     const sign = end ? -1 : 1;
     const point = (d: number, r: number) => {
-      const theta = dialOffset(d) / radius;
+      const theta = dialOffset(d, scale) / radius;
       return {
         x: hubX + sign * r * Math.cos(theta),
         y: cy + r * Math.sin(theta),
