@@ -38,6 +38,7 @@ import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { Fmt } from '../../format';
 import { Card } from '../../layout/card';
+import { confirmDialog } from '../../layout/confirm-dialog';
 import { EmptyState } from '../../layout/empty-state';
 import { ListCard } from '../../layout/list-card';
 import { Page } from '../../layout/page';
@@ -498,10 +499,23 @@ export class LogPage {
     );
   }
 
-  /** Stops the clock and shares the workout. */
+  /**
+   * Stops the clock and shares the workout. With planned sets still to do,
+   * asks first: they won't be logged.
+   */
   protected async finish(): Promise<void> {
     const log = this.log();
     if (!log || this.busy()) return;
+    const progress = planProgress(log);
+    if (progress.done < progress.total) {
+      const left = progress.total - progress.done;
+      const go = await confirmDialog(this.dialog, {
+        title: 'Finish now?',
+        message: `${Fmt.count(left, 'planned set')} ${left === 1 ? 'isn’t' : 'aren’t'} done and won’t be logged. Everything you did will be.`,
+        action: 'Finish',
+      });
+      if (!go) return;
+    }
     this.busy.set(true);
     const done = await this.state.run(
       (app) => app.loggingService.submit(log.id, this.state.now()),

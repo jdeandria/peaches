@@ -288,6 +288,38 @@ describe('LogPage', () => {
     expect(text(el)).toContain('2 sets in');
   });
 
+  it('finishing early from log mode asks first, and logs what was done', async () => {
+    const { f, el } = await render();
+    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    const squat = loggableFromCatalog(backend.container.catalog.require('bb-back-squat'));
+    await backend.container.loggingService.planExercise(
+      draft.id,
+      entryOf(squat, { sets: [1, 2, 3].map(() => setLog({ reps: 5, loadKg: 100 })) }),
+    );
+    f.componentRef.setInput('mode', 'log');
+    await stable(f);
+    // Nothing done yet: nothing to finish.
+    expect(button(el, 'Finish')).toBeUndefined();
+    // Up 2.5 kg on the first set: the rest of the sets follow.
+    key(el.querySelector<HTMLElement>('[role=slider][aria-label="Weight in kg"]')!, 'ArrowUp');
+    await stable(f);
+    doneButton(el)!.click();
+    await stable(f);
+    button(el, 'Skip rest')!.click();
+    await stable(f);
+    expect(text(el.querySelector('.target'))).toBe('Target 5 × 102.5 kg');
+
+    button(el, 'Finish')!.click();
+    await stable(f);
+    expect(text(overlay().querySelector('h2'))).toBe('Finish now?');
+    expect(text(overlay())).toContain('2 planned sets aren’t done and won’t be logged.');
+    button(overlay(), 'Finish')!.click();
+    await stable(f);
+    const log = (await backend.container.logs.getById(draft.id))!;
+    expect(isSubmitted(log)).toBe(true);
+    expect(log.entries[0].sets).toEqual([setLog({ reps: 5, loadKg: 102.5 })]);
+  });
+
   it('leads with recent exercises and crate-mates’ ones, tagged with who', async () => {
     const { f, el } = await render();
     button(el, 'Add exercise')!.click();

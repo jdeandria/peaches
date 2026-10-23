@@ -320,13 +320,24 @@ export function addPlannedSet(log: WorkoutLog, exerciseId: string): WorkoutLog {
   return upsertPlanned(log, { ...planned, sets: [...planned.sets, last] });
 }
 
-/** Records a set done of a planned exercise. */
+/**
+ * Records a set done of a planned exercise. A different weight than planned
+ * becomes the working weight: the sets still to come that were planned at
+ * the old weight move to the new one, so going up is dialled once.
+ */
 export function logPlannedSet(log: WorkoutLog, exerciseId: string, set: SetLog): WorkoutLog {
   const planned = plannedFor(log, exerciseId);
   const entry = entryFor(log, exerciseId);
   const base = entry ?? (planned ? { ...planned, sets: [], rpe: null, notes: null } : undefined);
   if (!base) return log;
-  return upsertEntry(log, { ...base, sets: [...base.sets, set] });
+  const logged = upsertEntry(log, { ...base, sets: [...base.sets, set] });
+  const index = base.sets.length;
+  const target = planned?.sets[index];
+  if (!planned || !target || !planned.takesLoad || target.loadKg === set.loadKg) return logged;
+  const sets = planned.sets.map((s, i) =>
+    i > index && s.loadKg === target.loadKg ? { ...s, loadKg: set.loadKg } : s,
+  );
+  return upsertPlanned(logged, { ...planned, sets });
 }
 
 /** Takes back the last set done of an exercise. */

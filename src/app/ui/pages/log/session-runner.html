@@ -25,6 +25,9 @@
       restTimer() ? 'hourglass' : 'hourglass_disabled'
     }}</span>
   </button>
+  @if (next() && setsDone() > 0) {
+    <button matButton type="button" class="finish" (click)="finish.emit()">Finish</button>
+  }
 </header>
 
 <div class="column">

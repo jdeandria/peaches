@@ -169,6 +169,7 @@ type Motion =
       (pointermove)="onPointerMove($event)"
       (pointerup)="onPointerUp($event)"
       (pointercancel)="onPointerCancel()"
+      (lostpointercapture)="onPointerCancel()"
     >
       <svg class="rim" aria-hidden="true">
         <path class="band" />
@@ -562,6 +563,7 @@ export class Dial {
     this.release(velocity);
   }
 
+  /** The pointer went away without a release (cancelled, or capture lost): settle where it is. */
   protected onPointerCancel(): void {
     if (!this.pointer) return;
     this.pointer = null;

@@ -6,7 +6,7 @@ import {
 } from '@angular/material/bottom-sheet';
 import { firstValueFrom } from 'rxjs';
 
-import { ExerciseCatalog } from '../../../domain/exercises/exercise-catalog';
+import { ExerciseCatalog, searchRank } from '../../../domain/exercises/exercise-catalog';
 import {
   customExercise,
   LoggableExercise,
@@ -287,9 +287,12 @@ export class ExercisePickerSheet {
     const q = this.query().trim().toLowerCase();
     const { catalog, recent, fromCrates, loggedIds, units } = this.data;
     const seen = new Set<string>();
-    const rows = <T>(items: readonly T[], toRow: (item: T) => PickerRow) =>
+    /** Recent and crate-mates' exercises match like the catalog does, aliases included. */
+    const matches = (e: LoggableExercise) =>
+      !q || searchRank(q, e.name, catalog.byId(e.id)?.aliases ?? []) !== null;
+    const rows = <T>(items: readonly T[], toRow: (item: T) => PickerRow, filter = true) =>
       items.map(toRow).filter((r) => {
-        if (seen.has(r.exercise.id) || !r.exercise.name.toLowerCase().includes(q)) return false;
+        if (seen.has(r.exercise.id) || (filter && !matches(r.exercise))) return false;
         seen.add(r.exercise.id);
         return true;
       });
@@ -305,9 +308,11 @@ export class ExercisePickerSheet {
       ),
     );
     const crate = rows(fromCrates, (c) => row(c.exercise, `From ${c.from}`));
+    // The catalog's search already matched (and ranked) these.
     const all = rows(
-      catalog.search(q).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
+      q ? catalog.search(q) : catalog.all.sort((a, b) => (a.name < b.name ? -1 : 1)),
       (e) => row(loggableFromCatalog(e), Fmt.pattern(e.pattern)),
+      false,
     );
     return { mine: q ? mine : mine.slice(0, RECENT_LIMIT), crate, all };
   });

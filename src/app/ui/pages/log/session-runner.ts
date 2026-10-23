@@ -192,7 +192,7 @@ export class SessionRunner {
     const following = plan
       .slice(i + 1)
       .find((e) => doneCount(this.log(), e.exerciseId) < e.sets.length);
-    return following ? following.exerciseName : 'The finish';
+    return following ? following.exerciseName : 'you’re done';
   });
 
   /** During a rest: the set coming up. */

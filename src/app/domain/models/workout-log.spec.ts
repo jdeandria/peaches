@@ -101,6 +101,24 @@ describe('a session plan', () => {
     expect(planProgress(log)).toEqual({ done: 3, total: 3 });
   });
 
+  it('a new working weight carries to the sets still to come at the old one', () => {
+    const plan = exerciseLogEntry({
+      exerciseId: 'squat',
+      exerciseName: 'Squat',
+      sets: [60, 60, 70, 60].map((loadKg) => setLog({ reps: 5, loadKg })),
+    });
+    const log = workoutLog({ id: 'l', peachId: 'p', startedAt: t(0), plan: [plan] });
+    const heavier = logPlannedSet(log, 'squat', setLog({ reps: 5, loadKg: 62.5 }));
+    expect(plannedFor(heavier, 'squat')?.sets.map((s) => s.loadKg)).toEqual([60, 62.5, 70, 62.5]);
+    // Same weight as planned: the plan stays as it was.
+    const asPlanned = logPlannedSet(log, 'squat', setLog({ reps: 4, loadKg: 60 }));
+    expect(asPlanned.plan).toBe(log.plan);
+    // Bodyweight exercises have no working weight to carry.
+    const plankPlan = { ...plank, sets: [setLog({ seconds: 45 }), setLog({ seconds: 45 })] };
+    const timed = workoutLog({ id: 'l', peachId: 'p', startedAt: t(0), plan: [plankPlan] });
+    expect(logPlannedSet(timed, 'plank', setLog({ seconds: 50 })).plan).toBe(timed.plan);
+  });
+
   it('skips, adds and takes back sets', () => {
     let log = skipPlannedSet(planned, 'squat');
     expect(plannedFor(log, 'squat')?.sets).toHaveLength(1);

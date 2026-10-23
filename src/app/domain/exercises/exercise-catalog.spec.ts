@@ -9,7 +9,7 @@ import {
   regionsOf,
   takesLoad,
 } from './exercise';
-import { ExerciseCatalog } from './exercise-catalog';
+import { ExerciseCatalog, searchRank } from './exercise-catalog';
 import {
   EQUIPMENT,
   isCore,
@@ -287,6 +287,26 @@ describe('ExerciseCatalog queries', () => {
     expect(catalog.search('military').map((e) => e.id)).toContain('bb-overhead-press');
     expect(catalog.search('   ').length).toBe(catalog.length);
     expect(catalog.search('zzzz-no-such-thing')).toEqual([]);
+  });
+
+  it('search forgives hyphens, spacing and plurals, best matches first', () => {
+    for (const q of ['pushup', 'push-ups', 'Push ups', 'PUSH UP']) {
+      expect(catalog.search(q)[0]?.id).toBe('bw-push-up');
+    }
+    // An alias that starts with the query beats a name that merely contains a word of it.
+    expect(catalog.search('air squat')[0]?.id).toBe('bw-air-squat');
+    expect(catalog.search('air squat').map((e) => e.id)).not.toContain('bw-chair-squat');
+    expect(catalog.search('bench presses').map((e) => e.id)).toContain('bb-bench-press');
+    expect(catalog.search('deadlifts').map((e) => e.id)).toContain('bb-deadlift');
+  });
+
+  it('ranks matches: name prefix, alias prefix, name, alias', () => {
+    expect(searchRank('push', 'Push Up')).toBe(0);
+    expect(searchRank('air squat', 'Bodyweight Squat', ['Air Squat'])).toBe(1);
+    expect(searchRank('squat', 'Goblet Squat')).toBe(2);
+    expect(searchRank('press', 'Strict Thing', ['Shoulder Press'])).toBe(3);
+    expect(searchRank('air', 'Chair Squat')).toBeNull();
+    expect(searchRank('  ', 'Push Up')).toBeNull();
   });
 
   it('rejects duplicate ids', () => {

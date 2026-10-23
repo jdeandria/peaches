@@ -79,12 +79,61 @@ export class ExerciseCatalog {
     return this.all.filter((e) => isPerformableWith(e, available));
   }
 
-  /** Case-insensitive search over name and aliases. */
+  /**
+   * Search over names and aliases, forgiving of case, hyphens, spacing and
+   * plurals ("push-ups", "pushup" and "Push Up" all match), best matches
+   * first (see {@link searchRank}), then by name.
+   */
   search(query: string): Exercise[] {
-    const q = query.trim().toLowerCase();
-    if (!q) return this.all;
-    return this.all.filter(
-      (e) => e.name.toLowerCase().includes(q) || e.aliases.some((a) => a.toLowerCase().includes(q)),
-    );
+    if (!query.trim()) return this.all;
+    return this.all
+      .map((e) => ({ e, rank: searchRank(query, e.name, e.aliases) }))
+      .filter((r): r is { e: Exercise; rank: number } => r.rank !== null)
+      .sort((a, b) => a.rank - b.rank || (a.e.name < b.e.name ? -1 : a.e.name > b.e.name ? 1 : 0))
+      .map((r) => r.e);
   }
+}
+
+/** "presses" → "press", "ups" → "up". Queries and names go through it alike. */
+function singular(word: string): string {
+  if (word.length < 3) return word;
+  if (/(sses|shes|ches|xes)$/.test(word)) return word.slice(0, -2);
+  return word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word;
+}
+
+function words(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map(singular);
+}
+
+/**
+ * How well `query` matches an exercise called `name` (or one of its
+ * `aliases`): 0 (the name starts with it) .. 3 (an alias contains it), or
+ * null for no match. Every word of the query must start a word of the text,
+ * or (four letters or more) appear in it once spaces and hyphens are gone,
+ * so "pushup" finds "Push Up" but "air" doesn't find "Chair Squat".
+ */
+export function searchRank(
+  query: string,
+  name: string,
+  aliases: readonly string[] = [],
+): number | null {
+  const tokens = words(query);
+  if (tokens.length === 0) return null;
+  const whole = tokens.join('');
+  let best: number | null = null;
+  [name, ...aliases].forEach((text, i) => {
+    const ws = words(text);
+    const compact = ws.join('');
+    const found = tokens.every(
+      (t) => ws.some((w) => w.startsWith(t)) || (t.length >= 4 && compact.includes(t)),
+    );
+    if (!found) return;
+    const rank = (compact.startsWith(whole) ? 0 : 2) + (i === 0 ? 0 : 1);
+    if (best === null || rank < best) best = rank;
+  });
+  return best;
 }
