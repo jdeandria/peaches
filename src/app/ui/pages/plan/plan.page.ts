@@ -4,14 +4,13 @@ import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatTooltip } from '@angular/material/tooltip';
 
 import { MatchupBoard, MatchupSide } from '../../../application/season-service';
-import { addDays, LocalDate, localDateOfLocal, startOfWeek } from '../../../domain/core/local-date';
+import { addDays, LocalDate, startOfWeek } from '../../../domain/core/local-date';
 import { round2 } from '../../../domain/core/math';
 import { isLocked } from '../../../domain/models/commitment';
 import { CategoryWeights, DEFAULT_WEIGHTS, weightsToJson } from '../../../domain/models/scoring';
 import { isBye, opponentOf } from '../../../domain/models/season';
 import {
   daysOf,
-  isInWeek,
   PlannedWorkout,
   plannedSetCount,
   WeekPlan,
@@ -21,7 +20,6 @@ import {
   isSubmitted,
   planProgress,
   totalSets,
-  WorkoutLog,
 } from '../../../domain/models/workout-log';
 import { AppState } from '../../../state/app-state';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
@@ -81,18 +79,12 @@ interface WorkoutRow {
   readonly canLaunch: boolean;
 }
 
-interface LogRow {
-  readonly log: WorkoutLog;
-  readonly subtitle: string;
-}
-
 interface DayView {
   readonly date: LocalDate;
   readonly label: string;
   readonly today: boolean;
   readonly past: boolean;
   readonly workouts: readonly WorkoutRow[];
-  readonly unplanned: readonly LogRow[];
 }
 
 function capitalize(text: string): string {
@@ -350,17 +342,9 @@ export class PlanPage {
     if (!plan) return undefined;
     const today = this.state.today();
     const thisWeek = this.shown() === 'this';
-    const units = this.state.units();
     const weights = this.rowWeights();
     const logs = this.logsById();
-    const linked = new Set(plan.workouts.map((w) => w.logId));
     const scoring = this.state.app.scoring;
-    const unplanned = (this.logs() ?? []).filter(
-      (l) =>
-        isSubmitted(l) &&
-        !linked.has(l.id) &&
-        isInWeek(plan.weekStart, localDateOfLocal(l.startedAt)),
-    );
     return daysOf(plan.weekStart).map((date) => ({
       date,
       label: Fmt.day(date),
@@ -397,53 +381,30 @@ export class PlanPage {
             canLaunch: thisWeek && state !== 'done',
           };
         }),
-      unplanned: unplanned
-        .filter((l) => localDateOfLocal(l.startedAt) === date)
-        .map((log) => ({
-          log,
-          subtitle: `Unplanned · ${log.entries
-            .slice(0, 2)
-            .map((e) => `${e.exerciseName} ${Fmt.entryHeadline(e, units)}`)
-            .join(', ')}`,
-        })),
     }));
   });
 
-  /** How the week is going: workouts done of planned, or what's planned. */
+  /** How the week is going: workouts done of planned, or what's planned. Nothing for an empty week. */
   protected readonly summary = computed(() => {
     const days = this.days();
     if (!days) return null;
     const rows = days.flatMap((d) => d.workouts);
     const done = rows.filter((r) => r.state === 'done').length;
-    const extra = days.reduce((n, d) => n + d.unplanned.length, 0);
     const sets = rows.reduce((n, r) => n + plannedSetCount(r.workout), 0);
-    if (rows.length === 0) {
-      return {
-        empty: true,
-        title: this.shown() === 'this' ? 'Nothing planned this week' : 'Plan next week',
-        text: this.inCrates()
-          ? 'In a Crate, what your plan is worth is what you commit to. Hit it for a bonus; fall short and it costs you.'
-          : 'Put workouts on the days you’ll do them, then launch each one when it’s time.',
-        progress: null,
-      };
-    }
+    if (rows.length === 0) return null;
     if (this.shown() === 'next') {
       return {
-        empty: false,
         title: `${Fmt.count(rows.length, 'workout')} planned`,
         text: `${Fmt.count(sets, 'set')} across ${Fmt.count(new Set(rows.map((r) => r.workout.day)).size, 'day')}.`,
         progress: null,
       };
     }
     return {
-      empty: false,
       title: `${done} of ${Fmt.count(rows.length, 'workout')} done`,
       text:
-        extra > 0
-          ? `Plus ${Fmt.count(extra, 'unplanned workout')}.`
-          : done === rows.length
-            ? 'Every planned workout done. Anything more is a bonus.'
-            : 'Launch the next one when it’s time.',
+        done === rows.length
+          ? 'Every planned workout done. Doing more? Plan it on today.'
+          : 'Start the next one when it’s time.',
       progress: done / rows.length,
     };
   });

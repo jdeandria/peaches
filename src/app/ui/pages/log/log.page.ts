@@ -7,10 +7,9 @@ import {
   inject,
   input,
   signal,
-  untracked,
 } from '@angular/core';
 import { Location } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
@@ -20,7 +19,6 @@ import { firstValueFrom } from 'rxjs';
 import { localDateOfLocal } from '../../../domain/core/local-date';
 import { LoggableExercise } from '../../../domain/exercises/loggable';
 import { CategoryWeights, SCORING_CATEGORIES } from '../../../domain/models/scoring';
-import { Routine } from '../../../domain/models/routine';
 import {
   doneCount,
   elapsedSeconds,
@@ -34,13 +32,7 @@ import {
   planProgress,
   WorkoutLog,
 } from '../../../domain/models/workout-log';
-import { stableHash } from '../../../domain/core/stable-hash';
 import { lastEntry } from '../../../domain/services/last-entry';
-import {
-  templateWorkout,
-  WORKOUT_TEMPLATES,
-  WorkoutTemplate,
-} from '../../../domain/services/workout-templates';
 import { MetricExtractor } from '../../../domain/services/metric-extractor';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
@@ -55,7 +47,6 @@ import { SwipeRow } from '../../layout/swipe-row';
 import { DisputeCard } from '../workout/dispute-card';
 import { crateExercisesFor, openExercisePicker, recentEntries } from './exercise-picker-sheet';
 import { LogDetailsData, LogDetailsDialog, LogDetailsResult } from './log-details-dialog';
-import { SaveRoutineData, SaveRoutineDialog, SaveRoutineResult } from './save-routine-dialog';
 import { SessionRunner } from './session-runner';
 import { openSetLogger } from './set-logger-sheet';
 
@@ -73,13 +64,14 @@ interface PlannedView extends EntryView {
 }
 
 /**
- * Log a workout, solo, in two modes. Plan: pick exercises (your recent ones
- * and your crate-mates' come first, or a saved routine), each pre-filled
- * from last time, and set their target sets. Log (`?mode=log`): Start, and
- * a full-screen runner takes you through the sets one at a time; the clock
- * starts then and runs only while the page is open. Finish shares it with
- * your Crates. With an id it shows one of your logs, which you can keep
- * editing (exercises, when it happened, how long it took).
+ * The workout launched from the plan, in two modes. Its exercises, with
+ * how far along each is (add one, change targets, take one out); and Log
+ * (`?mode=log`): a full-screen runner that takes you through the sets one
+ * at a time; the clock starts then and runs only while the page is open.
+ * Finish shares it with your Crates. With nothing launched it points back
+ * to the plan: every workout starts there. With an id it shows one of your
+ * logs, which you can keep editing (exercises, when it happened, how long
+ * it took).
  */
 @Component({
   selector: 'pch-log-page',
@@ -93,6 +85,7 @@ interface PlannedView extends EntryView {
     MatIconButton,
     MatTooltip,
     Page,
+    RouterLink,
     Section,
     SessionRunner,
     Stagger,
@@ -106,8 +99,6 @@ export class LogPage {
   readonly logId = input<string>();
   /** Query param: `log` while doing the sets (which starts the clock), else planning. */
   readonly mode = input<string>();
-  /** Query param: a routine of mine to plan, when nothing is planned yet. */
-  readonly routine = input<string>();
 
   private readonly state = inject(AppState);
   private readonly sheet = inject(MatBottomSheet);
@@ -128,8 +119,14 @@ export class LogPage {
   protected readonly log = computed<WorkoutLog | null>(() =>
     this.id() === null ? null : (this.live.value() ?? null),
   );
+  /** Whether there's a draft to resume: unknown until asked. */
+  private readonly resumed = signal<boolean | null>(null);
+  /** Nothing launched: workouts start from the plan. */
+  protected readonly nothing = computed(() => !this.logId() && this.resumed() === false);
   protected readonly loading = computed(
-    () => this.id() === null || (this.live.value() === undefined && !this.live.error()),
+    () =>
+      !this.nothing() &&
+      (this.id() === null || (this.live.value() === undefined && !this.live.error())),
   );
   protected readonly mine = computed(() => this.log()?.peachId === this.me());
   protected readonly draft = computed(() => {
@@ -154,7 +151,7 @@ export class LogPage {
   protected readonly title = computed(() => {
     const log = this.log();
     if (log && isSubmitted(log)) return Fmt.day(localDateOfLocal(log.startedAt));
-    return this.started() ? 'Workout in progress' : 'Plan your workout';
+    return this.started() ? 'Workout in progress' : 'Your workout';
   });
 
   protected readonly clockHint = computed(() => {
@@ -185,48 +182,6 @@ export class LogPage {
     const log = this.log();
     return log !== null && nextPlannedSet(log) !== null;
   });
-
-  /** My saved routines, to plan from. */
-  private readonly routineList = this.state.watch(
-    () => this.me() ?? undefined,
-    (id, app) => app.routines.watchForPeach(id),
-  );
-  protected readonly routines = computed(() =>
-    (this.routineList.value() ?? []).map((routine) => ({
-      routine,
-      summary: exercisesSummary(routine.exercises),
-    })),
-  );
-
-  /** Times each template was shuffled, so a reshuffle draws a fresh mix. */
-  private readonly shuffles = signal<Readonly<Record<string, number>>>({});
-  /**
-   * Ready-made workouts, filled with exercises at random: the mix changes
-   * each day and on Shuffle, with weights from last time.
-   */
-  protected readonly templates = computed(() => {
-    const day = localDateOfLocal(this.state.now());
-    const shuffles = this.shuffles();
-    const logs = this.myLogs() ?? [];
-    return WORKOUT_TEMPLATES.map((template) => {
-      const seed = stableHash(`${day}:${template.id}:${shuffles[template.id] ?? 0}`);
-      const exercises = templateWorkout(template, this.state.catalog, seed, (id) =>
-        lastEntry(logs, id, null),
-      );
-      return { template, exercises, summary: exercisesSummary(exercises) };
-    });
-  });
-
-  protected shuffle(template: WorkoutTemplate): void {
-    this.shuffles.update((s) => ({ ...s, [template.id]: (s[template.id] ?? 0) + 1 }));
-  }
-
-  /** Plans a template's exercises, as shuffled. */
-  protected async useTemplate(exercises: readonly ExerciseLogEntry[]): Promise<void> {
-    const log = this.log();
-    if (!log) return;
-    await this.state.run((app) => app.loggingService.addToPlan(log.id, exercises));
-  }
 
   protected readonly subtitle = computed(() => {
     const log = this.log();
@@ -334,19 +289,10 @@ export class LogPage {
       void this.state.run((app) => app.loggingService.startSession(log.id, this.state.now()));
     });
 
-    // A routine to start from: plan it into an empty draft, once.
-    effect(() => {
-      const id = this.routine();
-      const log = this.log();
-      const routines = this.routineList.value();
-      if (!id || !log || routines === undefined) return;
-      untracked(() => void this.planRoutineOnce(log, routines.find((r) => r.id === id) ?? null));
-    });
-
     // The draft's clock runs only while this page is open and visible.
-    void this.openDraft();
+    void this.resumeDraft();
     const onVisibility = () =>
-      document.visibilityState === 'visible' ? void this.openDraft() : void this.pause();
+      document.visibilityState === 'visible' ? void this.resumeDraft() : void this.pause();
     document.addEventListener('visibilitychange', onVisibility);
     destroyRef.onDestroy(() => {
       document.removeEventListener('visibilitychange', onVisibility);
@@ -356,24 +302,12 @@ export class LogPage {
 
   /** The draft whose clock is being started, so it's started once. */
   private starting: string | null = null;
-  private routinePlanned = false;
-  private async planRoutineOnce(log: WorkoutLog, routine: Routine | null): Promise<void> {
-    if (this.routinePlanned) return;
-    this.routinePlanned = true;
-    if (routine && log.plan.length === 0 && log.entries.length === 0) {
-      await this.state.run((app) => app.loggingService.addToPlan(log.id, routine.exercises));
-    }
-    await this.router.navigate([], {
-      queryParams: { routine: null },
-      queryParamsHandling: 'merge',
-      replaceUrl: true,
-    });
-  }
-
-  private async openDraft(): Promise<void> {
+  private async resumeDraft(): Promise<void> {
     const me = this.me();
     if (!me) return;
-    const log = await this.state.run((app) => app.loggingService.openDraft(me, this.state.now()));
+    const log = await this.state.run((app) => app.loggingService.resumeDraft(me, this.state.now()));
+    if (log === undefined) return;
+    this.resumed.set(log !== null);
     if (log) this.draftId.set(log.id);
   }
 
@@ -469,55 +403,6 @@ export class LogPage {
     void this.router.navigate([], { queryParams: {}, replaceUrl: true });
   }
 
-  /** Plans a routine's exercises after anything already planned. */
-  protected async useRoutine(routine: Routine): Promise<void> {
-    const log = this.log();
-    if (!log) return;
-    await this.state.run((app) => app.loggingService.addToPlan(log.id, routine.exercises));
-  }
-
-  /** Deletes a routine at once, with Undo. */
-  protected async deleteRoutine(routine: Routine): Promise<void> {
-    const me = this.me();
-    if (!me) return;
-    const removed = await this.state.run((app) => app.routineService.remove(me, routine.id));
-    if (!removed) return;
-    this.state.toast(`Deleted “${routine.name}”.`, () => {
-      void this.state.run((app) => app.routineService.restore(removed));
-    });
-  }
-
-  /** Keeps this session's plan as a routine (or replaces one of the same name). */
-  protected async saveRoutine(): Promise<void> {
-    const log = this.log();
-    const me = this.me();
-    if (!log || !me || log.plan.length === 0) return;
-    const routines = this.routineList.value() ?? [];
-    const ref = this.dialog.open<SaveRoutineDialog, SaveRoutineData, SaveRoutineResult>(
-      SaveRoutineDialog,
-      {
-        data: { routines, suggestion: suggestRoutineName(log.plan) },
-        width: '420px',
-        maxWidth: 'calc(100vw - 32px)',
-      },
-    );
-    const result = await firstValueFrom(ref.afterClosed());
-    if (!result) return;
-    const now = this.state.now();
-    await this.state.run(
-      (app) =>
-        result.replaces
-          ? app.routineService.update(
-              me,
-              result.replaces.id,
-              { name: result.name, exercises: log.plan },
-              now,
-            )
-          : app.routineService.create(me, result.name, log.plan, now),
-      result.replaces ? `Updated “${result.name}”.` : `Saved “${result.name}”.`,
-    );
-  }
-
   /**
    * Stops the clock and shares the workout. With planned sets still to do,
    * asks first: they won't be logged.
@@ -580,18 +465,4 @@ export class LogPage {
     if (getSelection()?.toString()) return;
     void this.editEntry(entry);
   }
-}
-
-/** "Squat & Bench Press", "Run", "Squat, Row & more": a name from what's planned. */
-function suggestRoutineName(plan: readonly ExerciseLogEntry[]): string {
-  const names = plan.map((e) => e.exerciseName);
-  if (names.length <= 2) return names.join(' & ').slice(0, 40);
-  return `${names.slice(0, 2).join(', ')} & more`.slice(0, 40);
-}
-
-/** "4 exercises · Goblet Squat, Push Up, Row…" */
-function exercisesSummary(exercises: readonly ExerciseLogEntry[]): string {
-  const names = exercises.slice(0, 3).map((e) => e.exerciseName);
-  const more = exercises.length > 3 ? '…' : '';
-  return `${Fmt.count(exercises.length, 'exercise')} · ${names.join(', ')}${more}`;
 }

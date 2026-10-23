@@ -4,6 +4,11 @@
   padding: 48px 0;
 }
 
+.empty-action {
+  display: flex;
+  justify-content: center;
+}
+
 .muted {
   color: var(--mat-sys-on-surface-variant);
 }
@@ -207,47 +212,6 @@
   .material-symbols-rounded {
     font-size: 18px;
   }
-}
-
-.routine {
-  padding: 0 8px 0 0;
-}
-
-.routine-use {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  padding: 12px 8px 12px 16px;
-  border: 0;
-  border-radius: var(--pch-radius-medium);
-  background: none;
-  color: inherit;
-  text-align: start;
-  cursor: pointer;
-
-  &:hover {
-    background: color-mix(
-      in srgb,
-      var(--mat-sys-on-surface) calc(var(--mat-sys-hover-state-layer-opacity) * 100%),
-      transparent
-    );
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--mat-sys-primary);
-    outline-offset: -2px;
-  }
-}
-
-.kit {
-  margin-inline-start: 6px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
-  vertical-align: 2px;
 }
 
 // Only where swiping is how you'd do it.

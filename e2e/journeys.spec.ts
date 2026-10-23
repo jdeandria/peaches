@@ -86,8 +86,11 @@ test('core journey: plan against your opponent, launch a workout, see it score',
   await expect(page.getByText('Vote saved. It counts from the next Season.')).toBeVisible();
 });
 
-test('make up an exercise while logging; crate-mates see it came from you', async ({ page }) => {
-  await openApp(page, '/log');
+test('make up an exercise, add it for today and start it; crate-mates see it came from you', async ({
+  page,
+}) => {
+  await openApp(page);
+  await page.getByRole('link', { name: 'Plan a workout on Mon, Oct 12' }).click();
   await page.getByRole('button', { name: 'Add exercise' }).click();
   const picker = page.getByRole('dialog');
   await picker.getByRole('searchbox').fill('Rucking');
@@ -95,7 +98,8 @@ test('make up an exercise while logging; crate-mates see it came from you', asyn
   await picker.getByRole('button', { name: /Reps with weight/ }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Rucking')).toBeVisible();
-  await page.getByRole('button', { name: 'Start workout' }).click();
+  // Today's workout can start straight from the planner.
+  await page.getByRole('button', { name: 'Add and start' }).click();
   for (let set = 1; set <= 3; set++) {
     await page.getByRole('button', { name: `Done: set ${set} of Rucking` }).click();
     if (set < 3) await page.getByRole('button', { name: 'Skip rest' }).click();
@@ -103,14 +107,21 @@ test('make up an exercise while logging; crate-mates see it came from you', asyn
   await page.getByRole('button', { name: /^Finish/ }).click();
   await expect(page.getByText('Workout logged. Nice work.')).toBeVisible();
 
-  // Done without a plan: it shows on today as unplanned.
+  // It's on today's plan, done.
   await nav(page, 'Plan').click();
-  await expect(page.getByText(/^Unplanned · Rucking/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: '2 of 5 workouts done' })).toBeVisible();
 
   await nav(page, 'Crates').click();
   await page.getByRole('radio', { name: 'Activity' }).click();
   const rucking = page.locator('.exercises pch-list-row', { hasText: 'Rucking' });
   await expect(rucking).toContainText('From you');
+});
+
+test('every workout starts from the plan', async ({ page }) => {
+  await openApp(page, '/log');
+  await expect(page.getByRole('heading', { name: 'Nothing under way' })).toBeVisible();
+  await page.getByRole('link', { name: 'Go to your plan' }).click();
+  await expect(page.getByRole('heading', { name: 'Plan', level: 1 })).toBeVisible();
 });
 
 test('plan a routine, launch it and tick it off, resting between sets', async ({ page }) => {
@@ -137,7 +148,6 @@ test('plan a routine, launch it and tick it off, resting between sets', async ({
 
 test('repeat this week as next week’s plan, and take a workout off it', async ({ page }) => {
   await openApp(page, '/?week=next');
-  await expect(page.getByRole('heading', { name: 'Plan next week' })).toBeVisible();
   await page.getByRole('button', { name: 'Repeat this week' }).click();
   await expect(page.getByText('Planned 4 workouts from the week before.')).toBeVisible();
   await expect(page.getByRole('heading', { name: '4 workouts planned' })).toBeVisible();
@@ -281,7 +291,7 @@ test.describe('progressive web app', () => {
 
 test('every icon renders as a glyph from the subset font', async ({ page }) => {
   // A name missing from src/assets/fonts/icons.json falls back to its text
-  // ("inventory_2"), which is far wider than one 24px glyph.
+  // ("inventory_2"), which is far wider than one glyph.
   const pages = [
     '/',
     '/?week=next',
@@ -300,7 +310,15 @@ test('every icon renders as a glyph from the subset font', async ({ page }) => {
     const wide = await page.evaluate(() =>
       [...document.querySelectorAll('.material-symbols-rounded')]
         .filter((el) => (el as HTMLElement).offsetParent !== null)
-        .filter((el) => el.getBoundingClientRect().width > 40)
+        // A glyph's text is about as wide as its font size; a name spelled out
+        // is several times that, whatever box the icon sits in.
+        .filter((el) => {
+          const text = document.createRange();
+          text.selectNodeContents(el);
+          return (
+            text.getBoundingClientRect().width > 1.5 * parseFloat(getComputedStyle(el).fontSize)
+          );
+        })
         .map((el) => el.textContent?.trim()),
     );
     expect(wide, `icons rendered as text on ${where}`).toEqual([]);

@@ -171,9 +171,11 @@
 
 .bottom-actions {
   display: flex;
+  gap: 12px;
 }
 
-.submit {
+.submit,
+.start {
   flex: 1;
 
   .material-symbols-rounded {

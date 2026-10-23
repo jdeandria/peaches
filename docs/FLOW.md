@@ -5,7 +5,9 @@ DECISIONS.md #34 and #35 have the why in short.
 
 ## The idea
 
-You plan your week, then work through it. Alone, a plan is a planner and
+You plan your week, then work through it. Every workout is planned: it
+starts from its day on the plan, even one you decide on the spot (plan it
+on today and start it in the same step). Alone, a plan is a planner and
 a checklist. In a Crate it's also a bet: what your plan is worth becomes
 what you commit to for the week's matchup. Hit it and you earn a bonus on
 top; fall short and you lose points for the gap (SCORING.md §3). Your
@@ -32,11 +34,11 @@ A **This week | Next week** switch at the top (kept in `?week=`).
 
 1. **Workout in progress**, if one is going that isn't on the plan, with
    Continue.
-2. **The week at a glance.** This week: workouts done of planned, with a
-   progress bar, and **Log something unplanned** (the quick planner at
-   `/log`). An empty week offers **Repeat last week** (or, on next week,
-   **Repeat this week**), which plans the same workouts on the same
-   weekdays.
+2. **The week at a glance**, once anything is planned: this week, workouts
+   done of planned with a progress bar; next week, what's planned. An empty
+   week shows no card, just the days; if the week before had workouts, the
+   Days heading offers **Repeat last week** (or **Repeat this week**),
+   which plans the same workouts on the same weekdays.
 3. **Your matchups**, one strip per Crate playing that week (tap for the
    matchup):
    - **Next week**, before the lock: your plan's points against your
@@ -55,12 +57,14 @@ A **This week | Next week** switch at the top (kept in `?week=`).
    - in progress, with sets done and **Continue**;
    - done, with what it earned.
    Tap a workout to edit it; swipe right to edit, left to take it off the
-   plan (with Undo). Workouts logged without a plan show on their day as
-   *Unplanned*.
+   plan (with Undo).
 
 Start launches the workout: a draft log with the planned exercises as its
-session plan, straight into the runner (`/log?mode=log`). Finish leads to
-the workout's summary at `/log/:id`, and the day shows it done.
+session plan, straight into the runner (`/log?mode=log`). Back to plan in
+the runner shows the workout's exercises at `/log`, where one can be added
+or changed for this session. Finish leads to the workout's summary at
+`/log/:id`, and the day shows it done. With nothing launched, `/log` says
+so and links back to the plan.
 
 ### Planning a workout `/plan/:week/:id` (`new`, with `?day=`)
 
@@ -71,7 +75,8 @@ or start from **Your routines** or **Templates**. Each exercise's target
 sets are set on the dials, as before. Once there are exercises it shows
 what the workout is worth in each Crate with a Season on. Save as routine
 and Take off the plan sit in the top bar; **Add to plan** (or Save) in the
-bottom bar. Nothing is saved until then.
+bottom bar, and for a workout on today, **Add and start** beside it, which
+saves it and goes straight into the runner. Nothing is saved until then.
 
 ### Crates `/crates` → a Crate `/crates/:id`
 
@@ -115,7 +120,8 @@ An identity card, then **Stats | History | Gear | Settings** (kept in
   your opponent.
 - **Do today's workout**: Plan → Start on today's workout → runner → Finish.
 - **Pick a workout back up**: Plan → Continue on it.
-- **Log something you didn't plan**: Plan → Log something unplanned.
+- **Do something you didn't plan**: Plan → + on today → add exercises →
+  Add and start.
 - **Fix an old workout**: You → History → swipe right or tap → edit.
 - **Check the score**: Crates → This week → View matchup.
 - **Vote on the rules**: Crates → Rules chip.

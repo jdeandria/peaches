@@ -66,19 +66,29 @@ export class LoggingService {
   }
 
   /**
-   * The log screen opened: resumes the Peach's draft, or creates one. The
-   * clock doesn't run until the workout starts (`startSession`); once it
-   * has, opening the screen resumes it. A draft not started yet takes
-   * today's date, so a plan made on Sunday but done on Tuesday counts as
-   * Tuesday's.
+   * A new draft whose session plan is `plan`, not started yet: a planned
+   * workout being launched (see `PlanService.launch`), the only way a
+   * workout begins.
    */
-  async openDraft(peachId: string, now: Date): Promise<WorkoutLog> {
+  async newDraft(
+    peachId: string,
+    now: Date,
+    plan: readonly ExerciseLogEntry[] = [],
+  ): Promise<WorkoutLog> {
+    const log = workoutLog({ id: this.deps.ids.newId(), peachId, startedAt: now, plan });
+    await this.deps.logs.save(log);
+    return log;
+  }
+
+  /**
+   * The log screen opened: resumes the Peach's draft, or null with none
+   * (workouts start from the plan). Once started, its clock runs again; a
+   * draft not started yet takes today's date, so a workout launched on
+   * Sunday but done on Tuesday counts as Tuesday's.
+   */
+  async resumeDraft(peachId: string, now: Date): Promise<WorkoutLog | null> {
     const draft = await this.currentLog(peachId);
-    if (!draft) {
-      const log = workoutLog({ id: this.deps.ids.newId(), peachId, startedAt: now });
-      await this.deps.logs.save(log);
-      return log;
-    }
+    if (!draft) return null;
     const covered = planCoveringEntries(draft);
     const opened = hasStarted(covered)
       ? resumeTimer(covered, now)
@@ -113,15 +123,6 @@ export class LoggingService {
     if (problem) throw new DomainError(problem);
     if (planned.sets.length === 0) throw new DomainError('Plan at least one set.');
     return this.updateDraft(logId, (log) => upsertPlanned(log, planned, at));
-  }
-
-  /** Plans these exercises after the ones already planned (a routine, say), skipping repeats. */
-  async addToPlan(logId: string, exercises: readonly ExerciseLogEntry[]): Promise<WorkoutLog> {
-    return this.updateDraft(logId, (log) =>
-      exercises
-        .filter((e) => e.sets.length > 0 && !plannedFor(log, e.exerciseId))
-        .reduce((plan, e) => upsertPlanned(plan, e), log),
-    );
   }
 
   /**

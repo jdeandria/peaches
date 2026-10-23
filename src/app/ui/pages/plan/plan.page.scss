@@ -64,19 +64,9 @@ p {
   flex: 1 0 100%;
 }
 
-.summary-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-
-  &:empty {
-    display: none;
-  }
-
-  .material-symbols-rounded {
-    margin-inline-end: 8px;
-    font-size: 20px;
-  }
+.repeat .material-symbols-rounded {
+  margin-inline-end: 8px;
+  font-size: 20px;
 }
 
 .strips {

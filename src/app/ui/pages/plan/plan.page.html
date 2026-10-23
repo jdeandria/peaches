@@ -28,8 +28,7 @@
         </pch-card>
       }
 
-      @let s = summary();
-      @if (s) {
+      @if (summary(); as s) {
         <pch-card class="summary" variant="outlined" [pchStagger]="0">
           <div class="summary-text">
             <h2 class="pch-title-large">{{ s.title }}</h2>
@@ -38,20 +37,6 @@
           @if (s.progress !== null) {
             <pch-wavy-progress class="progress" [value]="s.progress" label="Workouts done" />
           }
-          <div class="summary-actions">
-            @if (s.empty && canRepeat()) {
-              <button matButton="filled" type="button" [disabled]="busy()" (click)="repeat()">
-                <span class="material-symbols-rounded" aria-hidden="true">event_repeat</span>
-                Repeat {{ shown() === 'next' ? 'this' : 'last' }} week
-              </button>
-            }
-            @if (shown() === 'this') {
-              <a matButton="tonal" routerLink="/log">
-                <span class="material-symbols-rounded" aria-hidden="true">bolt</span>
-                Log something unplanned
-              </a>
-            }
-          </div>
         </pch-card>
       }
 
@@ -137,7 +122,21 @@
     </div>
 
     <div secondaryPane>
-      <pch-section title="Days" [top]="8" />
+      <pch-section title="Days" [top]="8">
+        @if (canRepeat() && plan()?.workouts.length === 0) {
+          <button
+            sectionTrailing
+            matButton="tonal"
+            type="button"
+            class="repeat"
+            [disabled]="busy()"
+            (click)="repeat()"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">event_repeat</span>
+            Repeat {{ shown() === 'next' ? 'this' : 'last' }} week
+          </button>
+        }
+      </pch-section>
       @let dayList = days();
       @if (dayList === undefined) {
         <div class="loading"><pch-loading-indicator [size]="36" /></div>
@@ -164,7 +163,7 @@
                   <span class="material-symbols-rounded" aria-hidden="true">add</span>
                 </a>
               </div>
-              @if (d.workouts.length > 0 || d.unplanned.length > 0) {
+              @if (d.workouts.length > 0) {
                 <pch-list-card>
                   @for (r of d.workouts; track r.workout.id) {
                     <pch-swipe-row
@@ -236,21 +235,6 @@
                         }
                       </div>
                     </pch-swipe-row>
-                  }
-                  @for (u of d.unplanned; track u.log.id) {
-                    <a class="workout unplanned" [routerLink]="['/log', u.log.id]">
-                      <pch-shaped-avatar
-                        shape="softBurst"
-                        color="secondary-container"
-                        foreground="on-secondary-container"
-                      >
-                        <span class="material-symbols-rounded" aria-hidden="true">bolt</span>
-                      </pch-shaped-avatar>
-                      <span class="text">
-                        <span class="pch-title-medium">Workout</span>
-                        <span class="pch-body-small muted one-line">{{ u.subtitle }}</span>
-                      </span>
-                    </a>
                   }
                 </pch-list-card>
               }

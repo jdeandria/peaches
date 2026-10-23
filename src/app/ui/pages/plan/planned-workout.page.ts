@@ -21,7 +21,12 @@ import { LocalDate, parseLocalDate, startOfWeek } from '../../../domain/core/loc
 import { stableHash } from '../../../domain/core/stable-hash';
 import { LoggableExercise } from '../../../domain/exercises/loggable';
 import { isSeasonOpen } from '../../../domain/models/season';
-import { daysOf, isInWeek, PLANNED_NAME_MAX } from '../../../domain/models/week-plan';
+import {
+  daysOf,
+  isInWeek,
+  PlannedWorkout,
+  PLANNED_NAME_MAX,
+} from '../../../domain/models/week-plan';
 import {
   ExerciseLogEntry,
   isSubmitted,
@@ -195,6 +200,9 @@ export class PlannedWorkoutPage {
     return !!log && isSubmitted(log);
   });
 
+  /** A workout for today can start straight away (and every workout starts from the plan). */
+  protected readonly canStart = computed(() => this.date() === this.state.today() && !this.done());
+
   protected readonly dayOptions = computed<ButtonGroupOption<LocalDate>[]>(() => {
     const monday = this.monday();
     if (!monday) return [];
@@ -361,11 +369,34 @@ export class PlannedWorkoutPage {
     });
   }
 
+  /** Saves it to the plan, then starts it in the log. */
+  protected async saveAndStart(): Promise<void> {
+    const me = this.me();
+    const monday = this.monday();
+    const saved = await this.persist(false);
+    if (!saved || !me || !monday) return;
+    this.busy.set(true);
+    const log = await this.state.run((app) =>
+      app.planService.launch(me, monday, saved.id, this.state.now()),
+    );
+    this.busy.set(false);
+    if (log) {
+      await this.router.navigate(['/log'], { queryParams: { mode: 'log' }, replaceUrl: true });
+    } else {
+      await this.backToPlan();
+    }
+  }
+
   protected async save(): Promise<void> {
+    if (await this.persist()) await this.backToPlan();
+  }
+
+  /** Saves the workout to the plan (saying so, if `announce`); undefined if it couldn't be. */
+  private async persist(announce = true): Promise<PlannedWorkout | undefined> {
     const me = this.me();
     const monday = this.monday();
     const day = this.date();
-    if (!me || !monday || !day || this.busy() || this.exercises().length === 0) return;
+    if (!me || !monday || !day || this.busy() || this.exercises().length === 0) return undefined;
     this.busy.set(true);
     const saved = await this.state.run(
       (app) =>
@@ -381,10 +412,10 @@ export class PlannedWorkoutPage {
           },
           now: this.state.now(),
         }),
-      this.isNew() ? `Planned for ${Fmt.day(day)}.` : 'Plan updated.',
+      announce ? (this.isNew() ? `Planned for ${Fmt.day(day)}.` : 'Plan updated.') : undefined,
     );
     this.busy.set(false);
-    if (saved) await this.backToPlan();
+    return saved;
   }
 
   /** Takes it off the plan, with Undo, and goes back. */

@@ -26,7 +26,6 @@ import {
   hasStarted,
   isSubmitted,
   WorkoutLog,
-  workoutLog,
 } from '../domain/models/workout-log';
 import {
   CrateRepository,
@@ -156,7 +155,7 @@ export class PlanService {
     workoutId: string,
     now: Date,
   ): Promise<WorkoutLog> {
-    const { logs, logging, ids } = this.deps;
+    const { logs, logging } = this.deps;
     const plan = await this.plan(peachId, weekStart, now);
     const workout = plannedWorkout(plan, workoutId);
     if (!workout) throw new DomainError('That workout isn’t in your plan.');
@@ -168,8 +167,7 @@ export class PlanService {
       throw new DomainError('Finish the workout in progress first.');
     }
     if (draft) await logs.delete(draft);
-    const log = workoutLog({ id: ids.newId(), peachId, startedAt: now, plan: workout.exercises });
-    await logs.save(log);
+    const log = await logging.newDraft(peachId, now, workout.exercises);
     await this.deps.plans.save({
       ...upsertWorkout(plan, { ...workout, logId: log.id }),
       updatedAt: now,

@@ -2,6 +2,17 @@
   <pch-page title="Workout" showBack backLink="/">
     <div class="loading"><pch-loading-indicator /></div>
   </pch-page>
+} @else if (nothing()) {
+  <pch-page title="Workout" showBack backLink="/">
+    <pch-empty-state
+      icon="event_note"
+      title="Nothing under way"
+      message="Every workout starts from your plan: put it on a day, then start it."
+    />
+    <div class="empty-action">
+      <a matButton="filled" routerLink="/">Go to your plan</a>
+    </div>
+  </pch-page>
 } @else if (!log() || !mine()) {
   <pch-page title="Workout" showBack backLink="/">
     <pch-empty-state icon="search_off" title="Workout not found" />
@@ -15,18 +26,6 @@
   />
 } @else {
   <pch-page [title]="title()" [subtitle]="subtitle()" showBack backLink="/">
-    @if (draft() && planned().length > 0) {
-      <button
-        pageActions
-        matIconButton
-        type="button"
-        matTooltip="Save as routine"
-        aria-label="Save as routine"
-        (click)="saveRoutine()"
-      >
-        <span class="material-symbols-rounded" aria-hidden="true">bookmark_add</span>
-      </button>
-    }
     @if (!draft()) {
       <button
         pageActions
@@ -141,7 +140,6 @@
           }
         </pch-list-card>
       } @else {
-        <pch-section title="Build your own" [top]="8" />
         <button
           matButton="filled"
           type="button"
@@ -152,59 +150,6 @@
           <span class="material-symbols-rounded" aria-hidden="true">add</span>
           Add exercise
         </button>
-        @if (routines().length > 0) {
-          <pch-section title="Your routines" />
-          <pch-list-card [pchStagger]="2">
-            @for (r of routines(); track r.routine.id) {
-              <pch-swipe-row removable removeLabel="Delete" (remove)="deleteRoutine(r.routine)">
-                <div class="item routine">
-                  <button type="button" class="routine-use" (click)="useRoutine(r.routine)">
-                    <span class="pch-title-medium">{{ r.routine.name }}</span>
-                    <span class="pch-body-medium muted">{{ r.summary }}</span>
-                  </button>
-                  <span class="pch-swipe-actions">
-                    <button
-                      matIconButton
-                      type="button"
-                      matTooltip="Delete routine"
-                      [attr.aria-label]="'Delete routine ' + r.routine.name"
-                      (click)="deleteRoutine(r.routine)"
-                    >
-                      <span class="material-symbols-rounded" aria-hidden="true">delete</span>
-                    </button>
-                  </span>
-                </div>
-              </pch-swipe-row>
-            }
-          </pch-list-card>
-        }
-        <pch-section title="Templates" />
-        <pch-list-card [pchStagger]="3">
-          @for (t of templates(); track t.template.id) {
-            <div class="item routine">
-              <button
-                type="button"
-                class="routine-use template-use"
-                (click)="useTemplate(t.exercises)"
-              >
-                <span class="pch-title-medium"
-                  >{{ t.template.name }}
-                  <span class="kit pch-label-medium">{{ t.template.kit }}</span></span
-                >
-                <span class="pch-body-medium muted">{{ t.summary }}</span>
-              </button>
-              <button
-                matIconButton
-                type="button"
-                matTooltip="Shuffle"
-                [attr.aria-label]="'Shuffle ' + t.template.name"
-                (click)="shuffle(t.template)"
-              >
-                <span class="material-symbols-rounded" aria-hidden="true">shuffle</span>
-              </button>
-            </div>
-          }
-        </pch-list-card>
       }
     } @else if (entries().length > 0) {
       <pch-section title="Exercises" />

@@ -73,8 +73,8 @@ describe('PlanPage', () => {
     // Plans are locked in: each side's points against what they committed to.
     const [warriors] = strips(el);
     expect(warriors.head).toBe('Weekend Warriors · vs Cho');
-    expect(warriors.bars).toEqual(['You 51.2 / 104.5', 'Cho 0 / 79.0']);
-    expect(warriors.headline).toBe('53.3 to go to hit your plan');
+    expect(warriors.bars).toEqual(['You 47.8 / 104.5', 'Cho 0 / 79.0']);
+    expect(warriors.headline).toBe('56.7 to go to hit your plan');
     expect(warriors.href).toMatch(/^\/matchups\//);
     expect(text(el)).toContain('Lunch Break Lifters: no matchup this week.');
 
@@ -127,7 +127,8 @@ describe('PlanPage', () => {
     const f = await render({ week: 'next' });
     const el: HTMLElement = f.nativeElement;
     expect(text(el.querySelector('.subtitle'))).toBe('Oct 19 – 25');
-    expect(text(el.querySelector('.summary h2'))).toBe('Plan next week');
+    // An empty week has no summary, just the days and a way to repeat the week before.
+    expect(el.querySelector('.summary')).toBeNull();
     const [warriors, lifters] = strips(el);
     // A bye in one Crate; in the other, Cho has planned and I haven't.
     expect(warriors.head).toBe('Weekend Warriors · Bye');
@@ -158,7 +159,8 @@ describe('PlanPage', () => {
     const el: HTMLElement = f.nativeElement;
     expect(el.querySelector('a.strip')).toBeNull();
     expect(text(el)).toContain('Just for you.');
-    expect(text(el.querySelector('.summary h2'))).toBe('Nothing planned this week');
+    expect(el.querySelector('.summary')).toBeNull();
+    expect(button(el, 'Repeat last week')).toBeUndefined();
     const add = el.querySelector('li.day a.add')!;
     expect(add.getAttribute('href')).toBe('/plan/2026-10-12/new?day=2026-10-12');
   });

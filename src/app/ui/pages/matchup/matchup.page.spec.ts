@@ -68,7 +68,7 @@ describe('MatchupPage', () => {
     expect(text(el.querySelector('.subtitle'))).toBe('Weekend Warriors · Week 3 · Oct 12 – 18');
     // Monday morning: I've done my first workout, Cho nothing yet. Each
     // score counts the penalty for what's still to do, as if the week ended now.
-    expect(points(el)).toEqual(['24.6', '-39.5']);
+    expect(points(el)).toEqual(['19.5', '-39.5']);
     expect(text(el.querySelector('.verdict'))).toBe('Live · You lead');
     expect(text(el.querySelector('.banner'))).toContain('Everything you both log this week counts');
     const train = el.querySelector('a.log')!;
@@ -83,9 +83,9 @@ describe('MatchupPage', () => {
       'Your workouts',
       'Cho’s workouts',
     ]);
-    expect(breakdown(el)).toEqual(['Workouts 51.2 0', 'Plan penalty −26.6 −39.5']);
+    expect(breakdown(el)).toEqual(['Workouts 47.8 0', 'Plan penalty −28.3 −39.5']);
     expect(plans(el)).toEqual([
-      'Your plan · 104.5 pts committed · 53.3 pts to go · −26.6 if it stays',
+      'Your plan · 104.5 pts committed · 56.7 pts to go · −28.3 if it stays',
       'Cho’s plan · 79.0 pts committed · 79.0 pts to go · −39.5 if it stays',
     ]);
     // Every category the Crate gave points to, with its weight per par.
@@ -120,9 +120,9 @@ describe('MatchupPage', () => {
     await stable(f);
     // 10 km = 2 pars at 23; 50 min = 1.11 pars at 25: 73.8 more, past my
     // 104.5, which earns 25% of it.
-    expect(breakdown(el)).toEqual(['Workouts 125.0 0', 'Plan bonus or penalty +26.1 −39.5']);
+    expect(breakdown(el)).toEqual(['Workouts 121.6 0', 'Plan bonus or penalty +26.1 −39.5']);
     expect(plans(el)[0]).toBe('Your plan · 104.5 pts committed · Plan hit: +26.1 bonus');
-    expect(points(el)[0]).toBe('151.1');
+    expect(points(el)[0]).toBe('147.7');
     expect(text(el.querySelector('.verdict'))).toBe('Live · You lead');
     const mine = el.querySelectorAll('.logs > div')[0];
     const links = Array.from(mine.querySelectorAll('a[pch-list-row]')).map((a) =>
@@ -137,13 +137,13 @@ describe('MatchupPage', () => {
     const f = await render(done.id);
     const el: HTMLElement = f.nativeElement;
     expect(text(el.querySelector('h1'))).toBe('You vs Ada');
-    expect(points(el)).toEqual(['247.6', '97.5']);
-    // Workouts, then the plans: I hit mine (25% of 104.5); Ada fell 47 short
-    // of 168 (50% of it off).
-    expect(breakdown(el)).toEqual(['Workouts 221.5 121.0', 'Plan bonus or penalty +26.1 −23.5']);
+    expect(points(el)).toEqual(['207.2', '79.3']);
+    // Workouts, then the plans: I hit mine (25% of 104.5); Ada fell 59.1
+    // short of 168 (50% of it off).
+    expect(breakdown(el)).toEqual(['Workouts 181.1 108.8', 'Plan bonus or penalty +26.1 −29.6']);
     expect(plans(el)).toEqual([
       'Your plan · 104.5 pts committed · Hit: +26.1 bonus',
-      'Ada’s plan · 168.0 pts committed · Short by 47.0: −23.5',
+      'Ada’s plan · 168.0 pts committed · Short by 59.1: −29.6',
     ]);
     expect(text(el.querySelector('.verdict'))).toBe('Final · You won');
     expect(el.querySelector('.banner')).toBeNull();

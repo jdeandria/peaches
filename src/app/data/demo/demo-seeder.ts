@@ -156,9 +156,8 @@ export class DemoSeeder {
 
     await this.plan(season, now, timeZone);
 
-    // Everyone does most of what they planned, up to now, and the odd
-    // workout they didn't plan. Ada made up a loop of her own, which the
-    // Crate sees as hers.
+    // Everyone does most of what they planned, up to now. Ada made up a
+    // loop of her own, which the Crate sees as hers.
     const random = new SeededRandom(2026);
     const hillLoop = customExercise({
       id: 'reservoir-loop',
@@ -174,24 +173,18 @@ export class DemoSeeder {
         const weekIndex = day < thisWeek ? 0 : 1;
         const plan = await app.plans.get(p.id, startOfWeek(day));
         const planned = plan?.workouts.find((w) => w.day === day);
-        if (plan && planned) {
-          // Ada never misses her first run of the week: it's her own loop.
-          const loop = p.id === 'ada' && planned === plan.workouts[0];
-          if (!loop && random.nextDouble() < 0.2) continue;
-          const ids = loop ? [hillLoop.id] : planned.exercises.map((e) => e.exerciseId);
-          const logId = await this.logSession(p.id, ids, custom, random, at, weekIndex);
-          await app.plans.save(
-            upsertWorkout((await app.plans.get(p.id, plan.weekStart)) ?? plan, {
-              ...planned,
-              logId,
-            }),
-          );
-          continue;
-        }
-        if (random.nextDouble() > 0.2) continue;
-        const sessions = SESSIONS[STYLES[p.id]];
-        const ids = sessions[random.nextInt(sessions.length)];
-        await this.logSession(p.id, ids, custom, random, at, weekIndex);
+        if (!plan || !planned) continue;
+        // Ada never misses her first run of the week: it's her own loop.
+        const loop = p.id === 'ada' && planned === plan.workouts[0];
+        if (!loop && random.nextDouble() < 0.2) continue;
+        const ids = loop ? [hillLoop.id] : planned.exercises.map((e) => e.exerciseId);
+        const logId = await this.logSession(p.id, ids, custom, random, at, weekIndex);
+        await app.plans.save(
+          upsertWorkout((await app.plans.get(p.id, plan.weekStart)) ?? plan, {
+            ...planned,
+            logId,
+          }),
+        );
       }
     }
 

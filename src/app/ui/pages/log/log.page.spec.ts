@@ -8,7 +8,7 @@ import { Router } from '@angular/router';
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { AppState } from '../../../state/app-state';
 import { loggableFromCatalog } from '../../../domain/exercises/loggable';
-import { entryOf, isSubmitted, setLog } from '../../../domain/models/workout-log';
+import { entryOf, ExerciseLogEntry, isSubmitted, setLog } from '../../../domain/models/workout-log';
 import { seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { LogPage } from './log.page';
 
@@ -34,11 +34,29 @@ describe('LogPage', () => {
     TestBed.inject(MatDialog).closeAll();
   });
 
-  async function render(inputs: { logId?: string; mode?: string; routine?: string } = {}) {
+  /**
+   * Renders the page. Without a log id, a workout is launched first (as
+   * Start on the plan does) with `plan` as its exercises, unless `launched`
+   * is false.
+   */
+  async function render(
+    inputs: {
+      logId?: string;
+      mode?: string;
+      plan?: readonly ExerciseLogEntry[];
+      launched?: boolean;
+    } = {},
+  ) {
+    if (!inputs.logId && inputs.launched !== false) {
+      await backend.container.loggingService.newDraft(
+        DEMO_PEACH_ID,
+        TestBed.inject(AppState).now(),
+        inputs.plan,
+      );
+    }
     const f = TestBed.createComponent(LogPage);
     if (inputs.logId) f.componentRef.setInput('logId', inputs.logId);
     if (inputs.mode) f.componentRef.setInput('mode', inputs.mode);
-    if (inputs.routine) f.componentRef.setInput('routine', inputs.routine);
     await stable(f);
     return { f, el: f.nativeElement as HTMLElement };
   }
@@ -91,12 +109,11 @@ describe('LogPage', () => {
 
   it('plans a run, starts the clock with the workout, logs it set by set and finishes', async () => {
     const { f, el } = await render();
-    expect(text(el.querySelector('h1'))).toBe('Plan your workout');
+    expect(text(el.querySelector('h1'))).toBe('Your workout');
     expect(text(el.querySelector('.subtitle'))).toBe('Counts in 2 Crates');
-    // No clock until there's a workout going; building your own comes first.
+    // No clock until there's a workout going; an empty one starts with Add exercise.
     expect(el.querySelector('.clock')).toBeNull();
-    const sections = Array.from(el.querySelectorAll('pch-section h2')).map(text);
-    expect(sections).toEqual(['Build your own', 'Your routines', 'Templates']);
+    expect(el.querySelectorAll('pch-section')).toHaveLength(0);
     expect(el.querySelector('button.add-first')).not.toBeNull();
     expect(button(el, 'Start workout')).toBeUndefined();
     // Planning doesn't count: the clock waits.
@@ -155,85 +172,6 @@ describe('LogPage', () => {
       }),
     ]);
     expect(TestBed.inject(Router).url).toBe(`/log/${draft.id}`);
-  });
-
-  it('plans from a routine, saves a plan as one, and deletes one with Undo', async () => {
-    const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
-    const { f, el } = await render();
-    const routines = () =>
-      Array.from(el.querySelectorAll('.routine-use:not(.template-use) .pch-title-medium')).map(
-        text,
-      );
-    expect(routines()).toEqual(['Full body', 'Swing day']);
-
-    el.querySelectorAll<HTMLButtonElement>('.routine-use:not(.template-use)')[0].click();
-    await stable(f);
-    expect(Array.from(el.querySelectorAll('.item .pch-title-medium')).map(text)).toEqual([
-      'Goblet Squat',
-      'Dumbbell Bench Press',
-      'Dumbbell Bent Over Row',
-      'Forearm Plank',
-    ]);
-    expect(text(el)).toContain('0 of 12 sets done');
-
-    button(el, 'Save as routine')!.click();
-    await stable(f);
-    const name = overlay().querySelector<HTMLInputElement>('mat-dialog-content input')!;
-    expect(name.value).toBe('Goblet Squat, Dumbbell Bench Press & mor');
-    type(name, 'full BODY');
-    await stable(f);
-    // Same name: it replaces that one.
-    expect(text(overlay().querySelector('mat-hint'))).toBe('Replaces your “Full body” routine');
-    type(name, 'Upper & lower');
-    await stable(f);
-    button(overlay(), 'Save')!.click();
-    await stable(f);
-    const saved = await backend.container.routines.forPeach(DEMO_PEACH_ID);
-    expect(saved.map((r) => r.name)).toEqual(['Full body', 'Swing day', 'Upper & lower']);
-    expect(saved[2].exercises).toHaveLength(4);
-    expect(toast).toHaveBeenCalledWith('Saved “Upper & lower”.');
-
-    // Back to an empty plan to see the routines again, and delete one.
-    for (const id of saved[2].exercises.map((e) => e.exerciseId)) {
-      const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-      await backend.container.loggingService.removeEntry(draft.id, id);
-    }
-    await stable(f);
-    expect(routines()).toEqual(['Full body', 'Swing day', 'Upper & lower']);
-    button(el, 'Delete routine Swing day')!.click();
-    await stable(f);
-    expect(routines()).toEqual(['Full body', 'Upper & lower']);
-    const undo = toast.mock.calls.find(([m]) => m === 'Deleted “Swing day”.')![1]!;
-    undo();
-    await stable(f);
-    expect(routines()).toEqual(['Full body', 'Swing day', 'Upper & lower']);
-  });
-
-  it('offers template workouts, reshuffled on demand, to plan in a tap', async () => {
-    const { f, el } = await render();
-    const template = (name: string) =>
-      Array.from(el.querySelectorAll<HTMLButtonElement>('.template-use')).find((b) =>
-        text(b.querySelector('.pch-title-medium'))?.startsWith(name),
-      )!;
-    expect(text(el)).toContain('Templates');
-    expect(text(template('Full body').querySelector('.kit'))).toBe('Dumbbells');
-    expect(text(template('Easy run'))).toMatch(/1 exercise · (Run|Easy Jog)/);
-
-    // Shuffling draws another mix; some shuffle soon differs.
-    const before = text(template('Upper body'));
-    let after = before;
-    for (let i = 0; i < 5 && after === before; i++) {
-      button(el, 'Shuffle Upper body')!.click();
-      await stable(f);
-      after = text(template('Upper body'));
-    }
-    expect(after).not.toBe(before);
-
-    template('Upper body').click();
-    await stable(f);
-    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    expect(draft.plan).toHaveLength(5);
-    expect(text(el)).toContain('0 of 15 sets done');
   });
 
   it('log mode rests between sets, and skips and takes back sets', async () => {
@@ -388,9 +326,8 @@ describe('LogPage', () => {
 
   it('swiping a planned exercise left removes it, and Undo puts it back in place', async () => {
     const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
-    const { f, el } = await render();
-    el.querySelectorAll<HTMLButtonElement>('.routine-use:not(.template-use)')[0].click();
-    await stable(f);
+    const [routine] = await backend.container.routines.forPeach(DEMO_PEACH_ID);
+    const { f, el } = await render({ plan: routine.exercises });
     const names = () => Array.from(el.querySelectorAll('.item .pch-title-medium')).map(text);
     const before = names();
     const content = el.querySelectorAll<HTMLElement>('pch-swipe-row .content')[1];
@@ -496,27 +433,9 @@ describe('LogPage', () => {
     expect(text(el)).toContain('Workout not found');
   });
 
-  it('plans the routine a link names into an empty draft, once', async () => {
-    const pushUp = loggableFromCatalog(backend.container.catalog.require('bw-push-up'));
-    const routine = await backend.container.routineService.create(
-      DEMO_PEACH_ID,
-      'Push day',
-      [entryOf(pushUp, { sets: [setLog({ reps: 20 }), setLog({ reps: 20 })] })],
-      TestBed.inject(AppState).now(),
-    );
-    const { f, el } = await render({ routine: routine.id });
-    expect(text(el.querySelector('.item'))).toContain('Push Up');
-    expect(el.querySelectorAll('.item.clickable')).toHaveLength(1);
-    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    expect(draft.plan.map((e) => e.exerciseId)).toEqual(['bw-push-up']);
-    // Not planned again on a later pass.
-    await stable(f);
-    expect((await backend.container.logs.getById(draft.id))!.plan).toHaveLength(1);
-  });
-
   it('opening the runner straight from a link starts the clock', async () => {
     const squat = loggableFromCatalog(backend.container.catalog.require('bb-back-squat'));
-    const fresh = await backend.container.loggingService.openDraft(
+    const fresh = await backend.container.loggingService.newDraft(
       DEMO_PEACH_ID,
       TestBed.inject(AppState).now(),
     );
@@ -526,8 +445,16 @@ describe('LogPage', () => {
     );
     // Planned, not started.
     expect(fresh.timerStartedAt).toBeNull();
-    const { el } = await render({ mode: 'log' });
+    const { el } = await render({ mode: 'log', launched: false });
     expect(text(el.querySelector('h1'))).toBe(squat.name);
     expect((await backend.container.logs.getById(fresh.id))!.timerStartedAt).not.toBeNull();
+  });
+
+  it('with nothing launched, points back to the plan', async () => {
+    const { el } = await render({ launched: false });
+    expect(text(el.querySelector('pch-empty-state'))).toContain('Nothing under way');
+    const link = Array.from(el.querySelectorAll('a')).find((a) => text(a) === 'Go to your plan');
+    expect(link?.getAttribute('href')).toBe('/');
+    expect(await backend.container.loggingService.currentLog(DEMO_PEACH_ID)).toBeNull();
   });
 });

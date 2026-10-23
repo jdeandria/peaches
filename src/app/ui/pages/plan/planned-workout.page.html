@@ -224,6 +224,18 @@
       }
 
       <div pageBottomBar class="bottom-actions">
+        @if (canStart()) {
+          <button
+            matButton="tonal"
+            type="button"
+            class="start"
+            [disabled]="busy() || exercises().length === 0"
+            (click)="saveAndStart()"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">play_arrow</span>
+            {{ isNew() ? 'Add and start' : 'Save and start' }}
+          </button>
+        }
         <button
           matButton="filled"
           type="button"

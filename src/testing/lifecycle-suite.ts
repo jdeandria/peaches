@@ -158,15 +158,6 @@ export function runLifecycleSuite(
         app.routineService.create('a', 'Silly', [squats(5000, 20)], now),
       ).rejects.toThrow(DomainError);
     });
-
-    it('plans a session from a routine', async () => {
-      const routine = await app.routineService.create('a', 'Legs', [squat, run(5)], now);
-      const draft = await app.loggingService.openDraft('a', now);
-      await app.loggingService.planExercise(draft.id, run(3));
-      const planned = await app.loggingService.addToPlan(draft.id, routine.exercises);
-      // Already-planned exercises keep their targets.
-      expect(planned.plan).toEqual([run(3), squat]);
-    });
   });
 
   describe(`${backend} LoggingService`, () => {
@@ -211,12 +202,14 @@ export function runLifecycleSuite(
     });
 
     it('the clock starts with the workout and runs while the log screen is open', async () => {
-      const opened = await app.loggingService.openDraft('a', utc(10, 6, 7));
+      // Nothing launched, nothing to resume: workouts start from the plan.
+      expect(await app.loggingService.resumeDraft('a', utc(10, 6, 7))).toBeNull();
+      const opened = await app.loggingService.newDraft('a', utc(10, 6, 7));
       // Planning doesn't count: the clock waits for the workout to start.
       expect(opened.timerStartedAt).toBeNull();
       await app.loggingService.planExercise(opened.id, run(3));
       // Reopening a draft not started yet, days later, takes the new day.
-      const reopened = await app.loggingService.openDraft('a', utc(10, 8, 18));
+      const reopened = (await app.loggingService.resumeDraft('a', utc(10, 8, 18)))!;
       expect(reopened.id).toBe(opened.id);
       expect(reopened.startedAt).toEqual(utc(10, 8, 18));
       expect(reopened.plan).toEqual([run(3)]);
@@ -230,7 +223,7 @@ export function runLifecycleSuite(
         new Date(utc(10, 8, 18).getTime() + 600_000),
       );
       expect(paused.durationSeconds).toBe(600);
-      const resumed = await app.loggingService.openDraft('a', utc(10, 8, 20));
+      const resumed = (await app.loggingService.resumeDraft('a', utc(10, 8, 20)))!;
       expect(resumed.startedAt).toEqual(utc(10, 8, 18));
       const done = await app.loggingService.submit(
         opened.id,
@@ -240,14 +233,14 @@ export function runLifecycleSuite(
     });
 
     it('plans a session, then ticks it off a set at a time', async () => {
-      const draft = await app.loggingService.openDraft('a', utc(10, 10, 8));
+      const draft = await app.loggingService.newDraft('a', utc(10, 10, 8));
       const plan = exerciseLogEntry({
         exerciseId: 'bb-back-squat',
         exerciseName: 'Back Squat',
         sets: [setLog({ reps: 5, loadKg: 100 }), setLog({ reps: 5, loadKg: 100 })],
       });
       await app.loggingService.planExercise(draft.id, plan);
-      await app.loggingService.addToPlan(draft.id, [plan, run(5)]);
+      await app.loggingService.planExercise(draft.id, run(5));
       expect((await app.logs.getById(draft.id))!.plan.map((e) => e.exerciseId)).toEqual([
         'bb-back-squat',
         'bw-run',
@@ -329,7 +322,7 @@ export function runLifecycleSuite(
       expect((await app.logs.getById(log.id))?.sharedWith).toEqual([one.id]);
 
       // A draft goes and comes back as it was.
-      const draft = await app.loggingService.openDraft('a', now);
+      const draft = await app.loggingService.newDraft('a', now);
       await app.loggingService.planExercise(draft.id, run(3));
       const gone = await app.loggingService.deleteLog(draft.id, 'a');
       expect(await app.loggingService.currentLog('a')).toBeNull();
@@ -338,7 +331,7 @@ export function runLifecycleSuite(
     });
 
     it('removing an exercise from a draft takes its plan too', async () => {
-      const draft = await app.loggingService.openDraft('a', now);
+      const draft = await app.loggingService.newDraft('a', now);
       await app.loggingService.planExercise(draft.id, run(5));
       await app.loggingService.logSet(draft.id, 'bw-run', run(5).sets[0], now);
       const removed = await app.loggingService.removeEntry(draft.id, 'bw-run');
@@ -550,7 +543,7 @@ export function runLifecycleSuite(
         app.planService.launch('a', monday, workout.id, utc(10, 13, 10)),
       ).rejects.toBeInstanceOf(DomainError);
       // An empty draft gives way to a launch.
-      const draft = await app.loggingService.openDraft('a', utc(10, 14, 6));
+      const draft = await app.loggingService.newDraft('a', utc(10, 14, 6));
       const next = await app.planService.launch('a', monday, other.id, utc(10, 14, 7));
       expect(next.id).not.toBe(draft.id);
       expect(await app.logs.getById(draft.id)).toBeNull();
