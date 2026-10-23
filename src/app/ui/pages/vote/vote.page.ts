@@ -15,9 +15,9 @@ import {
   CATEGORY_INFO,
   CategoryWeights,
   DEFAULT_RULES,
-  LINEUP_RULE_KEYS,
-  LINEUP_RULE_LIMITS,
-  LineupRules,
+  PLAN_RULE_KEYS,
+  PLAN_RULE_LIMITS,
+  PlanRules,
   SCORING_CATEGORIES,
   ScoringCategory,
   WEIGHT_BUDGET,
@@ -38,33 +38,28 @@ import { Stagger } from '../../layout/stagger';
 /** How far one tap moves a category. */
 const STEP = 5;
 
-/** How each lineup rule is shown and stepped. */
-const LINEUP_RULES: Readonly<
-  Record<keyof LineupRules, { label: string; step: number; describe: (n: number) => string }>
+/** How each plan rule is shown and stepped. */
+const PLAN_RULES: Readonly<
+  Record<keyof PlanRules, { label: string; step: number; describe: (n: number) => string }>
 > = {
-  slots: {
-    label: 'Lineup slots',
-    step: 1,
-    describe: (n) =>
-      n === 0 ? 'No lineups: every workout just counts' : `Pledge up to ${n} categories a week`,
-  },
-  pledgeBonus: {
-    label: 'Pledge bonus',
-    step: 10,
-    describe: (n) => `A pledge you hit earns ${n}% of its points again`,
-  },
-  battlePars: {
-    label: 'Battle prize',
-    step: 1,
+  bonus: {
+    label: 'Plan bonus',
+    step: 5,
     describe: (n) =>
       n === 0
-        ? 'No battles'
-        : `Out-doing your opponent in a pledged category earns ${n === 1 ? 'one par' : `${n} pars`} of it`,
+        ? 'Hitting your plan earns nothing extra'
+        : `Hitting your plan earns ${n}% of it on top`,
+  },
+  penalty: {
+    label: 'Shortfall penalty',
+    step: 5,
+    describe: (n) =>
+      n === 0 ? 'Falling short costs nothing' : `Every point you fall short costs ${n}% of a point`,
   },
 };
 
 interface RuleView {
-  readonly key: keyof LineupRules;
+  readonly key: keyof PlanRules;
   readonly label: string;
   readonly mine: number;
   readonly unit: string;
@@ -89,7 +84,7 @@ interface CategoryView {
 /**
  * Members vote on the Crate's rules: each splits 100 points across the
  * scoring categories (the Crate's weights are the average) and picks the
- * lineup rules (the middle vote wins). A Season freezes the rules when it
+ * plan rules (the middle vote wins). A Season freezes the rules when it
  * starts, so a vote changes the next Season, not this one. Owners also set
  * the grace period here.
  */
@@ -150,7 +145,7 @@ export class VotePage {
 
   /** My ballot as I edit it; starts from my vote, else the Crate's tally. */
   protected readonly draft = signal<CategoryWeights>(DEFAULT_RULES.weights);
-  protected readonly lineupDraft = signal<LineupRules>(DEFAULT_RULES.lineup);
+  protected readonly planDraft = signal<PlanRules>(DEFAULT_RULES.plan);
   private readonly touched = signal(false);
   protected readonly grace = signal<number | null>(null);
 
@@ -161,7 +156,7 @@ export class VotePage {
       if (!d || this.touched()) return;
       const start = d.mine ?? d.tally;
       this.draft.set(start.weights);
-      this.lineupDraft.set(start.lineup);
+      this.planDraft.set(start.plan);
       this.grace.set(d.crate?.settings.loggingGraceHours ?? null);
     });
   }
@@ -184,28 +179,28 @@ export class VotePage {
     }));
   });
 
-  protected readonly lineupRules = computed<RuleView[]>(() => {
+  protected readonly planRules = computed<RuleView[]>(() => {
     const d = this.data.value();
-    const draft = this.lineupDraft();
-    return LINEUP_RULE_KEYS.map((key) => ({
+    const draft = this.planDraft();
+    return PLAN_RULE_KEYS.map((key) => ({
       key,
-      label: LINEUP_RULES[key].label,
+      label: PLAN_RULES[key].label,
       mine: draft[key],
-      unit: key === 'pledgeBonus' ? '%' : '',
-      describe: LINEUP_RULES[key].describe(draft[key]),
-      crate: d?.tally.lineup[key] ?? 0,
-      season: d?.season ? d.season.rules.lineup[key] : null,
-      min: LINEUP_RULE_LIMITS[key][0],
-      max: LINEUP_RULE_LIMITS[key][1],
+      unit: '%',
+      describe: PLAN_RULES[key].describe(draft[key]),
+      crate: d?.tally.plan[key] ?? 0,
+      season: d?.season ? d.season.rules.plan[key] : null,
+      min: PLAN_RULE_LIMITS[key][0],
+      max: PLAN_RULE_LIMITS[key][1],
     }));
   });
 
-  protected nudgeRule(key: keyof LineupRules, direction: 1 | -1): void {
-    const [min, max] = LINEUP_RULE_LIMITS[key];
+  protected nudgeRule(key: keyof PlanRules, direction: 1 | -1): void {
+    const [min, max] = PLAN_RULE_LIMITS[key];
     this.touched.set(true);
-    this.lineupDraft.update((r) => ({
+    this.planDraft.update((r) => ({
       ...r,
-      [key]: Math.min(max, Math.max(min, r[key] + direction * LINEUP_RULES[key].step)),
+      [key]: Math.min(max, Math.max(min, r[key] + direction * PLAN_RULES[key].step)),
     }));
   }
 
@@ -253,7 +248,7 @@ export class VotePage {
         app.votingService.castBallot(
           this.crateId(),
           me,
-          { weights: this.draft(), lineup: this.lineupDraft() },
+          { weights: this.draft(), plan: this.planDraft() },
           this.state.now(),
         ),
       'Vote saved. It counts from the next Season.',

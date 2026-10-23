@@ -100,4 +100,34 @@ describe('VotePage', () => {
       7,
     );
   });
+
+  it('votes on the plan bonus and penalty', async () => {
+    const warriors = await crate('Weekend Warriors');
+    const { f, el } = await render(warriors.id);
+    const headings = Array.from(el.querySelectorAll('h2')).map(text);
+    expect(headings).toContain('Plans');
+    expect(text(el)).toContain('commit to what your plan is worth');
+    // The middle votes: 25% bonus (25, 25, 50) and 50% penalty (50, 50, 75).
+    const rules = () =>
+      Array.from(el.querySelectorAll('.category .what'))
+        .slice(-2)
+        .map((w) => Array.from(w.children).map(text));
+    expect(rules()).toEqual([
+      ['Plan bonus', 'Hitting your plan earns 25% of it on top', 'Crate 25%'],
+      ['Shortfall penalty', 'Every point you fall short costs 50% of a point', 'Crate 50%'],
+    ]);
+
+    button(el, 'More: Plan bonus').click();
+    button(el, 'Less: Shortfall penalty').click();
+    await stable(f);
+    expect(text(el)).toContain('Hitting your plan earns 30% of it on top');
+    expect(text(el)).toContain('costs 45% of a point');
+    button(el, 'Cast my vote').click();
+    await stable(f);
+    const ballots = await backend.container.votingService.ballotsOf(warriors.id);
+    expect(ballots.find((b) => b.peachId === DEMO_PEACH_ID)?.rules.plan).toEqual({
+      bonus: 30,
+      penalty: 45,
+    });
+  });
 });

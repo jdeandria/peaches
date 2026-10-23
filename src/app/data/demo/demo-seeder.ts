@@ -9,11 +9,11 @@ import {
   LoggableExercise,
 } from '../../domain/exercises/loggable';
 import { Equipment } from '../../domain/exercises/taxonomy';
-import { Pledge } from '../../domain/models/lineup';
 import { peach, Peach } from '../../domain/models/peach';
-import { categoryWeights, LineupRules } from '../../domain/models/scoring';
+import { categoryWeights, PlanRules } from '../../domain/models/scoring';
 import { Season } from '../../domain/models/season';
-import { entryOf, SetLog, setLog } from '../../domain/models/workout-log';
+import { PLANNED_NAME_MAX, upsertWorkout } from '../../domain/models/week-plan';
+import { entryOf, ExerciseLogEntry, SetLog, setLog } from '../../domain/models/workout-log';
 
 /** The demo user's Peach id. */
 export const DEMO_PEACH_ID = 'me';
@@ -48,29 +48,13 @@ const SESSIONS: Readonly<Record<Style, readonly (readonly string[])[]>> = {
   rider: [['outdoor-cycling'], ['row-steady', 'bw-push-up'], ['outdoor-cycling']],
 };
 
-/** What each style pledges in a week. */
-const LINEUPS: Readonly<Record<Style, readonly Pledge[]>> = {
-  runner: [
-    { category: 'runWalk', target: 15 },
-    { category: 'activeMinutes', target: 120 },
-  ],
-  lifter: [
-    { category: 'weightMoved', target: 8000 },
-    { category: 'reps', target: 150 },
-  ],
-  mixed: [
-    { category: 'runWalk', target: 5 },
-    { category: 'weightMoved', target: 3000 },
-    { category: 'activeMinutes', target: 90 },
-  ],
-  bodyweight: [
-    { category: 'reps', target: 300 },
-    { category: 'activeMinutes', target: 90 },
-  ],
-  rider: [
-    { category: 'ride', target: 40 },
-    { category: 'swimRow', target: 2000 },
-  ],
+/** The days of the week (0 = Monday) each style plans to train. */
+const PLAN_DAYS: Readonly<Record<Style, readonly number[]>> = {
+  runner: [0, 2, 4, 5],
+  lifter: [0, 1, 3, 4],
+  mixed: [0, 2, 4, 5],
+  bodyweight: [1, 3, 5],
+  rider: [1, 4, 6],
 };
 
 /**
@@ -131,12 +115,12 @@ export class DemoSeeder {
       crateId: string,
       peachId: string,
       weights: Parameters<typeof categoryWeights>[0],
-      lineup: LineupRules = { slots: 3, pledgeBonus: 50, battlePars: 1 },
+      plan: PlanRules = { bonus: 25, penalty: 50 },
     ) =>
       app.votingService.castBallot(
         crateId,
         peachId,
-        { weights: categoryWeights(weights), lineup },
+        { weights: categoryWeights(weights), plan },
         created,
       );
     await vote(crate.id, 'ada', {
@@ -150,13 +134,13 @@ export class DemoSeeder {
       crate.id,
       'ben',
       { weightMoved: 45, reps: 25, runWalk: 10, activeMinutes: 20 },
-      { slots: 2, pledgeBonus: 75, battlePars: 1 },
+      { bonus: 50, penalty: 50 },
     );
     await vote(
       crate.id,
       'dev',
       { reps: 40, runWalk: 20, weightMoved: 10, activeMinutes: 30 },
-      { slots: 3, pledgeBonus: 50, battlePars: 2 },
+      { bonus: 25, penalty: 75 },
     );
     await vote(second.id, DEMO_PEACH_ID, { weightMoved: 60, reps: 30, activeMinutes: 10 });
 
@@ -170,10 +154,11 @@ export class DemoSeeder {
       now: created,
     });
 
-    await this.pledge(season, now, timeZone);
+    await this.plan(season, now, timeZone);
 
-    // Everyone trains a few times a week, in their own style, up to now. Ada
-    // made up a loop of her own, which the Crate sees as hers.
+    // Everyone does most of what they planned, up to now, and the odd
+    // workout they didn't plan. Ada made up a loop of her own, which the
+    // Crate sees as hers.
     const random = new SeededRandom(2026);
     const hillLoop = customExercise({
       id: 'reservoir-loop',
@@ -184,13 +169,29 @@ export class DemoSeeder {
     const custom = new Map([[hillLoop.id, hillLoop]]);
     for (const p of roster) {
       for (let day = addDays(thisWeek, -14); day <= today; day = addDays(day, 1)) {
-        if (random.nextDouble() > 0.5) continue;
         const at = new Date(app.zone.startOfDay(day, timeZone).getTime() + 7 * MS_PER_HOUR);
         if (at > now) continue;
+        const weekIndex = day < thisWeek ? 0 : 1;
+        const plan = await app.plans.get(p.id, startOfWeek(day));
+        const planned = plan?.workouts.find((w) => w.day === day);
+        if (plan && planned) {
+          // Ada never misses her first run of the week: it's her own loop.
+          const loop = p.id === 'ada' && planned === plan.workouts[0];
+          if (!loop && random.nextDouble() < 0.2) continue;
+          const ids = loop ? [hillLoop.id] : planned.exercises.map((e) => e.exerciseId);
+          const logId = await this.logSession(p.id, ids, custom, random, at, weekIndex);
+          await app.plans.save(
+            upsertWorkout((await app.plans.get(p.id, plan.weekStart)) ?? plan, {
+              ...planned,
+              logId,
+            }),
+          );
+          continue;
+        }
+        if (random.nextDouble() > 0.2) continue;
         const sessions = SESSIONS[STYLES[p.id]];
-        let ids = sessions[random.nextInt(sessions.length)];
-        if (p.id === 'ada' && random.nextDouble() < 0.3) ids = [hillLoop.id];
-        await this.logSession(p.id, ids, custom, random, at, day < thisWeek ? 0 : 1);
+        const ids = sessions[random.nextInt(sessions.length)];
+        await this.logSession(p.id, ids, custom, random, at, weekIndex);
       }
     }
 
@@ -205,6 +206,8 @@ export class DemoSeeder {
       weeks: 4,
       now: created,
     });
+    // Next week's plans count in the new Season too.
+    for (const p of roster) await app.planService.syncCommitments(p.id, now);
 
     await this.routines(created);
   }
@@ -212,14 +215,7 @@ export class DemoSeeder {
   /** Two routines you saved, so planning a session can start from one. */
   private async routines(at: Date): Promise<void> {
     const { app } = this;
-    const plan = (ids: readonly string[]) =>
-      ids.flatMap((id) => {
-        const e = app.catalog.byId(id);
-        if (!e) return [];
-        const loadKg = takesLoad(e) ? workingWeightKg(e, DEMO_PEACH_ID, 1) : null;
-        const exercise = loggableFromCatalog(e);
-        return [entryOf(exercise, { sets: plausibleSets(exercise, 1, loadKg) })];
-      });
+    const plan = (ids: readonly string[]) => this.plannedSession(ids, DEMO_PEACH_ID);
     await app.routineService.create(
       DEMO_PEACH_ID,
       'Full body',
@@ -235,10 +231,11 @@ export class DemoSeeder {
   }
 
   /**
-   * Everyone set a lineup the day before each week so far; for next week,
-   * everyone but you has, so there's a lineup waiting to be set.
+   * Everyone planned each week so far the day before it started, in their
+   * own style. For next week everyone but you has planned already, so you
+   * see what you're up against and have a week to plan.
    */
-  private async pledge(season: Season, now: Date, timeZone: string): Promise<void> {
+  private async plan(season: Season, now: Date, timeZone: string): Promise<void> {
     const { app } = this;
     const rounds = await app.seasons.roundsOf(season.id);
     const thisWeek = startOfWeek(app.zone.dateOf(now, timeZone));
@@ -246,16 +243,38 @@ export class DemoSeeder {
       const dayBefore = new Date(
         app.zone.startOfDay(round.weekStart, timeZone).getTime() - MS_PER_DAY,
       );
+      const at = dayBefore < now ? dayBefore : now;
       for (const peachId of season.participantIds) {
         if (round.weekStart > thisWeek && peachId === DEMO_PEACH_ID) continue;
-        await app.lineupService.setLineup({
-          roundId: round.id,
-          peachId,
-          pledges: LINEUPS[STYLES[peachId]],
-          now: dayBefore,
-        });
+        const style = STYLES[peachId];
+        const sessions = SESSIONS[style];
+        for (const [i, offset] of PLAN_DAYS[style].entries()) {
+          const ids = sessions[i % sessions.length];
+          await app.planService.saveWorkout({
+            peachId,
+            weekStart: round.weekStart,
+            workout: {
+              day: addDays(round.weekStart, offset),
+              name: sessionName(ids, this.app),
+              locationId: null,
+              exercises: this.plannedSession(ids, peachId),
+            },
+            now: at,
+          });
+        }
       }
     }
+  }
+
+  /** What a session of these exercises looks like, as a plan. */
+  private plannedSession(ids: readonly string[], peachId: string): ExerciseLogEntry[] {
+    return ids.flatMap((id) => {
+      const e = this.app.catalog.byId(id);
+      if (!e) return [];
+      const loadKg = takesLoad(e) ? workingWeightKg(e, peachId, 1) : null;
+      const exercise = loggableFromCatalog(e);
+      return [entryOf(exercise, { sets: plausibleSets(exercise, 1, loadKg) })];
+    });
   }
 
   /** Ben thinks one of Ada's sessions this week was generous, and wants your vote. */
@@ -285,7 +304,7 @@ export class DemoSeeder {
     random: SeededRandom,
     at: Date,
     weekIndex: number,
-  ): Promise<void> {
+  ): Promise<string> {
     const { app } = this;
     const log = await app.loggingService.startLog(peachId, at);
     for (const id of exerciseIds) {
@@ -307,7 +326,15 @@ export class DemoSeeder {
     }
     const minutes = 30 + random.nextInt(4) * 10;
     await app.loggingService.submit(log.id, new Date(at.getTime() + minutes * MS_PER_MINUTE));
+    return log.id;
   }
+}
+
+/** "Back Squat & Bench Press", "Run": a plan's name from its exercises. */
+function sessionName(ids: readonly string[], app: AppContainer): string {
+  const names = ids.map((id) => app.catalog.byId(id)?.name ?? 'Workout');
+  const name = names.length <= 2 ? names.join(' & ') : `${names[0]} & more`;
+  return name.length <= PLANNED_NAME_MAX ? name : `${names[0]} & more`;
 }
 
 /** A few sets of what a Peach might do: a steady effort for cardio, sets for the rest. */

@@ -22,15 +22,16 @@ import {
   sharedExerciseToJson,
 } from './crate-exercise';
 import { Dispute, disputeFromJson, disputeToJson } from './dispute';
-import { Lineup, lineupFromJson, lineupToJson } from './lineup';
+import { Commitment, commitmentFromJson, commitmentToJson } from './commitment';
 import { peach, peachFromJson, peachToJson } from './peach';
+import { WeekPlan, weekPlanFromJson, weekPlanKey, weekPlanToJson } from './week-plan';
 import {
   addTotals,
   categoryWeights,
-  DEFAULT_LINEUP_RULES,
+  DEFAULT_PLAN_RULES,
   DEFAULT_RULES,
   DEFAULT_WEIGHTS,
-  lineupRules,
+  planRules,
   rulesFromJson,
   weightsFromJson,
   weightsToJson,
@@ -92,9 +93,13 @@ describe('model JSON round trips', () => {
       fitnessLevel: 4,
       timeZone: 'Europe/London',
       units: 'imperial',
+      locations: [{ id: 'home', name: 'Home', equipment: ['dumbbell', 'bench'] }],
       createdAt: now,
     });
     expect(peachFromJson(viaJson(peachToJson(p)))).toEqual(p);
+    // Equipment a newer client added is dropped.
+    const newer = { ...peachToJson(p), locations: [{ id: 'h', name: 'H', equipment: ['laser'] }] };
+    expect(peachFromJson(newer).locations).toEqual([{ id: 'h', name: 'H', equipment: [] }]);
     expect(peachToJson(p)['createdAt']).toBe('2026-10-10T12:00:00.000Z');
   });
 
@@ -108,6 +113,7 @@ describe('model JSON round trips', () => {
       fitnessLevel: 2,
       timeZone: 'UTC',
       units: 'metric',
+      locations: [],
       createdAt: now,
     });
     expect(() => peach({ id: 'p', displayName: 'P', createdAt: now, fitnessLevel: 0 })).toThrow();
@@ -164,7 +170,7 @@ describe('model JSON round trips', () => {
       participantIds: ['p1', 'p2', 'p3'],
       rules: {
         weights: categoryWeights({ runWalk: 50, reps: 50 }),
-        lineup: lineupRules({ slots: 2, pledgeBonus: 30, battlePars: 0 }),
+        plan: planRules({ bonus: 30, penalty: 0 }),
       },
       status: 'active',
       createdAt: now,
@@ -299,35 +305,52 @@ describe('model JSON round trips', () => {
       peachId: 'p1',
       rules: {
         weights: categoryWeights({ ride: 70, activeMinutes: 30 }),
-        lineup: lineupRules({ slots: 1 }),
+        plan: planRules({ penalty: 80 }),
       },
       updatedAt: now,
     };
     expect(ballotFromJson(viaJson(ballotToJson(b)))).toEqual(b);
   });
 
-  it('Lineup', () => {
-    const l: Lineup = {
+  it('Commitment', () => {
+    const c: Commitment = {
       seasonId: 's1',
       roundId: 'r1',
       peachId: 'p1',
-      pledges: [
-        { category: 'runWalk', target: 15 },
-        { category: 'weightMoved', target: 8000 },
-      ],
+      points: 212.5,
       locksAt: now,
       updatedAt: now,
     };
-    const json = viaJson(lineupToJson(l));
-    expect(lineupFromJson(json)).toEqual(l);
+    const json = viaJson(commitmentToJson(c));
+    expect(commitmentFromJson(json)).toEqual(c);
     // The rules compare lock times with the request time, so they are numbers.
     expect(json['locksAt']).toBe(now.getTime());
-    // Pledges in categories a newer client added are dropped.
-    const newer = {
-      ...json,
-      pledges: [{ category: 'climb', target: 3 }, ...(json['pledges'] as [])],
+  });
+
+  it('WeekPlan', () => {
+    const run = exerciseLogEntry({
+      exerciseId: 'bw-run',
+      exerciseName: 'Run',
+      distanceKind: 'runWalk',
+      sets: [setLog({ meters: 5000, seconds: 1500 })],
+    });
+    const plan: WeekPlan = {
+      peachId: 'p1',
+      weekStart: localDate(2026, 10, 12),
+      workouts: [
+        {
+          id: 'w1',
+          day: localDate(2026, 10, 13),
+          name: 'Easy run',
+          locationId: null,
+          exercises: [run],
+          logId: 'l1',
+        },
+      ],
+      updatedAt: now,
     };
-    expect(lineupFromJson(newer).pledges).toEqual(l.pledges);
+    expect(weekPlanFromJson(viaJson(weekPlanToJson(plan)))).toEqual(plan);
+    expect(weekPlanKey('p1', plan.weekStart)).toBe('p1_2026-10-12');
   });
 
   it('Dispute', () => {
@@ -392,11 +415,11 @@ describe('model JSON round trips', () => {
 
   it('scoring rules', () => {
     expect(rulesFromJson(null)).toEqual(DEFAULT_RULES);
-    expect(() => lineupRules({ slots: 7 })).toThrow(RangeError);
-    expect(() => lineupRules({ pledgeBonus: 12.5 })).toThrow(RangeError);
-    // Invalid lineup rules fall back as a whole; weights fall back separately.
-    const json = { weights: weightsToJson(DEFAULT_WEIGHTS), lineup: { slots: 99 } };
-    expect(rulesFromJson(json).lineup).toEqual(DEFAULT_LINEUP_RULES);
+    expect(() => planRules({ bonus: 101 })).toThrow(RangeError);
+    expect(() => planRules({ penalty: 12.5 })).toThrow(RangeError);
+    // Invalid plan rules fall back as a whole; weights fall back separately.
+    const json = { weights: weightsToJson(DEFAULT_WEIGHTS), plan: { bonus: 999 } };
+    expect(rulesFromJson(json).plan).toEqual(DEFAULT_PLAN_RULES);
   });
 
   it('category weights and totals', () => {
@@ -564,7 +587,7 @@ describe('forward compatibility and garbage input', () => {
     );
     expect(() => roundFromJson({ id: 'r', seasonId: 's', weekStart: '10/12/2026' })).toThrow();
     expect(() => seasonFromJson({ ...season, startWeek: 'soon' })).toThrow();
-    expect(() => lineupFromJson({ seasonId: 's', roundId: 'r', updatedAt: iso })).toThrow(
+    expect(() => commitmentFromJson({ seasonId: 's', roundId: 'r', updatedAt: iso })).toThrow(
       FormatError,
     );
   });

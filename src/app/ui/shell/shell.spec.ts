@@ -16,14 +16,13 @@ describe('Shell', () => {
   it('maps URLs to destinations', () => {
     const router = TestBed.inject(Router);
     expect(activeDestination(router, '/')).toBe(0);
+    expect(activeDestination(router, '/plan/2026-10-19/new')).toBe(0);
     expect(activeDestination(router, '/log?mode=log')).toBe(0);
     expect(activeDestination(router, '/log/l1')).toBe(0);
-    expect(activeDestination(router, '/compete')).toBe(1);
+    expect(activeDestination(router, '/crates')).toBe(1);
+    expect(activeDestination(router, '/crates/c1?view=activity')).toBe(1);
     expect(activeDestination(router, '/matchups/m1')).toBe(1);
-    expect(activeDestination(router, '/matchups/m1/lineup')).toBe(1);
-    expect(activeDestination(router, '/crates')).toBe(2);
-    expect(activeDestination(router, '/crates/c1?view=activity')).toBe(2);
-    expect(activeDestination(router, '/profile')).toBe(3);
+    expect(activeDestination(router, '/you')).toBe(2);
     expect(activeDestination(router, '/sign-in')).toBe(-1);
   });
 
@@ -35,15 +34,14 @@ describe('Shell', () => {
     const nav = el.querySelector('nav[aria-label="Main"]')!;
     const links = Array.from(nav.querySelectorAll('a'));
     expect(links.map((a) => a.querySelector('.label')?.textContent)).toEqual([
-      'Train',
-      'Compete',
+      'Plan',
       'Crates',
-      'Profile',
+      'You',
     ]);
     expect(links.every((a) => a.querySelector('.icon')?.getAttribute('aria-hidden'))).toBe(true);
-    expect(links.map((a) => a.getAttribute('aria-current'))).toEqual([null, null, 'page', null]);
-    expect(links[2].querySelector('.icon')?.classList).toContain('pch-icon-filled');
-    expect(links[1].getAttribute('href')).toBe('/compete');
+    expect(links.map((a) => a.getAttribute('aria-current'))).toEqual([null, 'page', null]);
+    expect(links[1].querySelector('.icon')?.classList).toContain('pch-icon-filled');
+    expect(links[2].getAttribute('href')).toBe('/you');
     expect(links[0].getAttribute('href')).toBe('/');
     expect(el.querySelector('main')).not.toBeNull();
   });

@@ -6,13 +6,7 @@
     <pch-empty-state icon="search_off" title="Crate not found" />
   </pch-page>
 } @else {
-  <pch-page
-    [title]="c.name"
-    [subtitle]="c.description || undefined"
-    showBack
-    backLink="/crates"
-    [maxWidth]="1080"
-  >
+  <pch-page [title]="c.name" [subtitle]="c.description || undefined" [maxWidth]="1080">
     <!-- Without a native share sheet the code chip below already copies the code. -->
     @if (canShare) {
       <button
@@ -25,6 +19,26 @@
       >
         <span class="material-symbols-rounded" aria-hidden="true">share</span>
       </button>
+    }
+
+    <pch-crate-switcher class="switcher" [current]="c.id" />
+
+    <pch-section title="This week" [top]="8" />
+    @let week = thisWeek();
+    @if (week.kind === 'matchup') {
+      <pch-matchup-hero-card class="hero" [pchStagger]="0" [matchup]="week.matchup" />
+    } @else if (week.kind === 'note') {
+      <pch-card variant="outlined" class="week-note" [pchStagger]="0">
+        <p class="pch-body-medium">{{ week.text }}</p>
+        @if (week.plan) {
+          <a matButton="tonal" routerLink="/" [queryParams]="{ week: 'next' }">
+            <span class="material-symbols-rounded" aria-hidden="true">event_note</span>
+            Plan your week
+          </a>
+        }
+      </pch-card>
+    } @else {
+      <pch-loading-indicator class="loading" [size]="40" />
     }
 
     <div class="chips">
@@ -89,11 +103,31 @@
               } @else {
                 <pch-loading-indicator class="loading" [size]="40" />
               }
+              @if (results().length > 0) {
+                <pch-section title="Your results">
+                  <span sectionTrailing class="record pch-label-large" aria-label="Season record">{{
+                    record()
+                  }}</span>
+                </pch-section>
+                <pch-list-card [pchStagger]="2" class="results">
+                  @for (m of results(); track m.id) {
+                    <pch-matchup-row [matchup]="m" [link]="true" />
+                  }
+                </pch-list-card>
+              }
             }
           </div>
           <div secondaryPane>
+            @if (comingUp().length > 0) {
+              <pch-section title="Coming up" [top]="8" />
+              <pch-list-card [pchStagger]="2" class="coming-up">
+                @for (m of comingUp(); track m.id) {
+                  <pch-matchup-row [matchup]="m" [link]="true" />
+                }
+              </pch-list-card>
+            }
             @if (season()) {
-              <pch-section title="Weeks" [top]="8" />
+              <pch-section title="Weeks" [top]="comingUp().length > 0 ? 24 : 8" />
               @let roundList = rounds();
               @if (roundList) {
                 <pch-list-card [pchStagger]="2" class="weeks">

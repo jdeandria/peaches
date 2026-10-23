@@ -1,13 +1,13 @@
 import { Ballot } from '../domain/models/ballot';
 import { isActiveMembership } from '../domain/models/crate';
-import { categoryWeights, lineupRules, ScoringRules } from '../domain/models/scoring';
+import { categoryWeights, planRules, ScoringRules } from '../domain/models/scoring';
 import { BallotRepository, CrateRepository } from '../domain/repositories';
 import { BallotTally } from '../domain/services/ballot-tally';
 import { DomainError } from './errors';
 
 /**
  * Crate members vote on how the Crate scores: what each category is worth
- * and the lineup rules. Ballots can change at any time; a Season freezes the
+ * and the plan rules. Ballots can change at any time; a Season freezes the
  * tally when it is scheduled.
  */
 export class VotingService {
@@ -27,7 +27,7 @@ export class VotingService {
     }
     let checked: ScoringRules;
     try {
-      checked = { weights: categoryWeights(rules.weights), lineup: lineupRules(rules.lineup) };
+      checked = { weights: categoryWeights(rules.weights), plan: planRules(rules.plan) };
     } catch (e) {
       throw new DomainError(e instanceof Error ? e.message : String(e));
     }

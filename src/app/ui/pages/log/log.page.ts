@@ -53,7 +53,7 @@ import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
 import { SwipeRow } from '../../layout/swipe-row';
 import { DisputeCard } from '../workout/dispute-card';
-import { CrateExercise, openExercisePicker } from './exercise-picker-sheet';
+import { crateExercisesFor, openExercisePicker, recentEntries } from './exercise-picker-sheet';
 import { LogDetailsData, LogDetailsDialog, LogDetailsResult } from './log-details-dialog';
 import { SaveRoutineData, SaveRoutineDialog, SaveRoutineResult } from './save-routine-dialog';
 import { SessionRunner } from './session-runner';
@@ -317,26 +317,7 @@ export class LogPage {
   /** Exercises crate-mates have logged, with who logged them, for the picker. */
   private readonly fromCrates = this.state.query(
     () => this.me() ?? undefined,
-    async (me, app): Promise<CrateExercise[]> => {
-      const shared = (await app.loggingService.crateExercises(me)).filter((s) => s.peachId !== me);
-      const peaches = await app.peaches.getByIds(new Set(shared.map((s) => s.peachId)));
-      const names = new Map(peaches.map((p) => [p.id, p.displayName]));
-      const byExercise = new Map<
-        string,
-        { exercise: CrateExercise['exercise']; from: Set<string> }
-      >();
-      for (const s of shared) {
-        const row = byExercise.get(s.exercise.id) ?? {
-          exercise: { ...s.exercise, cues: app.catalog.byId(s.exercise.id)?.cues ?? null },
-          from: new Set<string>(),
-        };
-        row.from.add(names.get(s.peachId) ?? 'a crate-mate');
-        byExercise.set(s.exercise.id, row);
-      }
-      return [...byExercise.values()]
-        .map(({ exercise, from }) => ({ exercise, from: Fmt.names([...from].sort()) }))
-        .sort((a, b) => (a.exercise.name < b.exercise.name ? -1 : 1));
-    },
+    (me, app) => crateExercisesFor(app, me),
   );
 
   constructor() {
@@ -412,23 +393,13 @@ export class LogPage {
     const log = this.log();
     const exercise = await openExercisePicker(this.sheet, {
       catalog: this.state.catalog,
-      recent: this.recentEntries(log?.id ?? null),
+      recent: recentEntries(this.myLogs() ?? [], log?.id ?? null),
       fromCrates: this.fromCrates.value() ?? [],
       loggedIds: new Set(log?.entries.map((e) => e.exerciseId) ?? []),
       units: this.state.units(),
       newId: () => this.state.app.ids.newId(),
     });
     if (exercise) await this.logExercise(exercise);
-  }
-
-  /** The latest entry for each exercise in my other logs, newest first. */
-  private recentEntries(excludingLogId: string | null): ExerciseLogEntry[] {
-    const seen = new Map<string, ExerciseLogEntry>();
-    for (const log of this.myLogs() ?? []) {
-      if (log.id === excludingLogId) continue;
-      for (const e of log.entries) if (!seen.has(e.exerciseId)) seen.set(e.exerciseId, e);
-    }
-    return [...seen.values()];
   }
 
   /** Re-opens an exercise: its targets while planning, else what was logged. */

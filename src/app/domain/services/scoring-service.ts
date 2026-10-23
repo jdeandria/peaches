@@ -1,5 +1,5 @@
 import { round2 } from '../core/math';
-import { BattleResult, Pledge, PledgeResult, WeekScore } from '../models/lineup';
+import { WeekScore } from '../models/commitment';
 import {
   addTotals,
   CATEGORY_INFO,
@@ -7,18 +7,20 @@ import {
   CategoryTotals,
   CategoryWeights,
   LogScore,
+  PlanRules,
   SCORING_CATEGORIES,
   ScoringCategory,
   ScoringRules,
   ZERO_TOTALS,
 } from '../models/scoring';
-import { WorkoutLog } from '../models/workout-log';
+import { ExerciseLogEntry, WorkoutLog, workoutLog } from '../models/workout-log';
 import { MetricExtractor } from './metric-extractor';
 
-/** One side of a matchup's week: what it logged and pledged. */
+/** One side of a matchup's week: what it logged and committed to. */
 export interface WeekSide {
   readonly logs: Iterable<WorkoutLog>;
-  readonly pledges: readonly Pledge[];
+  /** The points its plan committed to; zero without one. */
+  readonly committed: number;
 }
 
 /**
@@ -27,7 +29,7 @@ export interface WeekSide {
  * 25 and a 10 km run 50. Points are linear in the amounts, so a week of
  * logs scores the same summed per log or all at once.
  *
- * A week adds the lineup on top (see {@link scoreWeek}).
+ * A week adds the plan on top (see {@link scoreWeek}).
  */
 export class ScoringService {
   scoreTotals(totals: CategoryTotals, weights: CategoryWeights): LogScore {
@@ -54,47 +56,30 @@ export class ScoringService {
   }
 
   /**
-   * One side's week: workout points for everything logged, plus for each
-   * pledge in the lineup
-   *
-   * - the pledge bonus, if the pledge was hit: `pledgeBonus`% of the points
-   *   the pledged amount is worth;
-   * - a battle against the opponent's amount in that category: more wins
-   *   `battlePars` pars of the category (a tie above zero splits them).
-   *
-   * `theirs` is null for a bye, which has no battles.
+   * What planned exercises are worth: the points their target sets would
+   * earn in a session as long as {@link plannedSessionSeconds} says, as
+   * the session clock would count it on the day.
    */
-  scoreWeek(
-    mine: CategoryTotals,
-    theirs: CategoryTotals | null,
-    pledges: readonly Pledge[],
-    rules: ScoringRules,
-  ): WeekScore {
-    const { weights, lineup } = rules;
-    const workouts = this.scoreTotals(mine, weights);
-    const pledgeResults: PledgeResult[] = pledges.map(({ category, target }) => {
-      const amount = mine[category];
-      const hit = amount >= target;
-      const bonus = (parPoints(weights, category, target) * lineup.pledgeBonus) / 100;
-      return { category, target, amount, hit, points: hit ? round2(bonus) : 0 };
+  scorePlan(exercises: readonly ExerciseLogEntry[], weights: CategoryWeights): LogScore {
+    const planned = workoutLog({
+      id: 'plan',
+      peachId: '',
+      startedAt: new Date(0),
+      entries: exercises,
+      durationSeconds: plannedSessionSeconds(exercises),
     });
-    const battles: BattleResult[] =
-      theirs === null
-        ? []
-        : pledges.map(({ category }) => {
-            const [m, t] = [mine[category], theirs[category]];
-            const outcome = m > t ? 'win' : m < t ? 'loss' : 'tie';
-            const prize = weights[category] * lineup.battlePars;
-            const points = outcome === 'win' ? prize : outcome === 'tie' && m > 0 ? prize / 2 : 0;
-            return { category, mine: m, theirs: t, outcome, points: round2(points) };
-          });
-    const sum = (xs: readonly { points: number }[]) => xs.reduce((s, x) => s + x.points, 0);
-    return {
-      workouts,
-      pledges: pledgeResults,
-      battles,
-      total: round2(workouts.total + sum(pledgeResults) + sum(battles)),
-    };
+    return this.scoreLog(planned, weights);
+  }
+
+  /**
+   * One side's week: workout points for everything logged, then the plan.
+   * Reaching the commitment earns `bonus`% of it on top; falling short
+   * costs `penalty`% of the points missed. Without a commitment, neither.
+   */
+  scoreWeek(mine: CategoryTotals, committed: number, rules: ScoringRules): WeekScore {
+    const workouts = this.scoreTotals(mine, rules.weights);
+    const { hit, points } = planPoints(workouts.total, committed, rules.plan);
+    return { workouts, committed, hit, plan: points, total: round2(workouts.total + points) };
   }
 
   /** Both sides of a matchup's week; `away` is null for a bye. */
@@ -103,13 +88,42 @@ export class ScoringService {
     away: WeekSide | null,
     rules: ScoringRules,
   ): { home: WeekScore; away: WeekScore | null } {
-    const homeTotals = this.totalsOf(home.logs);
-    const awayTotals = away ? this.totalsOf(away.logs) : null;
-    return {
-      home: this.scoreWeek(homeTotals, awayTotals, home.pledges, rules),
-      away: away && this.scoreWeek(awayTotals!, homeTotals, away.pledges, rules),
-    };
+    const score = (side: WeekSide) =>
+      this.scoreWeek(this.totalsOf(side.logs), side.committed, rules);
+    return { home: score(home), away: away && score(away) };
   }
+}
+
+/** A set without a time, and the rest after it. */
+export const PLANNED_SET_SECONDS = 120;
+/** The rest after a timed set (a distance is one effort, with none). */
+export const PLANNED_REST_SECONDS = 60;
+
+/**
+ * How long planned exercises take: each untimed set two minutes with its
+ * rest, a timed set its time and a minute's rest, a distance its time.
+ */
+export function plannedSessionSeconds(exercises: readonly ExerciseLogEntry[]): number {
+  let seconds = 0;
+  for (const e of exercises) {
+    for (const set of e.sets) {
+      if (set.seconds === null) seconds += PLANNED_SET_SECONDS;
+      else seconds += set.seconds + (set.meters === null ? PLANNED_REST_SECONDS : 0);
+    }
+  }
+  return seconds;
+}
+
+/** The plan's bonus (hit) or penalty (short, negative) for `earned` against `committed`. */
+export function planPoints(
+  earned: number,
+  committed: number,
+  rules: PlanRules,
+): { hit: boolean; points: number } {
+  if (committed <= 0) return { hit: true, points: 0 };
+  if (earned >= committed) return { hit: true, points: round2((committed * rules.bonus) / 100) };
+  const penalty = round2(((committed - earned) * rules.penalty) / 100);
+  return { hit: false, points: penalty === 0 ? 0 : -penalty };
 }
 
 /** The points `amount` of `category` is worth: its weight per par. */

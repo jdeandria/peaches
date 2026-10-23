@@ -8,7 +8,7 @@ import { peach } from '../app/domain/models/peach';
 import { SESSION_TIME } from '../app/domain/models/dispute';
 import {
   categoryWeights,
-  DEFAULT_LINEUP_RULES,
+  DEFAULT_PLAN_RULES,
   DEFAULT_RULES,
   ScoringRules,
 } from '../app/domain/models/scoring';
@@ -71,10 +71,10 @@ export function runLifecycleSuite(
     return app.loggingService.submit(log.id, new Date(at.getTime() + 3_600_000));
   }
 
-  /** A ballot of `weights` with the default lineup rules. */
+  /** A ballot of `weights` with the default plan rules. */
   const rules = (weights: Parameters<typeof categoryWeights>[0]): ScoringRules => ({
     weights: categoryWeights(weights),
-    lineup: DEFAULT_LINEUP_RULES,
+    plan: DEFAULT_PLAN_RULES,
   });
 
   describe(`${backend} CrateService`, () => {
@@ -402,13 +402,13 @@ export function runLifecycleSuite(
       await app.votingService.castBallot(
         crate.id,
         'b',
-        { ...rules({ reps: 100 }), lineup: { slots: 1, pledgeBonus: 20, battlePars: 0 } },
+        { ...rules({ reps: 100 }), plan: { bonus: 10, penalty: 100 } },
         now,
       );
       const tally = await app.votingService.currentRules(crate.id);
       expect(tally.weights).toEqual(categoryWeights({ runWalk: 50, reps: 50 }));
       // The lower middle vote of two.
-      expect(tally.lineup).toEqual({ slots: 1, pledgeBonus: 20, battlePars: 0 });
+      expect(tally.plan).toEqual({ bonus: 10, penalty: 50 });
 
       // Changing a vote replaces it.
       await app.votingService.castBallot(crate.id, 'b', rules({ runWalk: 100 }), now);
@@ -438,84 +438,142 @@ export function runLifecycleSuite(
         app.votingService.castBallot(
           crate.id,
           'a',
-          { ...DEFAULT_RULES, lineup: { ...DEFAULT_LINEUP_RULES, slots: 9 } },
+          { ...DEFAULT_RULES, plan: { ...DEFAULT_PLAN_RULES, penalty: 101 } },
           now,
         ),
       ).rejects.toBeInstanceOf(DomainError);
     });
   });
 
-  describe(`${backend} Lineups`, () => {
-    it('are set before the week, carry over, and score pledges and battles', async () => {
+  describe(`${backend} Plans`, () => {
+    /** a and b in a Crate scoring only running and reps, playing from Monday 12 October. */
+    async function season() {
       const crate = await crateWithMembers(['a', 'b']);
       await app.votingService.castBallot(crate.id, 'a', rules({ runWalk: 50, reps: 50 }), now);
-      // Starts Monday 12 October; now is Saturday the 10th.
-      const season = await app.seasonService.createSeason({
+      const s = await app.seasonService.createSeason({
         crate,
         name: 'S',
         startWeek: localDate(2026, 10, 12),
         weeks: 2,
         now,
       });
-      const [week1, week2] = await app.seasons.roundsOf(season.id);
-      const set = (
-        peachId: string,
-        roundId: string,
-        pledges: { category: 'runWalk' | 'reps'; target: number }[],
-        at = now,
-      ) => app.lineupService.setLineup({ roundId, peachId, pledges, now: at });
+      return { season: s, rounds: await app.seasons.roundsOf(s.id) };
+    }
+    const plan = (peachId: string, day: number, exercises: ReturnType<typeof run>[], at = now) =>
+      app.planService.saveWorkout({
+        peachId,
+        weekStart: localDate(2026, 10, 12),
+        workout: { day: localDate(2026, 10, day), name: 'Run', locationId: null, exercises },
+        now: at,
+      });
 
-      const lineup = await set('a', week1.id, [{ category: 'runWalk', target: 8 }]);
-      expect(lineup.locksAt).toEqual(utc(10, 12));
-      await set('b', week1.id, [
-        { category: 'runWalk', target: 20 },
-        { category: 'reps', target: 50 },
-      ]);
-      // Changing it before the week starts replaces it.
-      await set('a', week1.id, [
-        { category: 'runWalk', target: 10 },
-        { category: 'reps', target: 100 },
-      ]);
-      // Too many, too early, too late, or not playing: refused.
-      const four = (['runWalk', 'reps', 'ride', 'swimRow'] as const).map((category) => ({
-        category,
-        target: 1,
-      }));
-      await expect(
-        app.lineupService.setLineup({ roundId: week1.id, peachId: 'a', pledges: four, now }),
-      ).rejects.toBeInstanceOf(DomainError);
-      await expect(set('a', week2.id, [])).rejects.toBeInstanceOf(DomainError);
-      await expect(set('a', week1.id, [], utc(10, 12, 1))).rejects.toBeInstanceOf(DomainError);
-      await expect(set('c', week1.id, [])).rejects.toBeInstanceOf(DomainError);
+    it('commit to what the plan is worth until the week starts, then score a bonus or a penalty', async () => {
+      const { season: s, rounds } = await season();
+      const [week1] = rounds;
+      await plan('a', 13, [run(10)]);
+      await plan('b', 14, [run(20)]);
+      const committed = (id: string) => app.planService.committed(s.id, week1.id, id);
+      // 10 km = two pars at 50 points; 20 km = four.
+      expect(await committed('a')).toBe(100);
+      expect(await committed('b')).toBe(200);
+      const commitment = await app.seasons.getCommitment(s.id, week1.id, 'b');
+      expect(commitment?.locksAt).toEqual(utc(10, 12));
 
-      // a runs 10 km and does 120 reps; b runs 5 km and does 60 reps.
-      const pushUps = (reps: number) =>
-        exerciseLogEntry({ exerciseId: 'bw-push-up', sets: [setLog({ reps })] });
-      await logSession('a', utc(10, 13, 7), run(10), pushUps(120));
-      await logSession('b', utc(10, 14, 7), run(5), pushUps(60));
-      await app.seasonService.syncSeason(season.id, utc(10, 19, 7));
+      // Planning more raises it.
+      const thursday = await plan('a', 15, [run(5)]);
+      expect(await committed('a')).toBe(150);
+      // Once the week starts it is fixed, whatever the plan does.
+      await app.planService.removeWorkout(
+        'a',
+        localDate(2026, 10, 12),
+        thursday.id,
+        utc(10, 12, 1),
+      );
+      expect(await committed('a')).toBe(150);
+      expect((await app.planService.plan('a', localDate(2026, 10, 12), now)).workouts).toHaveLength(
+        1,
+      );
 
+      // a runs 16 km of 15 planned; b 10 of 20.
+      await logSession('a', utc(10, 13, 7), run(16));
+      await logSession('b', utc(10, 14, 7), run(10));
+      await app.seasonService.syncSeason(s.id, utc(10, 19, 7));
       const [m] = await app.seasons.matchupsInRound(week1.id);
       const board = (await app.seasonService.board(m.id))!;
       const side = (id: string) => (board.home.peachId === id ? board.home : board.away!);
-      const a = side('a').score;
-      // Workouts: 10 km = 2 pars × 50 = 100; 120 reps = 0.8 par × 50 = 40.
-      expect(a.workouts.total).toBe(140);
-      // 10 km hit (+50% of 100); 120 of 100 reps hit (+50% of 33.33).
-      expect(a.pledges.map((p) => p.points)).toEqual([50, 16.67]);
-      // Out-ran and out-repped b: a par (50) each.
-      expect(a.battles.map((x) => x.points)).toEqual([50, 50]);
-      const b = side('b').score;
-      // 5 of 20 km missed; 60 of 50 reps hit (+50% of 16.67); both battles lost.
-      expect(b.pledges.map((p) => p.hit)).toEqual([false, true]);
-      expect(b.total).toBeCloseTo(78.33, 2);
+      // Hit: 160 earned plus 25% of 150.
+      expect(side('a').committed).toBe(150);
+      expect(side('a').score).toMatchObject({ hit: true, plan: 37.5, total: 197.5 });
+      // Short by 100: 100 earned less 50% of it.
+      expect(side('b').score).toMatchObject({ hit: false, plan: -50, total: 50 });
       const result = (await app.seasons.getMatchup(m.id))!.result!;
-      expect(m.homePeachId === 'a' ? result.homePoints : result.awayPoints).toBe(a.total);
+      expect(m.homePeachId === 'a' ? result.homePoints : result.awayPoints).toBe(197.5);
+    });
 
-      // Nobody set a week-two lineup: week one's carries over.
-      const [m2] = await app.seasons.matchupsInRound(week2.id);
-      const board2 = (await app.seasonService.board(m2.id))!;
-      expect(board2.home.lineup?.roundId).toBe(week1.id);
+    it('a plan made before the Season is scheduled is picked up by the next sync', async () => {
+      await plan('a', 13, [run(5)]);
+      const { season: s, rounds } = await season();
+      expect(await app.planService.committed(s.id, rounds[0].id, 'a')).toBe(0);
+      await app.seasonService.syncPeach('a', now);
+      expect(await app.planService.committed(s.id, rounds[0].id, 'a')).toBe(50);
+    });
+
+    it('checks what is planned', async () => {
+      await expect(plan('a', 19, [run(5)])).rejects.toBeInstanceOf(DomainError);
+      await expect(plan('a', 13, [])).rejects.toBeInstanceOf(DomainError);
+      await expect(plan('a', 13, [run(500)])).rejects.toBeInstanceOf(DomainError);
+      const saved = await plan('a', 13, [run(5)]);
+      expect(saved.name).toBe('Run');
+    });
+
+    it('launch a planned workout into the log, once', async () => {
+      const monday = localDate(2026, 10, 12);
+      const workout = await plan('a', 13, [run(5), squats(5, 60)]);
+      const log = await app.planService.launch('a', monday, workout.id, utc(10, 13, 7));
+      expect(log.plan.map((e) => e.exerciseId)).toEqual(['bw-run', 'bb-back-squat']);
+      expect(log.startedAt).toEqual(utc(10, 13, 7));
+      const linked = (await app.planService.plan('a', monday, now)).workouts[0];
+      expect(linked.logId).toBe(log.id);
+      // Launching it again carries on with the same log.
+      expect((await app.planService.launch('a', monday, workout.id, utc(10, 13, 8))).id).toBe(
+        log.id,
+      );
+      // Another workout can't start while this one has sets logged.
+      const other = await plan('a', 14, [run(3)]);
+      await app.loggingService.logSet(log.id, 'bw-run', run(5).sets[0], utc(10, 13, 7));
+      await expect(
+        app.planService.launch('a', monday, other.id, utc(10, 13, 8)),
+      ).rejects.toBeInstanceOf(DomainError);
+      // Once it's done, it's done.
+      await app.loggingService.submit(log.id, utc(10, 13, 9));
+      await expect(
+        app.planService.launch('a', monday, workout.id, utc(10, 13, 10)),
+      ).rejects.toBeInstanceOf(DomainError);
+      // An empty draft gives way to a launch.
+      const draft = await app.loggingService.openDraft('a', utc(10, 14, 6));
+      const next = await app.planService.launch('a', monday, other.id, utc(10, 14, 7));
+      expect(next.id).not.toBe(draft.id);
+      expect(await app.logs.getById(draft.id)).toBeNull();
+    });
+
+    it('repeat a week into the next, on the same weekdays', async () => {
+      const { season: s, rounds } = await season();
+      await plan('a', 13, [run(5)]);
+      await plan('a', 17, [run(10)]);
+      const copied = await app.planService.repeatWeek(
+        'a',
+        localDate(2026, 10, 12),
+        localDate(2026, 10, 19),
+        utc(10, 13),
+      );
+      expect(copied).toBe(2);
+      const next = await app.planService.plan('a', localDate(2026, 10, 19), now);
+      expect(next.workouts.map((w) => w.day)).toEqual(['2026-10-20', '2026-10-24']);
+      expect(next.workouts.every((w) => w.logId === null)).toBe(true);
+      expect(await app.planService.committed(s.id, rounds[1].id, 'a')).toBe(150);
+      await expect(
+        app.planService.repeatWeek('a', localDate(2026, 11, 2), localDate(2026, 11, 9), now),
+      ).rejects.toBeInstanceOf(DomainError);
     });
   });
 
@@ -789,10 +847,14 @@ export function runLifecycleSuite(
       expect(shared.some((e) => e.peachId === 'ada' && e.exercise.id.startsWith('custom-'))).toBe(
         true,
       );
-      // Everyone but you has set next week's lineup.
-      const next = rounds[3];
-      expect(await demo.seasons.getLineup(season.id, next.id, 'me')).toBeNull();
-      expect(await demo.seasons.getLineup(season.id, next.id, 'ada')).not.toBeNull();
+      // Everyone planned this week; for next week, everyone but you.
+      const [, , current, next] = rounds;
+      expect(await demo.planService.committed(season.id, current.id, 'me')).toBeGreaterThan(0);
+      expect(await demo.planService.committed(season.id, next.id, 'me')).toBe(0);
+      expect(await demo.planService.committed(season.id, next.id, 'ada')).toBeGreaterThan(0);
+      // Your workouts this week went in against your plan.
+      const plan = await demo.plans.get('me', current.weekStart);
+      expect(plan?.workouts.length).toBeGreaterThan(0);
     });
   });
 }

@@ -1,0 +1,240 @@
+@switch (phase()) {
+  @case ('loading') {
+    <pch-page title="Plan a workout" showBack backLink="/">
+      <div class="loading"><pch-loading-indicator /></div>
+    </pch-page>
+  }
+  @case ('missing') {
+    <pch-page title="Workout" showBack backLink="/">
+      <pch-empty-state icon="search_off" title="That workout isn’t in your plan" />
+    </pch-page>
+  }
+  @default {
+    <pch-page [title]="title()" [subtitle]="subtitle()" showBack backLink="/">
+      @if (exercises().length > 0) {
+        <button
+          pageActions
+          matIconButton
+          type="button"
+          matTooltip="Save as routine"
+          aria-label="Save as routine"
+          (click)="saveRoutine()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">bookmark_add</span>
+        </button>
+      }
+      @if (!isNew()) {
+        <button
+          pageActions
+          matIconButton
+          type="button"
+          matTooltip="Take off the plan"
+          aria-label="Take off the plan"
+          (click)="delete()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">event_busy</span>
+        </button>
+      }
+
+      @if (done()) {
+        <p class="done pch-body-medium" [pchStagger]="0">
+          <span class="material-symbols-rounded" aria-hidden="true">check_circle</span>
+          Done. Changing the plan now doesn’t change what you logged.
+        </p>
+      }
+
+      <mat-form-field appearance="outline" class="name" [pchStagger]="0">
+        <mat-label>Name</mat-label>
+        <input
+          matInput
+          autocomplete="off"
+          [attr.maxlength]="nameMax"
+          [placeholder]="placeholder()"
+          [value]="name()"
+          (input)="name.set($any($event.target).value)"
+        />
+      </mat-form-field>
+
+      <h2 class="label pch-title-small" id="day-label">Day</h2>
+      <pch-button-group
+        class="days"
+        label="Day"
+        [options]="dayOptions()"
+        [selected]="date()"
+        [height]="40"
+        (selectionChange)="setDay($event)"
+      />
+
+      <h2 class="label pch-title-small" id="where-label">Where</h2>
+      <div class="chips" role="group" aria-labelledby="where-label">
+        <button
+          type="button"
+          class="chip"
+          [attr.aria-pressed]="locationId() === null"
+          (click)="setLocation(null)"
+        >
+          Anywhere
+        </button>
+        @for (l of locations(); track l.id) {
+          <button
+            type="button"
+            class="chip"
+            [attr.aria-pressed]="locationId() === l.id"
+            (click)="setLocation(l.id)"
+          >
+            {{ l.name }}
+          </button>
+        }
+        <a class="chip ghost" routerLink="/you" [queryParams]="{ view: 'equipment' }">
+          <span class="material-symbols-rounded" aria-hidden="true">tune</span>
+          {{ locations().length === 0 ? 'Set up your equipment' : 'Edit' }}
+        </a>
+      </div>
+
+      @if (rows().length > 0) {
+        <pch-section title="Exercises">
+          <span sectionTrailing class="pch-label-large muted">{{ setCount() }} sets</span>
+        </pch-section>
+        <p class="swipe-hint pch-body-small muted">
+          Swipe an exercise right to edit, left to remove.
+        </p>
+        <pch-list-card [pchStagger]="1">
+          @for (r of rows(); track r.entry.exerciseId) {
+            <pch-swipe-row
+              editable
+              removable
+              (edit)="editEntry(r.entry)"
+              (remove)="removeEntry(r.entry)"
+            >
+              <!-- The row is a larger mouse target; keyboard and screen readers use its buttons. -->
+              <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+              <div class="item clickable" (click)="rowClick($event, r.entry)">
+                <div class="text">
+                  <span class="pch-title-medium">{{ r.entry.exerciseName }}</span>
+                  <span class="pch-body-medium muted">{{ r.summary }}</span>
+                </div>
+                <span class="pch-swipe-actions">
+                  <button
+                    matIconButton
+                    type="button"
+                    matTooltip="Remove"
+                    [attr.aria-label]="'Remove ' + r.entry.exerciseName"
+                    (click)="removeEntry(r.entry)"
+                  >
+                    <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                  </button>
+                  <button
+                    matIconButton
+                    type="button"
+                    class="action filled"
+                    matTooltip="Edit sets"
+                    [attr.aria-label]="'Edit sets: ' + r.entry.exerciseName"
+                    (click)="editEntry(r.entry)"
+                  >
+                    <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+                  </button>
+                </span>
+              </div>
+            </pch-swipe-row>
+          }
+        </pch-list-card>
+        <button matButton="tonal" type="button" class="add" (click)="addExercise()">
+          <span class="material-symbols-rounded" aria-hidden="true">add</span>
+          Add exercise
+        </button>
+        @if (worth().length > 0) {
+          <p class="worth pch-body-medium" [pchStagger]="2">
+            Worth
+            @for (w of worth(); track w.crate; let last = $last) {
+              <span
+                ><strong>{{ w.points }} pts</strong> in {{ w.crate }}{{ last ? '' : ' · ' }}</span
+              >
+            }
+          </p>
+        }
+      } @else {
+        <pch-section title="Exercises" />
+        <button
+          matButton="filled"
+          type="button"
+          class="add add-first"
+          [pchStagger]="1"
+          (click)="addExercise()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">add</span>
+          Add exercise
+        </button>
+        @if (routines().length > 0) {
+          <pch-section title="Your routines" />
+          <pch-list-card [pchStagger]="2">
+            @for (r of routines(); track r.routine.id) {
+              <pch-swipe-row removable removeLabel="Delete" (remove)="deleteRoutine(r.routine.id)">
+                <div class="item routine">
+                  <button
+                    type="button"
+                    class="routine-use"
+                    (click)="use(r.routine.exercises, r.routine.name)"
+                  >
+                    <span class="pch-title-medium">{{ r.routine.name }}</span>
+                    <span class="pch-body-medium muted">{{ r.summary }}</span>
+                  </button>
+                  <span class="pch-swipe-actions">
+                    <button
+                      matIconButton
+                      type="button"
+                      matTooltip="Delete routine"
+                      [attr.aria-label]="'Delete routine ' + r.routine.name"
+                      (click)="deleteRoutine(r.routine.id)"
+                    >
+                      <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                    </button>
+                  </span>
+                </div>
+              </pch-swipe-row>
+            }
+          </pch-list-card>
+        }
+        <pch-section title="Templates" />
+        <pch-list-card [pchStagger]="3">
+          @for (t of templates(); track t.template.id) {
+            <div class="item routine">
+              <button
+                type="button"
+                class="routine-use template-use"
+                (click)="use(t.exercises, t.template.name)"
+              >
+                <span class="pch-title-medium"
+                  >{{ t.template.name }}
+                  <span class="kit pch-label-medium">{{ t.template.kit }}</span></span
+                >
+                <span class="pch-body-medium muted">{{ t.summary }}</span>
+              </button>
+              <button
+                matIconButton
+                type="button"
+                matTooltip="Shuffle"
+                [attr.aria-label]="'Shuffle ' + t.template.name"
+                (click)="shuffle(t.template)"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">shuffle</span>
+              </button>
+            </div>
+          }
+        </pch-list-card>
+      }
+
+      <div pageBottomBar class="bottom-actions">
+        <button
+          matButton="filled"
+          type="button"
+          class="submit"
+          [disabled]="busy() || exercises().length === 0"
+          (click)="save()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">event_available</span>
+          {{ isNew() ? 'Add to plan' : 'Save' }}
+        </button>
+      </div>
+    </pch-page>
+  }
+}

@@ -11,6 +11,7 @@ import { Router, RouterLink } from '@angular/router';
 import { MatButton } from '@angular/material/button';
 
 import { AppContainer } from '../../../application/app-container';
+import { MatchupSide } from '../../../application/season-service';
 import { isBye, Matchup, opponentOf, Round, winnerId } from '../../../domain/models/season';
 import { RoundWindow } from '../../../domain/services/round-window';
 import { AppState } from '../../../state/app-state';
@@ -51,6 +52,14 @@ export async function loadMatchupInfo(
   };
 }
 
+/** "120 of 185 planned", "40, no plan": one side's workouts against its commitment. */
+function planLine(who: string, side: MatchupSide): { who: string; line: string; hit: boolean } {
+  const { committed, hit } = side.score;
+  const earned = Fmt.points(side.score.workouts.total);
+  if (committed <= 0) return { who, line: `${earned} pts, no plan`, hit: false };
+  return { who, line: `${earned} of ${Fmt.points(committed)} planned`, hit };
+}
+
 /** Shared lookups for the hero card and list row. */
 @Directive()
 abstract class MatchupView {
@@ -81,8 +90,9 @@ abstract class MatchupView {
 
 /**
  * This week's matchup, as an M3 hero card on the primary container: who
- * you're up against, the live score from everything both of you have logged
- * this week, and how long is left. The call to action is a link; clicking
+ * you're up against, the live score (workouts plus each plan's bonus or
+ * penalty so far), each side's points earned against what they committed
+ * to, and how long is left. The call to action is a link; clicking
  * anywhere else on the card follows it too (pointer convenience only).
  */
 @Component({
@@ -136,6 +146,18 @@ abstract class MatchupView {
             trackColor="color-mix(in srgb, var(--mat-sys-surface-container-lowest) 70%, transparent)"
           />
         }
+        <ul class="plans pch-body-medium" aria-label="Plans">
+          @for (p of s.plans; track p.who) {
+            <li>
+              <span class="material-symbols-rounded" aria-hidden="true">{{
+                p.hit ? 'check_circle' : 'event_note'
+              }}</span>
+              <span
+                ><strong>{{ p.who }}</strong> {{ p.line }}</span
+              >
+            </li>
+          }
+        </ul>
       }
       <a matButton="filled" class="cta" [routerLink]="link()">
         <span class="material-symbols-rounded" aria-hidden="true">scoreboard</span>
@@ -202,6 +224,22 @@ abstract class MatchupView {
     .dash {
       opacity: 0.6;
     }
+    .plans {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin: 12px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .plans li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .plans .material-symbols-rounded {
+      font-size: 18px;
+    }
     .cta {
       margin-top: 20px;
       width: 100%;
@@ -228,14 +266,22 @@ export class MatchupHeroCard extends MatchupView {
     const me = this.me();
     if (!board || me === null) return null;
     const home = board.home.peachId === me;
-    const mine = (home ? board.home : board.away)?.score.total ?? 0;
-    const theirs = (home ? board.away : board.home)?.score.total ?? 0;
-    const total = mine + theirs;
+    const mySide = home ? board.home : board.away;
+    const theirSide = home ? board.away : board.home;
+    const mine = mySide?.score.total ?? 0;
+    const theirs = theirSide?.score.total ?? 0;
+    // Shares of a negative total make no sense: compare what's above zero.
+    const total = Math.max(0, mine) + Math.max(0, theirs);
+    const plans = [
+      ...(mySide ? [planLine('You', mySide)] : []),
+      ...(theirSide ? [planLine(this.info.value()?.opponentName ?? 'Them', theirSide)] : []),
+    ];
     return {
       mine,
       theirs,
-      share: total === 0 ? 0.5 : mine / total,
+      share: total === 0 ? 0.5 : Math.max(0, mine) / total,
       leading: mine > theirs ? 'Leading' : mine < theirs ? 'Trailing' : null,
+      plans,
     };
   });
 

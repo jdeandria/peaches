@@ -13,10 +13,9 @@ export interface NavDestination {
 }
 
 export const NAV_DESTINATIONS: readonly NavDestination[] = [
-  { label: 'Train', icon: 'fitness_center', link: '/', matches: ['', 'log'] },
-  { label: 'Compete', icon: 'emoji_events', link: '/compete', matches: ['compete', 'matchups'] },
-  { label: 'Crates', icon: 'inventory_2', link: '/crates', matches: ['crates'] },
-  { label: 'Profile', icon: 'person', link: '/profile', matches: ['profile'] },
+  { label: 'Plan', icon: 'event_note', link: '/', matches: ['', 'plan', 'log'] },
+  { label: 'Crates', icon: 'inventory_2', link: '/crates', matches: ['crates', 'matchups'] },
+  { label: 'You', icon: 'person', link: '/you', matches: ['you'] },
 ];
 
 /** The destination index active for a URL, or -1. */

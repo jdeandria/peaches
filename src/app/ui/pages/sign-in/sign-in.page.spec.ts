@@ -207,7 +207,7 @@ describe('Sign-in journey', () => {
     signIn().click();
     await stable();
     expect(router.url).toBe('/');
-    expect(el.querySelector('h1')?.textContent).toBe('Train');
+    expect(el.querySelector('h1')?.textContent).toBe('Plan');
     const peach = await backend.container.peaches.getById('u1');
     expect(peach?.displayName).toBe('Uma');
     expect(peach?.email).toBe('uma@example.com');

@@ -37,7 +37,7 @@ export interface Season {
   readonly weeks: number;
   /** Peaches competing in this Season, frozen at scheduling time. */
   readonly participantIds: readonly string[];
-  /** Category weights and lineup rules, frozen at scheduling time. */
+  /** Category weights and plan rules, frozen at scheduling time. */
   readonly rules: ScoringRules;
   readonly status: SeasonStatus;
   readonly createdAt: Date;

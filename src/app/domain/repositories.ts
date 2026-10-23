@@ -12,14 +12,16 @@
  */
 import { Observable } from 'rxjs';
 
+import { LocalDate } from './core/local-date';
 import { Ballot } from './models/ballot';
 import { Crate, CrateMembership } from './models/crate';
+import { Commitment } from './models/commitment';
 import { SharedExercise } from './models/crate-exercise';
 import { Dispute, DisputeVote } from './models/dispute';
-import { Lineup } from './models/lineup';
 import { Peach } from './models/peach';
 import { Routine } from './models/routine';
 import { Matchup, Round, Season } from './models/season';
+import { WeekPlan } from './models/week-plan';
 import { WorkoutLog } from './models/workout-log';
 
 export interface PeachRepository {
@@ -63,11 +65,11 @@ export interface SeasonRepository {
   watchMatchupsFor(peachId: string): Observable<Matchup[]>;
 
   /**
-   * A Peach's lineup for a week, or null if they set none. A crate-mate's
-   * lineup reads as null until it locks: lineups are secret until then.
+   * What a Peach's plan for a week is worth in a Season, or null if they
+   * made none. Crate-mates can read it while it is still changing.
    */
-  getLineup(seasonId: string, roundId: string, peachId: string): Promise<Lineup | null>;
-  saveLineup(lineup: Lineup): Promise<void>;
+  getCommitment(seasonId: string, roundId: string, peachId: string): Promise<Commitment | null>;
+  saveCommitment(commitment: Commitment): Promise<void>;
 }
 
 export interface WorkoutLogRepository {
@@ -109,6 +111,18 @@ export interface RoutineRepository {
   delete(id: string): Promise<void>;
   /** In name order. */
   watchForPeach(peachId: string): Observable<Routine[]>;
+}
+
+/** A Peach's plans for their weeks, private to them. */
+export interface WeekPlanRepository {
+  get(peachId: string, weekStart: LocalDate): Promise<WeekPlan | null>;
+  /** Newest week first. */
+  forPeach(peachId: string): Promise<WeekPlan[]>;
+  save(plan: WeekPlan): Promise<void>;
+  /** Emits null while the week has no plan. */
+  watch(peachId: string, weekStart: LocalDate): Observable<WeekPlan | null>;
+  /** Newest week first. */
+  watchForPeach(peachId: string): Observable<WeekPlan[]>;
 }
 
 /** Each member's vote on the Crate's scoring rules, one per member. */

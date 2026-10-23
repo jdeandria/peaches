@@ -60,45 +60,6 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-.pledges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 16px;
-  padding: 0;
-  list-style: none;
-}
-
-.pledge {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 8px;
-  align-items: center;
-  padding: 8px 14px;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: var(--pch-radius-large);
-  color: var(--mat-sys-on-surface-variant);
-
-  .material-symbols-rounded {
-    grid-row: span 2;
-    font-size: 20px;
-  }
-
-  .pch-label-large {
-    color: var(--mat-sys-on-surface);
-  }
-
-  &.hit {
-    border-color: transparent;
-    background: var(--mat-sys-tertiary-container);
-    color: var(--mat-sys-on-tertiary-container);
-
-    .pch-label-large {
-      color: inherit;
-    }
-  }
-}
-
 .disputes {
   display: flex;
   flex-direction: column;

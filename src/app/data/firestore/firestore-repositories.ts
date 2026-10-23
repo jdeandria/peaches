@@ -33,6 +33,7 @@ import { Observable, from, map, switchMap } from 'rxjs';
 
 import { Repositories } from '../../application/app-container';
 import { dateTimeToJson, JsonMap } from '../../domain/core/json';
+import { LocalDate } from '../../domain/core/local-date';
 import { Ballot, ballotFromJson, ballotToJson } from '../../domain/models/ballot';
 import {
   Crate,
@@ -50,8 +51,13 @@ import {
   sharedExercisesOf,
   sharedExerciseToJson,
 } from '../../domain/models/crate-exercise';
+import {
+  Commitment,
+  commitmentFromJson,
+  commitmentKey,
+  commitmentToJson,
+} from '../../domain/models/commitment';
 import { Dispute, disputeFromJson, disputeToJson, DisputeVote } from '../../domain/models/dispute';
-import { Lineup, lineupFromJson, lineupKey, lineupToJson } from '../../domain/models/lineup';
 import { Peach, peachFromJson, peachToJson } from '../../domain/models/peach';
 import {
   byRoutineName,
@@ -71,6 +77,12 @@ import {
   seasonFromJson,
   seasonToJson,
 } from '../../domain/models/season';
+import {
+  WeekPlan,
+  weekPlanFromJson,
+  weekPlanKey,
+  weekPlanToJson,
+} from '../../domain/models/week-plan';
 import { WorkoutLog, workoutLogFromJson, workoutLogToJson } from '../../domain/models/workout-log';
 import {
   BallotRepository,
@@ -79,6 +91,7 @@ import {
   PeachRepository,
   RoutineRepository,
   SeasonRepository,
+  WeekPlanRepository,
   WorkoutLogRepository,
 } from '../../domain/repositories';
 
@@ -99,9 +112,11 @@ export const COLLECTIONS = {
   seasons: 'seasons',
   rounds: 'rounds',
   matchups: 'matchups',
-  lineups: 'lineups',
+  /** What each Peach's plan for a week is worth, under the Season. */
+  commitments: 'commitments',
   workoutLogs: 'workoutLogs',
   routines: 'routines',
+  weekPlans: 'weekPlans',
 } as const;
 
 /** Firestore `in` filters accept at most 30 values. */
@@ -297,8 +312,8 @@ export class FirestoreSeasonRepository implements SeasonRepository {
     return collection(this.seasons, seasonId, COLLECTIONS.matchups);
   }
 
-  private lineups(seasonId: string): CollectionReference {
-    return collection(this.seasons, seasonId, COLLECTIONS.lineups);
+  private commitments(seasonId: string): CollectionReference {
+    return collection(this.seasons, seasonId, COLLECTIONS.commitments);
   }
 
   private crateQuery(crateId: string): Query {
@@ -413,24 +428,22 @@ export class FirestoreSeasonRepository implements SeasonRepository {
     return watchQuery(this.peachMatchupsQuery(peachId), (snap) => decodeAll(snap, matchupFromJson));
   }
 
-  /**
-   * The rules refuse a crate-mate's lineup until it locks, which is exactly
-   * "no lineup you can see", so a refusal reads as null.
-   */
-  async getLineup(seasonId: string, roundId: string, peachId: string): Promise<Lineup | null> {
-    try {
-      const snap = await getDoc(doc(this.lineups(seasonId), lineupKey(roundId, peachId)));
-      return decodeDoc(snap, lineupFromJson);
-    } catch (e) {
-      if ((e as { code?: string }).code === 'permission-denied') return null;
-      throw e;
-    }
+  async getCommitment(
+    seasonId: string,
+    roundId: string,
+    peachId: string,
+  ): Promise<Commitment | null> {
+    const snap = await getDoc(doc(this.commitments(seasonId), commitmentKey(roundId, peachId)));
+    return decodeDoc(snap, commitmentFromJson);
   }
 
-  saveLineup(lineup: Lineup): Promise<void> {
+  saveCommitment(commitment: Commitment): Promise<void> {
     return setDoc(
-      doc(this.lineups(lineup.seasonId), lineupKey(lineup.roundId, lineup.peachId)),
-      lineupToJson(lineup),
+      doc(
+        this.commitments(commitment.seasonId),
+        commitmentKey(commitment.roundId, commitment.peachId),
+      ),
+      commitmentToJson(commitment),
     );
   }
 }
@@ -632,6 +645,49 @@ export class FirestoreRoutineRepository implements RoutineRepository {
   }
 }
 
+/** Plans are top-level, keyed "<peachId>_<weekStart>", found by `peachId`; sorted on the client. */
+export class FirestoreWeekPlanRepository implements WeekPlanRepository {
+  constructor(private readonly db: Firestore) {}
+
+  private get col(): CollectionReference {
+    return collection(this.db, COLLECTIONS.weekPlans);
+  }
+
+  private peachQuery(peachId: string): Query {
+    return query(this.col, where('peachId', '==', peachId));
+  }
+
+  private static newestFirst(plans: WeekPlan[]): WeekPlan[] {
+    return plans.sort((a, b) => compareStrings(b.weekStart, a.weekStart));
+  }
+
+  async get(peachId: string, weekStart: LocalDate): Promise<WeekPlan | null> {
+    return decodeDoc(
+      await getDoc(doc(this.col, weekPlanKey(peachId, weekStart))),
+      weekPlanFromJson,
+    );
+  }
+
+  async forPeach(peachId: string): Promise<WeekPlan[]> {
+    const snap = await getDocs(this.peachQuery(peachId));
+    return FirestoreWeekPlanRepository.newestFirst(decodeAll(snap, weekPlanFromJson));
+  }
+
+  save(plan: WeekPlan): Promise<void> {
+    return setDoc(doc(this.col, weekPlanKey(plan.peachId, plan.weekStart)), weekPlanToJson(plan));
+  }
+
+  watch(peachId: string, weekStart: LocalDate): Observable<WeekPlan | null> {
+    return watchDoc(doc(this.col, weekPlanKey(peachId, weekStart)), weekPlanFromJson);
+  }
+
+  watchForPeach(peachId: string): Observable<WeekPlan[]> {
+    return watchQuery(this.peachQuery(peachId), (snap) =>
+      FirestoreWeekPlanRepository.newestFirst(decodeAll(snap, weekPlanFromJson)),
+    );
+  }
+}
+
 /** One of each repository, all on the same database. */
 export function firestoreRepositories(db: Firestore): Repositories {
   return {
@@ -642,5 +698,6 @@ export function firestoreRepositories(db: Firestore): Repositories {
     ballots: new FirestoreBallotRepository(db),
     disputes: new FirestoreDisputeRepository(db),
     routines: new FirestoreRoutineRepository(db),
+    plans: new FirestoreWeekPlanRepository(db),
   };
 }

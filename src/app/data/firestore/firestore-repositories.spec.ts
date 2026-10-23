@@ -20,11 +20,12 @@ import { FormatError } from '../../domain/core/json';
 import { localDate } from '../../domain/core/local-date';
 import { Crate, CrateMembership, crateSettings } from '../../domain/models/crate';
 import { Dispute } from '../../domain/models/dispute';
-import { Lineup } from '../../domain/models/lineup';
+import { Commitment } from '../../domain/models/commitment';
 import { peach } from '../../domain/models/peach';
 import { Routine } from '../../domain/models/routine';
-import { categoryWeights, DEFAULT_LINEUP_RULES, DEFAULT_RULES } from '../../domain/models/scoring';
+import { categoryWeights, DEFAULT_PLAN_RULES, DEFAULT_RULES } from '../../domain/models/scoring';
 import { matchup, Round, Season } from '../../domain/models/season';
+import { WeekPlan } from '../../domain/models/week-plan';
 import { exerciseLogEntry, setLog, workoutLog } from '../../domain/models/workout-log';
 import {
   COLLECTIONS,
@@ -34,6 +35,7 @@ import {
   FirestorePeachRepository,
   FirestoreRoutineRepository,
   FirestoreSeasonRepository,
+  FirestoreWeekPlanRepository,
   FirestoreWorkoutLogRepository,
 } from './firestore-repositories';
 
@@ -140,7 +142,7 @@ function season(id: string, crateId: string, createdAt = now): Season {
     startWeek: localDate(2026, 10, 5),
     weeks: 2,
     participantIds: ['a', 'b'],
-    rules: { weights: categoryWeights({ runWalk: 60, reps: 40 }), lineup: DEFAULT_LINEUP_RULES },
+    rules: { weights: categoryWeights({ runWalk: 60, reps: 40 }), plan: DEFAULT_PLAN_RULES },
     status: 'scheduled',
     createdAt,
   };
@@ -646,22 +648,67 @@ describe.skipIf(!EMULATOR_HOST)('Firestore repositories (emulator)', () => {
     });
   });
 
-  describe('FirestoreSeasonRepository lineups', () => {
-    it('keeps one lineup per Peach per week', async () => {
+  describe('FirestoreSeasonRepository commitments', () => {
+    it('keeps one commitment per Peach per week', async () => {
       const repo = new FirestoreSeasonRepository(db);
-      const lineup: Lineup = {
+      const commitment: Commitment = {
         seasonId: 's1',
         roundId: 'r1',
         peachId: 'a',
-        pledges: [{ category: 'runWalk', target: 15 }],
+        points: 180,
         locksAt: later(60),
         updatedAt: now,
       };
-      await repo.saveLineup(lineup);
-      const changed = { ...lineup, pledges: [{ category: 'reps' as const, target: 300 }] };
-      await repo.saveLineup(changed);
-      expect(await repo.getLineup('s1', 'r1', 'a')).toEqual(changed);
-      expect(await repo.getLineup('s1', 'r1', 'b')).toBeNull();
+      await repo.saveCommitment(commitment);
+      const raised = { ...commitment, points: 240.5 };
+      await repo.saveCommitment(raised);
+      expect(await repo.getCommitment('s1', 'r1', 'a')).toEqual(raised);
+      expect(await repo.getCommitment('s1', 'r1', 'b')).toBeNull();
+    });
+  });
+
+  describe('FirestoreWeekPlanRepository', () => {
+    const plan = (peachId: string, weekStart: string, name = 'Run'): WeekPlan => ({
+      peachId,
+      weekStart: weekStart as WeekPlan['weekStart'],
+      workouts: [
+        {
+          id: 'w1',
+          day: weekStart as WeekPlan['weekStart'],
+          name,
+          locationId: null,
+          exercises: [
+            exerciseLogEntry({
+              exerciseId: 'bw-run',
+              distanceKind: 'runWalk',
+              sets: [setLog({ meters: 5000, seconds: 1500 })],
+            }),
+          ],
+          logId: null,
+        },
+      ],
+      updatedAt: now,
+    });
+
+    it('keeps one plan per Peach per week, newest week first, and follows changes', async () => {
+      const repo = new FirestoreWeekPlanRepository(db);
+      await repo.save(plan('a', '2026-10-05'));
+      await repo.save(plan('a', '2026-10-12'));
+      await repo.save(plan('b', '2026-10-12'));
+      expect(await repo.get('a', localDate(2026, 10, 5))).toEqual(plan('a', '2026-10-05'));
+      expect(await repo.get('a', localDate(2026, 10, 19))).toBeNull();
+      expect((await repo.forPeach('a')).map((p) => p.weekStart)).toEqual([
+        '2026-10-12',
+        '2026-10-05',
+      ]);
+
+      const watched = record(repo.watch('a', localDate(2026, 10, 12)));
+      expect((await watched.next())?.workouts[0].name).toBe('Run');
+      await repo.save(plan('a', '2026-10-12', 'Long run'));
+      expect((await watched.next((p) => p?.workouts[0].name === 'Long run'))?.weekStart).toBe(
+        '2026-10-12',
+      );
+      watched.stop();
     });
   });
 });

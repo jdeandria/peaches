@@ -11,12 +11,12 @@ ui (Angular components)  ──►  state (signals, DI)  ──►  application 
 * **domain** is plain TypeScript with no framework imports (RxJS appears only
   as the `Observable` type on repository `watch*` methods). It holds
   models, the exercise catalog and the services that do the thinking:
-  turning logs into points, scoring lineups, tallying votes and disputes,
+  turning logs and plans into points, tallying votes and disputes,
   scheduling, standings. Nothing
   here knows about Angular
   or a database, which is why it is where most tests live.
 * **application** holds use cases (`CrateService`, `SeasonService`,
-  `LoggingService`, `VotingService`, `LineupService`, `DisputeService`,
+  `LoggingService`, `PlanService`, `VotingService`, `DisputeService`,
   `SessionService`), the
   `AuthService` boundary with a `DemoAuthService`, and `AppContainer`, the
   single composition root. Also framework-free.
@@ -54,30 +54,32 @@ Exercise (catalog, versioned, shipped)
 Peach ──< WorkoutLog (private; shared on submit) ──> copies under each Crate
   │                                                  └─> SharedExercise per entry
   └──< CrateMembership >── Crate ──< Season ──< Round (a week) ──< Matchup
-                             │          └──< Lineup (one per Peach per week)
+                             │          └──< Commitment (one per Peach per week)
                              ├──< Ballot (one per member)
                              └──< Dispute (about a shared log)
 ```
 
 | Entity | Identity | Notes |
 | --- | --- | --- |
-| `Peach` | `id` | Global profile: time zone, units. |
+| `Peach` | `id` | Global profile: time zone, units, and `locations` (where they train and the equipment there). |
 | `Exercise` | slug `id` | Reference data. Classified by movement pattern, muscles, equipment, modality, measurement, difficulty, MET. `distanceKindOf` says which distance category it scores. |
 | `Crate` | `id` | Group with `inviteCode`, time zone and `CrateSettings` (the grace period). |
 | `CrateMembership` | `(crateId, peachId)` | Role and status. A Peach can be in many Crates. |
-| `Ballot` | `(crateId, peachId)` | A member's vote on the `ScoringRules`: a split of 100 points across the categories, and the lineup rules. |
+| `Ballot` | `(crateId, peachId)` | A member's vote on the `ScoringRules`: a split of 100 points across the categories, and the plan rules. |
 | `SharedExercise` | `(crateId, exerciseId, peachId)` | An exercise a member has logged, as their Crate sees it: how it is logged and who logged it. Written whenever a log is shared. |
 | `Dispute` | `(crateId, id)` | A member questioning one exercise (or the session time) of a shared log: the numbers' `snapshot` and each member's vote. |
-| `Season` | `id` | A tournament: a start Monday and a number of weeks, frozen `participantIds` and frozen `rules` (weights and lineup rules). |
+| `Season` | `id` | A tournament: a start Monday and a number of weeks, frozen `participantIds` and frozen `rules` (weights and plan rules). |
 | `Round` | `id` | One week (`weekStart`, a Monday in the Crate's zone). |
 | `Matchup` | `id` | Home vs away for a week (away null = bye). Holds the `MatchupResult` once the week closes. |
-| `Lineup` | `(seasonId, roundId, peachId)` | A Peach's pledges for a week; `locksAt` is when the week starts. |
+| `WeekPlan` | `(peachId, weekStart)` | A Peach's plan for a week: `PlannedWorkout`s, each on a day, with a location, exercises and target sets, and the `logId` it was launched into. Private to the Peach. |
+| `Commitment` | `(seasonId, roundId, peachId)` | What the Peach's plan for that week is worth under the Season's weights. Follows the plan until `locksAt` (when the week starts), then fixed. Readable by the Crate. |
 | `WorkoutLog` | `id` | What a Peach did: entries per exercise (each with how it is logged copied in: name, track, load, distance kind), sets, the session clock, notes. Belongs to the Peach; `sharedWith` lists the Crates it is shared with. Custom exercises exist only in entries (ids start `custom-`). |
 | `WorkoutLog.plan` | (in the log) | While a draft: the exercises the Peach means to do, with target sets; the n-th set done of an exercise is its n-th planned set. Only done sets are `entries`; the plan is cleared on submit. |
 | `Routine` | `id` | A plan a Peach saved under a name: exercises with target sets. Private to the Peach. |
 
-Derived, never stored: category totals and points, week scores (pledges
-and battles), live matchup scores, the Crate's current rules (the tally of
+Derived, never stored: category totals and points, what a planned
+workout is worth, week scores (workouts and the plan's bonus or penalty),
+live matchup scores, the Crate's current rules (the tally of
 ballots), dispute outcomes, standings.
 
 ### Decisions worth knowing
@@ -89,7 +91,8 @@ ballots), dispute outcomes, standings.
   in every Crate the Peach is in, each Crate scoring it with its own
   weights. Matchups find their logs by Crate and week.
 * **Scoring is raw totals per category**, weighted by the Crate's vote,
-  plus lineup pledges and battles (see [SCORING.md](SCORING.md)).
+  plus a bonus for hitting the week's plan or a penalty for falling
+  short of it (see [SCORING.md](SCORING.md)).
 * **Rules are frozen per Season**, so votes never re-score past weeks.
 * **Disputes are scored, not applied**: a struck metric is removed from a
   log when a Crate scores it (`withoutStruck`), so the log itself never
@@ -114,9 +117,10 @@ crates/{crateId}/disputes/{logId}~{snapshot}  (logId in; range on openedAt)
 seasons/{seasonId}                            (crateId field, indexed)
 seasons/{seasonId}/rounds/{roundId}
 seasons/{seasonId}/matchups/{matchupId}       (peachIds, weekStart; collectionGroup)
-seasons/{seasonId}/lineups/{roundId}_{peachId} (locksAt in epoch ms)
+seasons/{seasonId}/commitments/{roundId}_{peachId} (locksAt in epoch ms)
 workoutLogs/{logId}                           (peachId)
 routines/{routineId}                          (peachId)
+weekPlans/{peachId}_{weekStart}               (peachId)
 ```
 
 Matchup documents carry denormalised `peachIds` and `weekStart` fields so
@@ -133,11 +137,11 @@ queries, which rules can't tie to a Crate, so any signed-in Peach can read
 those); shared copies and exercises are written only by their Peach, and
 only once submitted; a member writes only their own ballot; a dispute is
 opened by a member other than the log's owner, and afterwards each member
-but the owner may change only their own vote; a lineup is written by its
-Peach only before it locks, and read by crate-mates only after; only
-owners/admins write schedules, and nobody changes a Season's participants
-or rules. A crate-mate's lineup that is still secret reads as missing in
-`getLineup`.
+but the owner may change only their own vote; a commitment is written by
+its Peach only before it locks (and never below zero), and read by any
+member at any time; a week plan is read and written by its Peach alone;
+only owners/admins write schedules, and nobody changes a Season's
+participants or rules.
 `src/app/data/firestore/firestore-rules.spec.ts` tests these rules on the
 emulator.
 
@@ -151,7 +155,7 @@ is idempotent and convergent:
 
 * opening a week only marks it and its matchups open;
 * closing scores the logs shared with the Crate in that week, the Crate's
-  struck disputes and the locked lineups with a pure function and the
+  struck disputes and the locked commitments with a pure function and the
   Season's frozen rules, so two devices closing the same week write
   identical results;
 * security rules let any active member advance round, matchup and season

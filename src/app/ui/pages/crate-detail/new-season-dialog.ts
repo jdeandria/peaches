@@ -172,12 +172,8 @@ export class NewSeasonDialog {
       .sort((a, b) => w[b] - w[a])
       .map((c) => `${Fmt.category(c)} ${w[c]}`)
       .join(', ');
-    const { slots, pledgeBonus, battlePars } = r.lineup;
-    const lineups =
-      slots === 0
-        ? 'no lineups'
-        : `lineups of ${slots} with +${pledgeBonus}% pledges and ${Fmt.count(battlePars, 'par')} per battle`;
-    return `${weights}; ${lineups}`;
+    const { bonus, penalty } = r.plan;
+    return `${weights}; plans earn +${bonus}% when hit and cost ${penalty}% of any shortfall`;
   });
 
   protected onName(event: Event): void {

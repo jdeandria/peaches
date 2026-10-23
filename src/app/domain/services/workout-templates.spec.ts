@@ -64,4 +64,14 @@ describe('workout templates', () => {
     const again = withHistory.find((e) => e.exerciseId === loaded.exerciseId)!;
     expect(again.sets.every((s) => s.loadKg === 42.5)).toBe(true);
   });
+
+  it('a location’s equipment narrows the kit', () => {
+    const upper = WORKOUT_TEMPLATES.find((t) => t.id === 'upper-body')!;
+    const home = new Set(['dumbbell', 'bench'] as const);
+    for (let seed = 1; seed <= 15; seed++) {
+      for (const entry of templateWorkout(upper, catalog, seed, () => null, home)) {
+        expect(isPerformableWith(catalog.require(entry.exerciseId), home)).toBe(true);
+      }
+    }
+  });
 });

@@ -2,10 +2,12 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatDialogRef } from '@angular/material/dialog';
 import { Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { AppState } from '../../../state/app-state';
 import { seededBackend, settle, TestBackend } from '../../../../testing/test-app';
+import { rememberCrate } from './crate-switcher';
 import { CratesPage } from './crates.page';
 import { CreateCrateDialog } from './create-crate-dialog';
 import { JoinCrateDialog } from './join-crate-dialog';
@@ -26,37 +28,45 @@ describe('Crates', () => {
   }
 
   describe('CratesPage', () => {
-    it('lists my Crates as links with their season progress', async () => {
-      await setUp();
+    afterEach(() => localStorage.clear());
+
+    async function open() {
       const f = TestBed.createComponent(CratesPage);
-      await settle();
-      await f.whenStable();
-      const el: HTMLElement = f.nativeElement;
-      expect(el.querySelector('h1')?.textContent).toBe('Crates');
-      expect(el.textContent).toContain('2 Crates');
-      const links = Array.from(el.querySelectorAll<HTMLAnchorElement>('a.pch-card'));
-      expect(links.map((a) => a.querySelector('.name')?.textContent)).toEqual(
-        expect.arrayContaining(['Weekend Warriors', 'Lunch Break Lifters']),
-      );
-      const warriors = links.find((a) => a.textContent?.includes('Weekend Warriors'))!;
-      expect(warriors.getAttribute('href')).toMatch(/^\/crates\/.+/);
-      expect(warriors.textContent).toContain('5 Peaches');
-      expect(warriors.textContent).toContain('Autumn Kick-off');
-      expect(warriors.textContent).toContain('Week 3 of 6');
-      const lifters = links.find((a) => a.textContent?.includes('Lunch Break Lifters'))!;
-      expect(lifters.textContent).toContain('Starts Mon, Oct 19');
-      expect(el.querySelector('button[matFab]')?.textContent).toContain('Add Crate');
+      for (let i = 0; i < 4; i++) {
+        await settle();
+        await f.whenStable();
+      }
+      return f.nativeElement as HTMLElement;
+    }
+
+    async function crateNamed(name: string) {
+      const crates = await firstValueFrom(backend.container.crates.watchCratesFor(DEMO_PEACH_ID));
+      return crates.find((c) => c.name === name)!;
+    }
+
+    it('opens the Crate with a Season under way', async () => {
+      await setUp();
+      await open();
+      const warriors = await crateNamed('Weekend Warriors');
+      expect(TestBed.inject(Router).url).toBe(`/crates/${warriors.id}`);
     });
 
-    it('shows the empty state without Crates', async () => {
+    it('reopens the Crate last looked at', async () => {
+      await setUp();
+      const lifters = await crateNamed('Lunch Break Lifters');
+      rememberCrate(lifters.id);
+      await open();
+      expect(TestBed.inject(Router).url).toBe(`/crates/${lifters.id}`);
+    });
+
+    it('offers to create or join a Crate without any', async () => {
       await setUp({ seed: false });
-      const f = TestBed.createComponent(CratesPage);
-      await settle();
-      await f.whenStable();
-      const el: HTMLElement = f.nativeElement;
+      const el = await open();
       expect(el.textContent).toContain('Train together, compete together.');
       expect(el.textContent).toContain('No Crates yet');
-      expect(el.textContent).toContain('Create a Crate or join one with an invite code.');
+      const buttons = Array.from(el.querySelectorAll('button')).map((b) => b.textContent?.trim());
+      expect(buttons).toEqual(['add Create a Crate', 'key Join with a code']);
+      expect(TestBed.inject(Router).url).toBe('/');
     });
   });
 

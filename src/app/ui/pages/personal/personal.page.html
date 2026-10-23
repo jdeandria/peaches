@@ -1,0 +1,324 @@
+@let p = peach();
+@if (p) {
+  <pch-page title="You" [maxWidth]="720">
+    <pch-card class="identity" [pchStagger]="0">
+      <pch-shaped-avatar
+        [shapeId]="p.id"
+        [name]="p.displayName"
+        [size]="68"
+        color="primary-container"
+        foreground="on-primary-container"
+      />
+      <div class="identity-text">
+        <h2 class="pch-title-large">{{ p.displayName }}</h2>
+        <p class="pch-body-medium muted">{{ identityLine() }}</p>
+      </div>
+    </pch-card>
+
+    <pch-button-group
+      class="views"
+      label="Show"
+      [options]="views"
+      [selected]="shown()"
+      [height]="40"
+      (selectionChange)="showView($event)"
+    />
+
+    @switch (shown()) {
+      @case ('stats') {
+        <pch-section title="This week" [top]="8" />
+        <ul class="stats" [pchStagger]="1" aria-label="This week">
+          @for (s of stats(); track s.label) {
+            <li>
+              <pch-card variant="elevated" class="stat">
+                <span class="value pch-headline-small">{{ s.value }}</span>
+                <span class="label pch-label-medium">{{ s.label }}</span>
+              </pch-card>
+            </li>
+          }
+        </ul>
+        @if (weekTotals().length > 0) {
+          <ul class="totals" [pchStagger]="1" aria-label="This week adds up to">
+            @for (t of weekTotals(); track t.category) {
+              <li class="total">
+                <span class="material-symbols-rounded" aria-hidden="true">{{ t.icon }}</span>
+                <span class="pch-title-small">{{ t.amount }}</span>
+                <span class="pch-label-small muted">{{ t.label }}</span>
+              </li>
+            }
+          </ul>
+        }
+
+        <pch-section title="Plan kept" />
+        @let k = kept();
+        @if (k.planned === 0) {
+          <pch-card variant="outlined" [pchStagger]="2">
+            Plan your weeks on the Plan tab and you’ll see how many planned workouts you get done.
+          </pch-card>
+        } @else {
+          <pch-card variant="elevated" class="kept" [pchStagger]="2">
+            <p class="pch-title-medium kept-summary">{{ k.summary }}</p>
+            <pch-wavy-progress
+              [value]="k.fraction"
+              [color]="k.kept >= k.planned ? 'tertiary' : 'primary'"
+              label="Plan kept"
+            />
+            <ul class="bars" aria-label="Plan kept by week">
+              @for (b of k.bars; track b.key) {
+                <li class="bar" [attr.aria-label]="b.label + ': ' + b.text">
+                  <span class="bar-track" aria-hidden="true">
+                    <span
+                      class="bar-fill"
+                      [class.all]="b.all"
+                      [style.height.%]="b.fraction * 100"
+                    ></span>
+                  </span>
+                  <span class="pch-label-small muted" aria-hidden="true">{{ b.short }}</span>
+                  <span class="pch-label-medium" aria-hidden="true">{{ b.text }}</span>
+                </li>
+              }
+            </ul>
+          </pch-card>
+        }
+
+        <pch-section title="Workouts per week" />
+        <pch-list-card [pchStagger]="3">
+          @for (w of weeks(); track w.key) {
+            <div class="week-row">
+              <span class="pch-title-small week-label">{{ w.label }}</span>
+              <pch-wavy-progress
+                class="week-bar"
+                [value]="w.fraction"
+                [label]="w.label + ': ' + w.count"
+              />
+              <span class="pch-label-large week-count">{{ w.count }}</span>
+            </div>
+          }
+        </pch-list-card>
+
+        <pch-section title="Records" />
+        @let r = records();
+        @if (r.lifts.length === 0 && r.singles.length === 0) {
+          <pch-card variant="outlined" [pchStagger]="4">
+            Your personal bests show up here once you’ve logged a few workouts.
+          </pch-card>
+        } @else {
+          @if (r.lifts.length > 0) {
+            <h3 id="lifts-caption" class="caption pch-label-large">Heaviest lifts</h3>
+            <pch-list-card [pchStagger]="4" class="records" aria-labelledby="lifts-caption">
+              @for (l of r.lifts; track l.key) {
+                <pch-list-row>
+                  <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
+                    >fitness_center</span
+                  >
+                  {{ l.name }}
+                  <span rowSubtitle>{{ l.when }}</span>
+                  <span rowTrailing class="pch-label-large record">{{ l.value }}</span>
+                </pch-list-row>
+              }
+            </pch-list-card>
+          }
+          @if (r.singles.length > 0) {
+            <h3 id="bests-caption" class="caption pch-label-large">In one go</h3>
+            <pch-list-card [pchStagger]="5" class="records" aria-labelledby="bests-caption">
+              @for (s of r.singles; track s.key) {
+                <pch-list-row>
+                  <span rowLeading class="material-symbols-rounded icon" aria-hidden="true">{{
+                    s.icon
+                  }}</span>
+                  {{ s.label }}
+                  <span rowSubtitle>{{ s.when }}</span>
+                  <span rowTrailing class="pch-label-large record">{{ s.value }}</span>
+                </pch-list-row>
+              }
+            </pch-list-card>
+          }
+        }
+      }
+
+      @case ('history') {
+        <pch-section title="History" [top]="8" />
+        <div [pchStagger]="1">
+          @if (logs() === undefined) {
+            <div class="loading"><pch-loading-indicator [size]="36" /></div>
+          } @else if (history().length === 0) {
+            <pch-card variant="outlined">Nothing logged yet. Your workouts show up here.</pch-card>
+          } @else {
+            <p class="swipe-hint pch-body-small">
+              Swipe a workout right to edit it, left to delete it.
+            </p>
+            @for (week of history(); track week.label) {
+              <h3 class="caption week pch-label-large">{{ week.label }}</h3>
+              <pch-list-card>
+                @for (row of week.rows; track row.log.id) {
+                  <pch-swipe-row
+                    editable
+                    removable
+                    removeLabel="Delete"
+                    (edit)="openLog(row)"
+                    (remove)="deleteLog(row)"
+                  >
+                    <a pch-list-row [routerLink]="row.submitted ? ['/log', row.log.id] : ['/log']">
+                      <ng-container
+                        ngProjectAs="[rowLeading]"
+                        [ngTemplateOutlet]="logLeading"
+                        [ngTemplateOutletContext]="{ $implicit: row }"
+                      />
+                      {{ row.day }}
+                      <span rowSubtitle class="one-line">{{ row.names }}</span>
+                      <ng-container
+                        ngProjectAs="[rowTrailing]"
+                        [ngTemplateOutlet]="logTrailing"
+                        [ngTemplateOutletContext]="{ $implicit: row }"
+                      />
+                    </a>
+                  </pch-swipe-row>
+                }
+              </pch-list-card>
+            }
+            @if (moreHistory()) {
+              <button matButton type="button" class="show-more" (click)="showMore()">
+                Show more
+              </button>
+            }
+          }
+        </div>
+      }
+
+      @case ('equipment') {
+        <pch-section title="Where you train" [top]="8">
+          @if (locations().length < maxLocations) {
+            <button
+              sectionTrailing
+              matButton
+              type="button"
+              class="add-location"
+              (click)="editLocation(p, null)"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">add</span>
+              Add
+            </button>
+          }
+        </pch-section>
+        <p class="pch-body-medium muted intro">
+          When you plan a workout at a location, exercises and templates fit the kit there.
+        </p>
+        @if (locations().length === 0) {
+          <pch-card variant="outlined" class="no-locations" [pchStagger]="1">
+            <span>No locations yet. Add Home, Gym or Travel to get started.</span>
+            <button matButton="filled" type="button" (click)="editLocation(p, null)">
+              Add a location
+            </button>
+          </pch-card>
+        } @else {
+          <pch-list-card [pchStagger]="1" class="locations">
+            @for (l of locations(); track l.location.id) {
+              <pch-swipe-row
+                editable
+                removable
+                removeLabel="Delete"
+                (edit)="editLocation(p, l.location)"
+                (remove)="deleteLocation(p, l.location)"
+              >
+                <pch-list-row>
+                  <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
+                    >location_on</span
+                  >
+                  {{ l.location.name }}
+                  <span rowSubtitle class="one-line">{{ l.summary }}</span>
+                  <span rowTrailing class="pch-swipe-actions">
+                    <button
+                      matIconButton
+                      type="button"
+                      matTooltip="Delete"
+                      [attr.aria-label]="'Delete ' + l.location.name"
+                      (click)="deleteLocation(p, l.location)"
+                    >
+                      <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                    </button>
+                    <button
+                      matIconButton
+                      type="button"
+                      matTooltip="Edit"
+                      [attr.aria-label]="'Edit ' + l.location.name"
+                      (click)="editLocation(p, l.location)"
+                    >
+                      <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+                    </button>
+                  </span>
+                </pch-list-row>
+              </pch-swipe-row>
+            }
+          </pch-list-card>
+        }
+      }
+
+      @case ('settings') {
+        <pch-section title="Units" [top]="8" />
+        <pch-button-group
+          [pchStagger]="1"
+          label="Units"
+          [options]="unitOptions"
+          [selected]="p.units"
+          (selectionChange)="saveUnits(p, $event)"
+        />
+
+        <pch-section title="More" />
+        <pch-list-card [pchStagger]="2" class="more">
+          @if (pwa.canInstall()) {
+            <button pch-list-row type="button" (click)="install()">
+              <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
+                >install_mobile</span
+              >
+              Install app
+              <span rowSubtitle>Add Peaches to your home screen</span>
+            </button>
+          }
+          @if (canSignOut()) {
+            <button pch-list-row type="button" (click)="signOut()">
+              <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
+                >logout</span
+              >
+              Sign out
+              @if (p.email) {
+                <span rowSubtitle>{{ p.email }}</span>
+              }
+            </button>
+          }
+          <pch-list-row>
+            <span rowLeading class="peach" aria-hidden="true">🍑</span>
+            Peaches
+            <span rowSubtitle>Version {{ version }}</span>
+          </pch-list-row>
+        </pch-list-card>
+      }
+    }
+  </pch-page>
+} @else if (loading()) {
+  <pch-loading-indicator class="page-loading" />
+} @else {
+  <pch-page title="You" [maxWidth]="720">
+    <pch-empty-state icon="person_off" title="Not signed in" />
+  </pch-page>
+}
+
+<ng-template #logLeading let-r>
+  <pch-shaped-avatar
+    [shape]="r.submitted ? 'softBurst' : 'circle'"
+    [color]="r.submitted ? 'primary-container' : 'surface-container-high'"
+    [foreground]="r.submitted ? 'on-primary-container' : 'on-surface-variant'"
+  >
+    <span class="material-symbols-rounded" aria-hidden="true">{{
+      r.submitted ? 'check' : 'edit'
+    }}</span>
+  </pch-shaped-avatar>
+</ng-template>
+
+<ng-template #logTrailing let-r>
+  <span class="log-meta pch-label-medium">
+    <span class="muted">{{ r.sets }} {{ r.sets === 1 ? 'set' : 'sets' }}</span>
+    @if (r.headline) {
+      <span class="amount">{{ r.headline }}</span>
+    }
+  </span>
+</ng-template>

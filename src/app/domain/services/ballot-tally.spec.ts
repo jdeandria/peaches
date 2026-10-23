@@ -1,9 +1,9 @@
 import {
   categoryWeights,
-  DEFAULT_LINEUP_RULES,
+  DEFAULT_PLAN_RULES,
   DEFAULT_RULES,
   DEFAULT_WEIGHTS,
-  LineupRules,
+  PlanRules,
   weightsTotal,
 } from '../models/scoring';
 import { BallotTally } from './ballot-tally';
@@ -62,23 +62,23 @@ describe('BallotTally', () => {
 });
 
 describe('BallotTally.rules', () => {
-  const ballot = (lineup: Partial<LineupRules>) => ({
+  const ballot = (plan: Partial<PlanRules>) => ({
     weights: DEFAULT_WEIGHTS,
-    lineup: { ...DEFAULT_LINEUP_RULES, ...lineup },
+    plan: { ...DEFAULT_PLAN_RULES, ...plan },
   });
 
   it('uses the defaults with no ballots', () => {
     expect(BallotTally.rules([])).toEqual(DEFAULT_RULES);
   });
 
-  it('each lineup rule is the middle vote, the lower one when even', () => {
+  it('each plan rule is the middle vote, the lower one when even', () => {
     const rules = BallotTally.rules([
-      ballot({ slots: 1, pledgeBonus: 100 }),
-      ballot({ slots: 6, pledgeBonus: 0 }),
-      ballot({ slots: 2, pledgeBonus: 40 }),
+      ballot({ bonus: 10, penalty: 100 }),
+      ballot({ bonus: 60, penalty: 0 }),
+      ballot({ bonus: 20, penalty: 40 }),
     ]);
-    expect(rules.lineup).toEqual({ slots: 2, pledgeBonus: 40, battlePars: 1 });
-    const even = BallotTally.rules([ballot({ slots: 1 }), ballot({ slots: 4 })]);
-    expect(even.lineup.slots).toBe(1);
+    expect(rules.plan).toEqual({ bonus: 20, penalty: 40 });
+    const even = BallotTally.rules([ballot({ bonus: 10 }), ballot({ bonus: 40 })]);
+    expect(even.plan.bonus).toBe(10);
   });
 });

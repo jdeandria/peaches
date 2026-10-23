@@ -8,14 +8,15 @@ import {
   PeachRepository,
   RoutineRepository,
   SeasonRepository,
+  WeekPlanRepository,
   WorkoutLogRepository,
 } from '../domain/repositories';
 import { RoundWindowService } from '../domain/services/round-window';
 import { ScoringService } from '../domain/services/scoring-service';
 import { CrateService } from './crate-service';
 import { DisputeService } from './dispute-service';
-import { LineupService } from './lineup-service';
 import { LoggingService } from './logging-service';
+import { PlanService } from './plan-service';
 import { RoutineService } from './routine-service';
 import { SeasonService } from './season-service';
 import { SessionService } from './session-service';
@@ -30,6 +31,7 @@ export interface Repositories {
   readonly ballots: BallotRepository;
   readonly disputes: DisputeRepository;
   readonly routines: RoutineRepository;
+  readonly plans: WeekPlanRepository;
 }
 
 /**
@@ -46,6 +48,7 @@ export class AppContainer implements Repositories {
   readonly ballots: BallotRepository;
   readonly disputes: DisputeRepository;
   readonly routines: RoutineRepository;
+  readonly plans: WeekPlanRepository;
 
   readonly windows: RoundWindowService;
   readonly scoring = new ScoringService();
@@ -53,7 +56,7 @@ export class AppContainer implements Repositories {
   readonly loggingService: LoggingService;
   readonly routineService: RoutineService;
   readonly votingService: VotingService;
-  readonly lineupService: LineupService;
+  readonly planService: PlanService;
   readonly disputeService: DisputeService;
   readonly seasonService: SeasonService;
   readonly sessionService: SessionService;
@@ -72,16 +75,22 @@ export class AppContainer implements Repositories {
       ballots: this.ballots,
       disputes: this.disputes,
       routines: this.routines,
+      plans: this.plans,
     } = repositories);
     this.windows = new RoundWindowService(zone);
     this.crateService = new CrateService(this.crates, ids);
     this.loggingService = new LoggingService({ logs: this.logs, crates: this.crates, ids });
     this.routineService = new RoutineService(this.routines, ids);
     this.votingService = new VotingService(this.ballots, this.crates);
-    this.lineupService = new LineupService({
+    this.planService = new PlanService({
+      plans: this.plans,
       seasons: this.seasons,
       crates: this.crates,
+      logs: this.logs,
+      logging: this.loggingService,
       windows: this.windows,
+      ids,
+      scoring: this.scoring,
     });
     this.disputeService = new DisputeService({
       disputes: this.disputes,
@@ -95,7 +104,7 @@ export class AppContainer implements Repositories {
       crates: this.crates,
       logs: this.logs,
       voting: this.votingService,
-      lineups: this.lineupService,
+      plans: this.planService,
       disputes: this.disputeService,
       ids,
       windows: this.windows,

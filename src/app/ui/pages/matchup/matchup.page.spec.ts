@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
+import { LocalDate } from '../../../domain/core/local-date';
 import { Matchup } from '../../../domain/models/season';
 import { exerciseLogEntry, setLog } from '../../../domain/models/workout-log';
 import { AppState } from '../../../state/app-state';
@@ -44,14 +45,20 @@ describe('MatchupPage', () => {
   /** The "How the score adds up" lines: label, then each side's points. */
   const breakdown = (el: HTMLElement) =>
     Array.from(el.querySelectorAll('.category:not(.heading)'))
-      .slice(0, 3)
+      .slice(0, 2)
       .map((row) => Array.from(row.children).map(text).join(' '));
   const points = (el: HTMLElement) =>
     Array.from(el.querySelectorAll('.scoreboard pch-animated-number .pch-visually-hidden')).map(
       text,
     );
 
-  it('shows this week’s live score, the breakdown and both sides’ workouts', async () => {
+  /** Each side's plan card: whose, committed, and how it's going. */
+  const plans = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('.plan')).map((card) =>
+      [card.children[0], card.children[1], card.querySelector('.status')].map(text).join(' · '),
+    );
+
+  it('shows this week’s live score, the breakdown, both plans and both sides’ workouts', async () => {
     const matchups = await setUp();
     const open = matchups.find((m) => m.status === 'inProgress')!;
     const f = await render(open.id);
@@ -59,32 +66,33 @@ describe('MatchupPage', () => {
 
     expect(text(el.querySelector('h1'))).toBe('You vs Cho');
     expect(text(el.querySelector('.subtitle'))).toBe('Weekend Warriors · Week 3 · Oct 12 – 18');
-    expect(points(el)).toEqual(['0', '35.8']);
-    expect(text(el.querySelector('.verdict'))).toBe('Live · Cho leads');
+    // Monday morning: I've done my first workout, Cho nothing yet. Each
+    // score counts the penalty for what's still to do, as if the week ended now.
+    expect(points(el)).toEqual(['24.6', '-39.5']);
+    expect(text(el.querySelector('.verdict'))).toBe('Live · You lead');
     expect(text(el.querySelector('.banner'))).toContain('Everything you both log this week counts');
-    expect(el.querySelector('a.log')?.getAttribute('href')).toBe('/log');
+    const train = el.querySelector('a.log')!;
+    expect(train.getAttribute('href')).toBe('/');
+    expect(text(train)).toContain('Go to your plan');
 
     const headings = Array.from(el.querySelectorAll('h2')).map(text);
     expect(headings).toEqual([
       'How the score adds up',
-      'Your lineup',
-      'Cho’s lineup',
+      'Plans',
       'Workout points by category',
       'Your workouts',
       'Cho’s workouts',
     ]);
-    // The whole score, line by line: Cho out-rode me (nobody else rode).
-    expect(breakdown(el)).toEqual(['Workouts 0 31.8', 'Pledge bonus 0 0', 'Battle prizes 0 4']);
-    const choRide = Array.from(el.querySelectorAll('.sides > div')[1].querySelectorAll('.pledge'))
-      .map(text)
-      .find((t) => t?.includes('Ride'));
-    expect(choRide).toContain('20.07 km of 40 km');
-    expect(choRide).toContain('Won vs your 0 km');
+    expect(breakdown(el)).toEqual(['Workouts 51.2 0', 'Plan penalty −26.6 −39.5']);
+    expect(plans(el)).toEqual([
+      'Your plan · 104.5 pts committed · 53.3 pts to go · −26.6 if it stays',
+      'Cho’s plan · 79.0 pts committed · 79.0 pts to go · −39.5 if it stays',
+    ]);
     // Every category the Crate gave points to, with its weight per par.
     const categories = Array.from(el.querySelectorAll('.category .what .pch-title-small')).map(
       text,
     );
-    expect(categories).toEqual([
+    expect(categories.slice(-6)).toEqual([
       'Run & walk',
       'Ride',
       'Swim & row',
@@ -92,11 +100,11 @@ describe('MatchupPage', () => {
       'Reps',
       'Active minutes',
     ]);
-    expect(text(el.querySelectorAll('.category:not(.heading)')[3])).toContain('23 pts per 5 km');
+    expect(text(el)).toContain('23 pts per 5 km');
     expect(text(el.querySelector('.category.heading'))).toBe('YouCho');
     expect(text(el)).toContain('Nothing logged this week yet.');
 
-    // A run I log now shows up in the score.
+    // A run I log now shows up in the score, and hits my plan.
     const log = await backend.container.loggingService.startLog(DEMO_PEACH_ID, FIXED_NOW);
     await backend.container.loggingService.recordEntry(
       log.id,
@@ -110,17 +118,17 @@ describe('MatchupPage', () => {
     await backend.container.loggingService.submit(log.id, FIXED_NOW);
     TestBed.inject(AppState).bump();
     await stable(f);
-    // 10 km = 2 pars at 23; 50 min = 1.11 pars at 25. My 5 km pledge is hit
-    // (+11.5), I out-ran Cho (+23) and tied Cho's 50 minutes (half of 25).
-    expect(breakdown(el)).toEqual([
-      'Workouts 73.8 31.8',
-      'Pledge bonus 11.5 0',
-      'Battle prizes 35.5 4',
-    ]);
-    expect(points(el)[0]).toBe('120.8');
+    // 10 km = 2 pars at 23; 50 min = 1.11 pars at 25: 73.8 more, past my
+    // 104.5, which earns 25% of it.
+    expect(breakdown(el)).toEqual(['Workouts 125.0 0', 'Plan bonus or penalty +26.1 −39.5']);
+    expect(plans(el)[0]).toBe('Your plan · 104.5 pts committed · Plan hit: +26.1 bonus');
+    expect(points(el)[0]).toBe('151.1');
     expect(text(el.querySelector('.verdict'))).toBe('Live · You lead');
     const mine = el.querySelectorAll('.logs > div')[0];
-    expect(mine.querySelector('a[pch-list-row]')?.getAttribute('href')).toBe(`/log/${log.id}`);
+    const links = Array.from(mine.querySelectorAll('a[pch-list-row]')).map((a) =>
+      a.getAttribute('href'),
+    );
+    expect(links).toContain(`/log/${log.id}`);
   });
 
   it('shows the final score once the week has closed', async () => {
@@ -129,15 +137,15 @@ describe('MatchupPage', () => {
     const f = await render(done.id);
     const el: HTMLElement = f.nativeElement;
     expect(text(el.querySelector('h1'))).toBe('You vs Ada');
-    expect(points(el)).toEqual(['253.6', '288.4']);
-    // Workouts, then pledges hit (5 km and 90 min for me; 15 km and 120 min
-    // for Ada) and battles won (weight and minutes for me, running for Ada).
-    expect(breakdown(el)).toEqual([
-      'Workouts 174.1 197.6',
-      'Pledge bonus 36.5 67.8',
-      'Battle prizes 43 23',
+    expect(points(el)).toEqual(['247.6', '97.5']);
+    // Workouts, then the plans: I hit mine (25% of 104.5); Ada fell 47 short
+    // of 168 (50% of it off).
+    expect(breakdown(el)).toEqual(['Workouts 221.5 121.0', 'Plan bonus or penalty +26.1 −23.5']);
+    expect(plans(el)).toEqual([
+      'Your plan · 104.5 pts committed · Hit: +26.1 bonus',
+      'Ada’s plan · 168.0 pts committed · Short by 47.0: −23.5',
     ]);
-    expect(text(el.querySelector('.verdict'))).toBe('Final · Ada won');
+    expect(text(el.querySelector('.verdict'))).toBe('Final · You won');
     expect(el.querySelector('.banner')).toBeNull();
     expect(el.querySelector('a.log')).toBeNull();
     // Crate-mates' workouts open as shared with the Crate, to view and dispute.
@@ -145,14 +153,43 @@ describe('MatchupPage', () => {
     expect(theirs.querySelector('a')?.getAttribute('href')).toMatch(/^\/crates\/.+\/logs\//);
   });
 
-  it('shows a bye week that has not started yet', async () => {
+  it('before the week starts, shows commitments so far and asks for a plan', async () => {
     const matchups = await setUp();
     const bye = matchups.find((m) => m.status === 'scheduled' && m.awayPeachId === null)!;
     const f = await render(bye.id);
     const el: HTMLElement = f.nativeElement;
     expect(text(el.querySelector('h1'))).toBe('Your bye week');
     expect(text(el.querySelector('.banner .pch-body-medium'))).toBe('Starts Mon, Oct 19');
+    expect(plans(el)).toEqual(['Your plan · No plan · Nothing planned yet · locks in 6 d']);
+    const plan = el.querySelector('a.plan-week')!;
+    expect(plan.getAttribute('href')).toBe('/?week=next');
+    expect(text(plan)).toContain('Plan your week');
     expect(el.querySelectorAll('.logs > div')).toHaveLength(1);
+
+    // What I plan shows up as my commitment.
+    await backend.container.planService.saveWorkout({
+      peachId: DEMO_PEACH_ID,
+      weekStart: '2026-10-19' as LocalDate,
+      workout: {
+        day: '2026-10-20' as LocalDate,
+        name: 'Run',
+        locationId: null,
+        exercises: [
+          exerciseLogEntry({
+            exerciseId: 'bw-run',
+            exerciseName: 'Run',
+            distanceKind: 'runWalk',
+            sets: [setLog({ meters: 5000, seconds: 1500 })],
+          }),
+        ],
+      },
+      now: FIXED_NOW,
+    });
+    TestBed.inject(AppState).bump();
+    await stable(f);
+    expect(plans(el)[0]).toMatch(
+      /^Your plan · [\d.]+ pts committed · [\d.]+ committed so far · locks in 6 d$/,
+    );
   });
 
   it('says when a matchup does not exist', async () => {

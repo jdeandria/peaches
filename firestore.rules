@@ -128,27 +128,30 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // A Peach's lineup for a week, keyed "<roundId>_<peachId>". Secret from
-      // crate-mates until it locks when the week starts (`locksAt`, epoch
-      // ms), and only changeable before then. A new lineup can lock at most
-      // a week (and a day of clock skew) ahead.
-      match /lineups/{lineupId} {
-        allow get: if resource == null && isMember(seasonCrate(seasonId))
-                   || isSelf(resource.data.peachId)
-                   || isMember(seasonCrate(seasonId))
-                      && request.time.toMillis() >= resource.data.locksAt;
-        allow list: if isSelf(resource.data.peachId);
+      // What a Peach's plan for a week is worth, keyed "<roundId>_<peachId>".
+      // Crate-mates see it as it changes (only the number: the plan itself
+      // stays private), so opponents plan against each other. Only its Peach
+      // writes it, and only before it locks when the week starts (`locksAt`,
+      // epoch ms). A new one can lock at most a week (and a day of clock
+      // skew) ahead.
+      match /commitments/{commitmentId} {
+        allow read: if isMember(seasonCrate(seasonId));
         allow create: if isSelf(request.resource.data.peachId)
                       && isMember(seasonCrate(seasonId))
                       && request.resource.data.seasonId == seasonId
-                      && lineupId == request.resource.data.roundId + '_' + request.auth.uid
+                      && commitmentId == request.resource.data.roundId + '_' + request.auth.uid
+                      && request.resource.data.points is number
+                      && request.resource.data.points >= 0
                       && request.time.toMillis() < request.resource.data.locksAt
                       && request.resource.data.locksAt < request.time.toMillis() + 8 * 86400000;
         allow update: if isSelf(resource.data.peachId)
                       && isMember(seasonCrate(seasonId))
                       && request.resource.data.peachId == resource.data.peachId
                       && request.resource.data.roundId == resource.data.roundId
+                      && request.resource.data.seasonId == resource.data.seasonId
                       && request.resource.data.locksAt == resource.data.locksAt
+                      && request.resource.data.points is number
+                      && request.resource.data.points >= 0
                       && request.time.toMillis() < resource.data.locksAt;
         allow delete: if false;
       }
@@ -178,6 +181,20 @@ service cloud.firestore {
       allow create: if isSelf(request.resource.data.peachId);
       allow update: if isSelf(resource.data.peachId)
                     && request.resource.data.peachId == resource.data.peachId;
+    }
+
+    // A Peach's week plans are theirs alone, keyed "<peachId>_<weekStart>".
+    // Crates see only what a plan is worth (`commitments` above).
+    match /weekPlans/{planId} {
+      // A missing plan reads as missing (that reveals nothing) rather than refused.
+      allow get: if signedIn() && resource == null || isSelf(resource.data.peachId);
+      allow list: if isSelf(resource.data.peachId);
+      allow create: if isSelf(request.resource.data.peachId)
+                    && planId == request.resource.data.peachId + '_' + request.resource.data.weekStart;
+      allow update: if isSelf(resource.data.peachId)
+                    && request.resource.data.peachId == resource.data.peachId
+                    && request.resource.data.weekStart == resource.data.weekStart;
+      allow delete: if false;
     }
 
     // A Peach's saved routines are theirs alone, to change or delete.

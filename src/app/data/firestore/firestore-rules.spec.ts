@@ -41,6 +41,7 @@ import {
   COLLECTIONS,
   FirestoreCrateRepository,
   FirestoreRoutineRepository,
+  FirestoreWeekPlanRepository,
   FirestoreSeasonRepository,
   FirestoreWorkoutLogRepository,
 } from './firestore-repositories';
@@ -367,51 +368,75 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     await expect(deleteDoc(ref(client('a')))).rejects.toThrow();
   });
 
-  it('lineups are secret until they lock, and frozen after', async () => {
+  it('commitments are open to the Crate, written by their Peach until they lock', async () => {
     const hour = 3_600_000;
-    const lineup = (peachId: string, locksAt: number) => ({
+    const commitment = (peachId: string, locksAt: number, points = 120) => ({
       seasonId: 's1',
       roundId: 'r1',
       peachId,
-      pledges: [{ category: 'runWalk', target: 10 }],
+      points,
       locksAt,
       updatedAt: now.toISOString(),
     });
     const ref = (db: Firestore, peachId: string, roundId = 'r1') =>
-      doc(db, COLLECTIONS.seasons, 's1', COLLECTIONS.lineups, `${roundId}_${peachId}`);
+      doc(db, COLLECTIONS.seasons, 's1', COLLECTIONS.commitments, `${roundId}_${peachId}`);
     const future = Date.now() + 48 * hour;
     await seed(async (db) => {
       await setDoc(doc(db, COLLECTIONS.seasons, 's1'), { id: 's1', crateId: 'c1' });
-      await setDoc(ref(db, 'a', 'r0'), { ...lineup('a', Date.now() - hour), roundId: 'r0' });
+      await setDoc(ref(db, 'a', 'r0'), { ...commitment('a', Date.now() - hour), roundId: 'r0' });
     });
 
-    // b sets and changes a lineup for next week; a can't see it yet.
-    await setDoc(ref(client('b'), 'b'), lineup('b', future));
-    await setDoc(ref(client('b'), 'b'), { ...lineup('b', future), pledges: [] });
-    expect((await getDoc(ref(client('b'), 'b'))).exists()).toBe(true);
-    await expect(getDoc(ref(client('a'), 'b'))).rejects.toThrow();
-    // A lineup that doesn't exist reads as missing, not as a refusal.
-    expect((await getDoc(ref(client('a'), 'z'))).exists()).toBe(false);
-    // A locked one is readable by members, not outsiders, and can't change.
-    expect((await getDoc(ref(client('b'), 'a', 'r0'))).exists()).toBe(true);
-    await expect(getDoc(ref(client('c'), 'a', 'r0'))).rejects.toThrow();
+    // b commits and raises it for next week; a sees it as it changes.
+    await setDoc(ref(client('b'), 'b'), commitment('b', future));
+    await setDoc(ref(client('b'), 'b'), commitment('b', future, 260));
+    expect((await getDoc(ref(client('a'), 'b'))).data()?.['points']).toBe(260);
+    // Outsiders don't.
+    await expect(getDoc(ref(client('c'), 'b'))).rejects.toThrow();
+    // A locked one can't change.
     await expect(
       setDoc(ref(client('a'), 'a', 'r0'), {
-        ...lineup('a', Date.now() - hour),
+        ...commitment('a', Date.now() - hour, 0),
         roundId: 'r0',
-        pledges: [],
       }),
     ).rejects.toThrow();
 
-    // Nobody sets a lineup for someone else, past its lock, moves the lock,
-    // or locks it more than a week away.
-    await expect(setDoc(ref(client('a'), 'b'), lineup('b', future))).rejects.toThrow();
-    await expect(setDoc(ref(client('a'), 'a'), lineup('a', Date.now() - hour))).rejects.toThrow();
-    await expect(setDoc(ref(client('b'), 'b'), lineup('b', future + hour))).rejects.toThrow();
+    // Nobody commits for someone else, past the lock, moves the lock,
+    // locks it more than a week away, or commits below zero.
+    await expect(setDoc(ref(client('a'), 'b'), commitment('b', future))).rejects.toThrow();
     await expect(
-      setDoc(ref(client('a'), 'a'), lineup('a', Date.now() + 9 * 24 * hour)),
+      setDoc(ref(client('a'), 'a'), commitment('a', Date.now() - hour)),
     ).rejects.toThrow();
-    await expect(setDoc(ref(client('c'), 'c'), lineup('c', future))).rejects.toThrow();
+    await expect(setDoc(ref(client('b'), 'b'), commitment('b', future + hour))).rejects.toThrow();
+    await expect(
+      setDoc(ref(client('a'), 'a'), commitment('a', Date.now() + 9 * 24 * hour)),
+    ).rejects.toThrow();
+    await expect(setDoc(ref(client('a'), 'a'), commitment('a', future, -5))).rejects.toThrow();
+    await expect(setDoc(ref(client('c'), 'c'), commitment('c', future))).rejects.toThrow();
+  });
+
+  it('a Peach’s week plans are theirs alone', async () => {
+    const plan = (peachId: string, weekStart = '2026-10-12') => ({
+      peachId,
+      weekStart,
+      workouts: [],
+      updatedAt: now.toISOString(),
+    });
+    const ref = (db: Firestore, key: string) => doc(db, COLLECTIONS.weekPlans, key);
+    const mine = new FirestoreWeekPlanRepository(client('b'));
+    await setDoc(ref(client('b'), 'b_2026-10-12'), plan('b'));
+    expect(await mine.forPeach('b')).toHaveLength(1);
+    // A week with no plan reads as missing, not as a refusal.
+    expect((await getDoc(ref(client('a'), 'b_2026-10-19'))).exists()).toBe(false);
+
+    // Nobody else reads or changes it, or saves one in another's name or key.
+    await expect(getDoc(ref(client('a'), 'b_2026-10-12'))).rejects.toThrow();
+    await expect(new FirestoreWeekPlanRepository(client('a')).forPeach('b')).rejects.toThrow();
+    await expect(setDoc(ref(client('a'), 'b_2026-10-12'), plan('a'))).rejects.toThrow();
+    await expect(
+      setDoc(ref(client('a'), 'b_2026-10-19'), plan('b', '2026-10-19')),
+    ).rejects.toThrow();
+    await expect(setDoc(ref(client('a'), 'a_2026-10-19'), plan('a'))).rejects.toThrow();
+    await expect(deleteDoc(ref(client('b'), 'b_2026-10-12'))).rejects.toThrow();
   });
 
   it('a Season’s frozen rules cannot change', async () => {

@@ -22,13 +22,14 @@ export const routes: Routes = [
       {
         path: '',
         pathMatch: 'full',
-        title: 'Train',
-        loadComponent: () => import('./ui/pages/train/train.page').then((m) => m.TrainPage),
+        title: 'Plan',
+        loadComponent: () => import('./ui/pages/plan/plan.page').then((m) => m.PlanPage),
       },
       {
-        path: 'compete',
-        title: 'Compete',
-        loadComponent: () => import('./ui/pages/compete/compete.page').then((m) => m.CompetePage),
+        path: 'plan/:week/:workoutId',
+        title: 'Plan a workout',
+        loadComponent: () =>
+          import('./ui/pages/plan/planned-workout.page').then((m) => m.PlannedWorkoutPage),
       },
       {
         path: 'crates',
@@ -57,11 +58,6 @@ export const routes: Routes = [
         loadComponent: () => import('./ui/pages/matchup/matchup.page').then((m) => m.MatchupPage),
       },
       {
-        path: 'matchups/:matchupId/lineup',
-        title: 'Lineup',
-        loadComponent: () => import('./ui/pages/lineup/lineup.page').then((m) => m.LineupPage),
-      },
-      {
         path: 'log',
         title: 'Log a workout',
         loadComponent: () => import('./ui/pages/log/log.page').then((m) => m.LogPage),
@@ -72,10 +68,15 @@ export const routes: Routes = [
         loadComponent: () => import('./ui/pages/log/log.page').then((m) => m.LogPage),
       },
       {
-        path: 'profile',
-        title: 'Profile',
-        loadComponent: () => import('./ui/pages/profile/profile.page').then((m) => m.ProfilePage),
+        path: 'you',
+        title: 'You',
+        loadComponent: () =>
+          import('./ui/pages/personal/personal.page').then((m) => m.PersonalPage),
       },
+      // Where the tabs used to be.
+      { path: 'compete', redirectTo: 'crates' },
+      { path: 'profile', redirectTo: 'you' },
+      { path: 'matchups/:matchupId/lineup', redirectTo: 'matchups/:matchupId' },
     ],
   },
   { path: '**', redirectTo: '' },

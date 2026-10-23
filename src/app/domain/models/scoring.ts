@@ -117,39 +117,39 @@ export function weightsToJson(w: CategoryWeights): JsonMap {
 }
 
 /**
- * How lineups score in a Crate. Members vote on these alongside the
+ * How a week's plan scores in a Crate. Members vote on these alongside the
  * category weights (the middle vote wins), and a Season freezes them.
+ *
+ * A Peach commits to the points their week's plan is worth. Hit it and
+ * they earn `bonus`% of the commitment on top; fall short and they lose
+ * `penalty`% of every point they missed by.
  */
-export interface LineupRules {
-  /** Categories a Peach can pledge each week; 0 turns lineups off. */
-  readonly slots: number;
-  /** A pledge that is hit earns this percentage of the pledged amount's points again. */
-  readonly pledgeBonus: number;
-  /** Beating your opponent in a lineup category earns this many pars of it. */
-  readonly battlePars: number;
+export interface PlanRules {
+  /** Hitting the plan earns this percentage of the committed points again. */
+  readonly bonus: number;
+  /** Falling short costs this percentage of the points missed. */
+  readonly penalty: number;
 }
 
-/** The range each lineup rule can be voted within. */
-export const LINEUP_RULE_LIMITS: Readonly<Record<keyof LineupRules, readonly [number, number]>> =
+/** The range each plan rule can be voted within. */
+export const PLAN_RULE_LIMITS: Readonly<Record<keyof PlanRules, readonly [number, number]>> =
   Object.freeze({
-    slots: [0, SCORING_CATEGORIES.length],
-    pledgeBonus: [0, 100],
-    battlePars: [0, 3],
+    bonus: [0, 100],
+    penalty: [0, 100],
   });
 
-export const LINEUP_RULE_KEYS = ['slots', 'pledgeBonus', 'battlePars'] as const;
+export const PLAN_RULE_KEYS = ['bonus', 'penalty'] as const;
 
-export const DEFAULT_LINEUP_RULES: LineupRules = Object.freeze({
-  slots: 3,
-  pledgeBonus: 50,
-  battlePars: 1,
+export const DEFAULT_PLAN_RULES: PlanRules = Object.freeze({
+  bonus: 25,
+  penalty: 50,
 });
 
-/** Builds lineup rules, checking each is a whole number within its limits. */
-export function lineupRules(values: Partial<LineupRules>): LineupRules {
-  const r = { ...DEFAULT_LINEUP_RULES, ...values };
-  for (const key of LINEUP_RULE_KEYS) {
-    const [min, max] = LINEUP_RULE_LIMITS[key];
+/** Builds plan rules, checking each is a whole number within its limits. */
+export function planRules(values: Partial<PlanRules>): PlanRules {
+  const r = { ...DEFAULT_PLAN_RULES, ...values };
+  for (const key of PLAN_RULE_KEYS) {
+    const [min, max] = PLAN_RULE_LIMITS[key];
     if (!Number.isInteger(r[key]) || r[key] < min || r[key] > max) {
       throw new RangeError(`${key} must be a whole number from ${min} to ${max}`);
     }
@@ -160,34 +160,34 @@ export function lineupRules(values: Partial<LineupRules>): LineupRules {
 /** Everything that decides how a week scores: what the Crate voted for. */
 export interface ScoringRules {
   readonly weights: CategoryWeights;
-  readonly lineup: LineupRules;
+  readonly plan: PlanRules;
 }
 
 export const DEFAULT_RULES: ScoringRules = Object.freeze({
   weights: DEFAULT_WEIGHTS,
-  lineup: DEFAULT_LINEUP_RULES,
+  plan: DEFAULT_PLAN_RULES,
 });
 
 /** Decodes stored rules; anything missing or invalid falls back to the defaults. */
 export function rulesFromJson(json: JsonMap | null): ScoringRules {
-  const lineup = mapFromJson(json?.['lineup']);
-  let decoded = DEFAULT_LINEUP_RULES;
-  if (lineup) {
+  const plan = mapFromJson(json?.['plan']);
+  let decoded = DEFAULT_PLAN_RULES;
+  if (plan) {
     try {
-      decoded = lineupRules(
-        Object.fromEntries(LINEUP_RULE_KEYS.map((k) => [k, numberFromJson(lineup[k], -1)])),
+      decoded = planRules(
+        Object.fromEntries(PLAN_RULE_KEYS.map((k) => [k, numberFromJson(plan[k], -1)])),
       );
     } catch {
       // Keep the defaults.
     }
   }
-  return { weights: weightsFromJson(mapFromJson(json?.['weights'])), lineup: decoded };
+  return { weights: weightsFromJson(mapFromJson(json?.['weights'])), plan: decoded };
 }
 
 export function rulesToJson(r: ScoringRules): JsonMap {
   return {
     weights: weightsToJson(r.weights),
-    lineup: Object.fromEntries(LINEUP_RULE_KEYS.map((k) => [k, r.lineup[k]])),
+    plan: Object.fromEntries(PLAN_RULE_KEYS.map((k) => [k, r.plan[k]])),
   };
 }
 

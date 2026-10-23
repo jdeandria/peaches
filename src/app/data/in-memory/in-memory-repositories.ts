@@ -1,6 +1,7 @@
 import { combineLatest, distinctUntilChanged, map, Observable } from 'rxjs';
 
 import { Repositories } from '../../application/app-container';
+import { LocalDate } from '../../domain/core/local-date';
 import { Ballot } from '../../domain/models/ballot';
 import { Crate, CrateMembership, isActiveMembership } from '../../domain/models/crate';
 import {
@@ -8,11 +9,12 @@ import {
   sharedExerciseKey,
   sharedExercisesOf,
 } from '../../domain/models/crate-exercise';
+import { Commitment, commitmentKey } from '../../domain/models/commitment';
 import { Dispute, DisputeVote } from '../../domain/models/dispute';
-import { Lineup, lineupKey } from '../../domain/models/lineup';
 import { Peach } from '../../domain/models/peach';
 import { byRoutineName, Routine } from '../../domain/models/routine';
 import { involves, Matchup, Round, Season } from '../../domain/models/season';
+import { WeekPlan, weekPlanKey } from '../../domain/models/week-plan';
 import { isSubmitted, WorkoutLog } from '../../domain/models/workout-log';
 import {
   BallotRepository,
@@ -21,6 +23,7 @@ import {
   PeachRepository,
   RoutineRepository,
   SeasonRepository,
+  WeekPlanRepository,
   WorkoutLogRepository,
 } from '../../domain/repositories';
 import { InMemoryStore } from './in-memory-store';
@@ -104,7 +107,9 @@ export class InMemorySeasonRepository implements SeasonRepository {
   private readonly seasons = new InMemoryStore<Season>((s) => s.id);
   private readonly rounds = new InMemoryStore<Round>((r) => r.id);
   private readonly matchups = new InMemoryStore<Matchup>((m) => m.id);
-  private readonly lineups = new InMemoryStore<Lineup>((l) => lineupKey(l.roundId, l.peachId));
+  private readonly commitments = new InMemoryStore<Commitment>((c) =>
+    commitmentKey(c.roundId, c.peachId),
+  );
 
   async getById(id: string): Promise<Season | null> {
     return this.seasons.get(id);
@@ -165,13 +170,16 @@ export class InMemorySeasonRepository implements SeasonRepository {
     return this.matchups.watch((all) => all.filter((m) => involves(m, peachId)));
   }
 
-  /** Nothing is secret in memory: the app only asks for lineups it may see. */
-  async getLineup(_seasonId: string, roundId: string, peachId: string): Promise<Lineup | null> {
-    return this.lineups.get(lineupKey(roundId, peachId));
+  async getCommitment(
+    _seasonId: string,
+    roundId: string,
+    peachId: string,
+  ): Promise<Commitment | null> {
+    return this.commitments.get(commitmentKey(roundId, peachId));
   }
 
-  async saveLineup(lineup: Lineup): Promise<void> {
-    this.lineups.put(lineup);
+  async saveCommitment(commitment: Commitment): Promise<void> {
+    this.commitments.put(commitment);
   }
 }
 
@@ -280,7 +288,6 @@ export class InMemoryDisputeRepository implements DisputeRepository {
   }
 }
 
-/** A fresh, empty set of in-memory repositories. */
 export class InMemoryRoutineRepository implements RoutineRepository {
   private readonly store = new InMemoryStore<Routine>((r) => r.id);
 
@@ -305,6 +312,38 @@ export class InMemoryRoutineRepository implements RoutineRepository {
   }
 }
 
+const newestWeekFirst = (a: WeekPlan, b: WeekPlan) =>
+  a.weekStart < b.weekStart ? 1 : a.weekStart > b.weekStart ? -1 : 0;
+
+export class InMemoryWeekPlanRepository implements WeekPlanRepository {
+  private readonly store = new InMemoryStore<WeekPlan>((p) => weekPlanKey(p.peachId, p.weekStart));
+
+  async get(peachId: string, weekStart: LocalDate): Promise<WeekPlan | null> {
+    return this.store.get(weekPlanKey(peachId, weekStart));
+  }
+
+  async forPeach(peachId: string): Promise<WeekPlan[]> {
+    return this.store.where((p) => p.peachId === peachId).sort(newestWeekFirst);
+  }
+
+  async save(plan: WeekPlan): Promise<void> {
+    this.store.put(plan);
+  }
+
+  watch(peachId: string, weekStart: LocalDate): Observable<WeekPlan | null> {
+    return this.store
+      .watch(() => this.store.get(weekPlanKey(peachId, weekStart)))
+      .pipe(distinctUntilChanged());
+  }
+
+  watchForPeach(peachId: string): Observable<WeekPlan[]> {
+    return this.store.watch((all) =>
+      all.filter((p) => p.peachId === peachId).sort(newestWeekFirst),
+    );
+  }
+}
+
+/** A fresh, empty set of in-memory repositories. */
 export function inMemoryRepositories(): Repositories {
   return {
     peaches: new InMemoryPeachRepository(),
@@ -314,5 +353,6 @@ export function inMemoryRepositories(): Repositories {
     ballots: new InMemoryBallotRepository(),
     disputes: new InMemoryDisputeRepository(),
     routines: new InMemoryRoutineRepository(),
+    plans: new InMemoryWeekPlanRepository(),
   };
 }

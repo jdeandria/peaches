@@ -1,0 +1,263 @@
+<pch-page
+  title="Plan"
+  [subtitle]="subtitle()"
+  [maxWidth]="1080"
+  refreshable
+  [refreshing]="refreshing()"
+  (refresh)="refresh()"
+>
+  <pch-button-group
+    class="weeks"
+    label="Week"
+    [options]="weeks"
+    [selected]="shown()"
+    [height]="40"
+    (selectionChange)="showWeek($event)"
+  />
+
+  <pch-two-pane [stackedGap]="8">
+    <div primaryPane>
+      @if (going(); as progress) {
+        <pch-card class="going" variant="filled" [pchStagger]="0">
+          <span class="material-symbols-rounded" aria-hidden="true">directions_run</span>
+          <div class="text">
+            <h2 class="pch-title-medium">Workout in progress</h2>
+            <p class="pch-body-medium muted">{{ progress }}</p>
+          </div>
+          <a matButton="filled" routerLink="/log" [queryParams]="{ mode: 'log' }">Continue</a>
+        </pch-card>
+      }
+
+      @let s = summary();
+      @if (s) {
+        <pch-card class="summary" variant="outlined" [pchStagger]="0">
+          <div class="summary-text">
+            <h2 class="pch-title-large">{{ s.title }}</h2>
+            <p class="pch-body-medium muted">{{ s.text }}</p>
+          </div>
+          @if (s.progress !== null) {
+            <pch-wavy-progress class="progress" [value]="s.progress" label="Workouts done" />
+          }
+          <div class="summary-actions">
+            @if (s.empty && canRepeat()) {
+              <button matButton="filled" type="button" [disabled]="busy()" (click)="repeat()">
+                <span class="material-symbols-rounded" aria-hidden="true">event_repeat</span>
+                Repeat {{ shown() === 'next' ? 'this' : 'last' }} week
+              </button>
+            }
+            @if (shown() === 'this') {
+              <a matButton="tonal" routerLink="/log">
+                <span class="material-symbols-rounded" aria-hidden="true">bolt</span>
+                Log something unplanned
+              </a>
+            }
+          </div>
+        </pch-card>
+      }
+
+      @let list = strips();
+      @if (list && list.length > 0) {
+        <pch-section [title]="shown() === 'this' ? 'Your matchups' : 'Next week’s matchups'" />
+        <div class="strips" [pchStagger]="1">
+          @for (m of list; track m.key) {
+            <a class="strip" [class.behind]="m.behind" [routerLink]="m.link">
+              <span class="strip-head">
+                <span class="pch-title-small">{{ m.crate }}</span>
+                <span class="pch-label-medium muted">{{
+                  m.them ? 'vs ' + m.them.name : 'Bye'
+                }}</span>
+                <span class="material-symbols-rounded chevron" aria-hidden="true"
+                  >chevron_right</span
+                >
+              </span>
+              <span class="bars">
+                <span class="bar-row">
+                  <span class="who pch-label-large">You</span>
+                  <pch-wavy-progress
+                    class="bar"
+                    [value]="m.me.fill"
+                    color="primary"
+                    [label]="'Your ' + (m.locked ? 'points against your plan' : 'plan')"
+                  />
+                  <span class="nums pch-title-small">
+                    @if (m.locked) {
+                      {{ fmt.points(m.me.earned)
+                      }}<span class="muted"> / {{ fmt.points(m.me.committed) }}</span>
+                    } @else {
+                      {{ fmt.points(m.me.committed) }}
+                    }
+                  </span>
+                </span>
+                @if (m.them; as them) {
+                  <span class="bar-row">
+                    <span class="who pch-label-large one-line">{{ them.name }}</span>
+                    <pch-wavy-progress
+                      class="bar"
+                      [value]="them.fill"
+                      color="tertiary"
+                      [label]="them.name + (m.locked ? '’s points against their plan' : '’s plan')"
+                    />
+                    <span class="nums pch-title-small">
+                      @if (m.locked) {
+                        {{ fmt.points(them.earned)
+                        }}<span class="muted"> / {{ fmt.points(them.committed) }}</span>
+                      } @else {
+                        {{ fmt.points(them.committed) }}
+                      }
+                    </span>
+                  </span>
+                }
+              </span>
+              <span class="strip-foot">
+                <span class="pch-title-small headline">{{ m.headline }}</span>
+                <span class="pch-body-small muted">{{ m.detail }}</span>
+              </span>
+            </a>
+          }
+        </div>
+        @if (!list[0].locked) {
+          <p class="pch-body-small muted note">
+            Points are what each plan is worth. Your opponents see yours change as you plan.
+          </p>
+        }
+      }
+      @if (list !== undefined && inCrates()) {
+        @for (c of idleCrates(); track c.id) {
+          <p class="idle pch-body-medium muted">
+            <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
+            {{ c.name }}: no matchup {{ shown() === 'this' ? 'this' : 'next' }} week.
+          </p>
+        }
+      } @else if (state.myCrates.value()?.length === 0) {
+        <p class="idle pch-body-medium muted">
+          <span class="material-symbols-rounded" aria-hidden="true">person</span>
+          Just for you. Join a Crate on the Crates tab to plan against other Peaches.
+        </p>
+      }
+    </div>
+
+    <div secondaryPane>
+      <pch-section title="Days" [top]="8" />
+      @let dayList = days();
+      @if (dayList === undefined) {
+        <div class="loading"><pch-loading-indicator [size]="36" /></div>
+      } @else {
+        <p class="swipe-hint pch-body-small">
+          Swipe a workout right to edit it, left to take it off the plan.
+        </p>
+        <ol class="days" [pchStagger]="2">
+          @for (d of dayList; track d.date) {
+            <li class="day" [class.today]="d.today" [class.past]="d.past && shown() === 'this'">
+              <div class="day-head">
+                <h3 class="pch-title-small">{{ d.label }}</h3>
+                @if (d.today) {
+                  <span class="today-chip pch-label-small">Today</span>
+                }
+                <a
+                  matIconButton
+                  class="add"
+                  [routerLink]="['/plan', monday(), 'new']"
+                  [queryParams]="{ day: d.date }"
+                  [matTooltip]="'Plan a workout on ' + d.label"
+                  [attr.aria-label]="'Plan a workout on ' + d.label"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">add</span>
+                </a>
+              </div>
+              @if (d.workouts.length > 0 || d.unplanned.length > 0) {
+                <pch-list-card>
+                  @for (r of d.workouts; track r.workout.id) {
+                    <pch-swipe-row
+                      editable
+                      removable
+                      [editLabel]="'Edit'"
+                      [removeLabel]="'Unplan'"
+                      (edit)="edit(r.workout)"
+                      (remove)="remove(r.workout)"
+                    >
+                      <div class="workout" [attr.data-state]="r.state">
+                        <pch-shaped-avatar
+                          [shape]="r.state === 'done' ? 'softBurst' : 'circle'"
+                          [color]="
+                            r.state === 'done'
+                              ? 'primary-container'
+                              : r.state === 'going'
+                                ? 'tertiary-container'
+                                : 'surface-container-high'
+                          "
+                          [foreground]="
+                            r.state === 'done'
+                              ? 'on-primary-container'
+                              : r.state === 'going'
+                                ? 'on-tertiary-container'
+                                : 'on-surface-variant'
+                          "
+                        >
+                          <span class="material-symbols-rounded" aria-hidden="true">{{
+                            r.icon
+                          }}</span>
+                        </pch-shaped-avatar>
+                        <a class="text stretched" [routerLink]="editLink(r.workout)">
+                          <span class="pch-title-medium one-line">{{ r.workout.name }}</span>
+                          <span class="pch-body-small muted one-line">{{ r.subtitle }}</span>
+                        </a>
+                        @if (r.points) {
+                          <span class="pts pch-label-large">{{ r.points }} pts</span>
+                        }
+                        <span class="pch-swipe-actions">
+                          <button
+                            matIconButton
+                            type="button"
+                            matTooltip="Take off the plan"
+                            [attr.aria-label]="'Take ' + r.workout.name + ' off the plan'"
+                            (click)="remove(r.workout)"
+                          >
+                            <span class="material-symbols-rounded" aria-hidden="true"
+                              >event_busy</span
+                            >
+                          </button>
+                        </span>
+                        @if (r.canLaunch) {
+                          <button
+                            matIconButton
+                            type="button"
+                            class="launch"
+                            [disabled]="busy()"
+                            [matTooltip]="r.state === 'going' ? 'Continue' : 'Start'"
+                            [attr.aria-label]="
+                              (r.state === 'going' ? 'Continue ' : 'Start ') + r.workout.name
+                            "
+                            (click)="launch(r.workout)"
+                          >
+                            <span class="material-symbols-rounded" aria-hidden="true"
+                              >play_arrow</span
+                            >
+                          </button>
+                        }
+                      </div>
+                    </pch-swipe-row>
+                  }
+                  @for (u of d.unplanned; track u.log.id) {
+                    <a class="workout unplanned" [routerLink]="['/log', u.log.id]">
+                      <pch-shaped-avatar
+                        shape="softBurst"
+                        color="secondary-container"
+                        foreground="on-secondary-container"
+                      >
+                        <span class="material-symbols-rounded" aria-hidden="true">bolt</span>
+                      </pch-shaped-avatar>
+                      <span class="text">
+                        <span class="pch-title-medium">Workout</span>
+                        <span class="pch-body-small muted one-line">{{ u.subtitle }}</span>
+                      </span>
+                    </a>
+                  }
+                </pch-list-card>
+              }
+            </li>
+          }
+        </ol>
+      }
+    </div>
+  </pch-two-pane>
+</pch-page>

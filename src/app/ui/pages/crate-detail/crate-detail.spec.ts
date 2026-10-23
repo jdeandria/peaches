@@ -5,7 +5,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { LocalDate } from '../../../domain/core/local-date';
 import { Crate } from '../../../domain/models/crate';
-import { categoryWeights, DEFAULT_LINEUP_RULES } from '../../../domain/models/scoring';
+import { categoryWeights, DEFAULT_PLAN_RULES } from '../../../domain/models/scoring';
 import { matchup, Round } from '../../../domain/models/season';
 import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { CrateDetailPage, roundViews } from './crate-detail.page';
@@ -50,17 +50,71 @@ describe('CrateDetailPage', () => {
     await fixture.whenStable();
   }
 
+  afterEach(() => localStorage.clear());
+
+  it('leads with this week’s matchup and switches between my Crates', async () => {
+    const crate = await myCrate(backend, 'Weekend Warriors');
+    const lifters = await myCrate(backend, 'Lunch Break Lifters');
+    const el = await render(crate.id);
+    // The tab's own page: no way back, a chip per Crate instead.
+    expect(el.querySelector('button[aria-label=Back]')).toBeNull();
+    const chips = Array.from(el.querySelectorAll<HTMLElement>('pch-crate-switcher .chip'));
+    expect(chips.map((c) => c.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      'Lunch Break Lifters',
+      'check Weekend Warriors',
+      'add Add Crate',
+    ]);
+    expect(chips[1].getAttribute('aria-current')).toBe('page');
+    expect(chips[0].getAttribute('href')).toBe(`/crates/${lifters.id}`);
+    // The Crates tab reopens it next time.
+    expect(localStorage.getItem('pch.lastCrate')).toBe(crate.id);
+
+    // Week 3 against Cho, with both plans.
+    const hero = el.querySelector('pch-matchup-hero-card')!;
+    expect(hero.textContent).toContain('vs Cho');
+    expect(hero.textContent).toContain('Week 3 · Oct 12 – 18');
+    const plans = Array.from(hero.querySelectorAll('.plans li > span:last-child')).map((li) =>
+      li.textContent?.replace(/\s+/g, ' ').trim(),
+    );
+    expect(plans).toHaveLength(2);
+    expect(plans[0]).toMatch(/^You [\d.]+ of [\d.]+ planned$/);
+    expect(plans[1]).toMatch(/^Cho [\d.]+ of [\d.]+ planned$/);
+    expect(hero.querySelector('a')?.getAttribute('href')).toMatch(/^\/matchups\//);
+  });
+
+  it('a Season that hasn’t started says when, and asks for a plan', async () => {
+    const lifters = await myCrate(backend, 'Lunch Break Lifters');
+    const el = await render(lifters.id);
+    const note = el.querySelector('.week-note')!;
+    expect(note.textContent).toContain('Strength Block 1 starts Mon, Oct 19.');
+    expect(note.querySelector('a')?.getAttribute('href')).toBe('/?week=next');
+    expect(el.querySelector('pch-matchup-hero-card')).toBeNull();
+  });
+
   it('shows disputes to vote on, then the Season, activity or members', async () => {
     const crate = await myCrate(backend, 'Weekend Warriors');
     const el = await render(crate.id);
     expect(el.querySelector('h1')?.textContent).toBe('Weekend Warriors');
     expect(el.textContent).toContain('Every workout counts. Most points each week wins.');
     expect(el.textContent).toContain('Rules · 3 of 5 voted');
-    expect(el.querySelector('a.chip')?.getAttribute('href')).toBe(`/crates/${crate.id}/vote`);
+    expect(el.querySelector('.chips a.chip')?.getAttribute('href')).toBe(
+      `/crates/${crate.id}/vote`,
+    );
     expect(el.textContent).toContain(`Code ${crate.inviteCode}`);
 
     const headings = () => Array.from(el.querySelectorAll('h2')).map((h) => h.textContent?.trim());
-    expect(headings()).toEqual(['Your vote needed', 'Autumn Kick-off', 'Weeks']);
+    expect(headings()).toEqual([
+      'This week',
+      'Your vote needed',
+      'Autumn Kick-off',
+      'Your results',
+      'Coming up',
+      'Weeks',
+    ]);
+    // Two weeks played, three to come.
+    expect(el.querySelectorAll('.results pch-matchup-row')).toHaveLength(2);
+    expect(el.querySelector('.record')?.textContent?.trim()).toMatch(/^\d-\d(-\d)?$/);
+    expect(el.querySelectorAll('.coming-up pch-matchup-row')).toHaveLength(3);
     const views = Array.from(el.querySelectorAll('pch-button-group [role=radio]'));
     expect(views.map((v) => v.textContent?.trim())).toEqual(['Season', 'Activity', 'Peaches']);
     expect(views[0].getAttribute('aria-checked')).toBe('true');
@@ -82,12 +136,13 @@ describe('CrateDetailPage', () => {
     expect(el.querySelectorAll('.weeks a.stretched')).toHaveLength(3);
 
     await show('activity');
-    expect(headings()).toEqual(['Your vote needed', 'Recent workouts', 'Exercises']);
+    expect(headings()).toEqual(['This week', 'Your vote needed', 'Recent workouts', 'Exercises']);
     // Every workout opens: mine to edit, crate-mates' to view and dispute.
     const activity = el.querySelectorAll<HTMLAnchorElement>('.activity a[pch-list-row]');
     expect(activity).toHaveLength(8);
-    expect(activity[0].textContent).toContain('Ada');
-    expect(activity[0].getAttribute('href')).toMatch(new RegExp(`^/crates/${crate.id}/logs/`));
+    const hrefs = Array.from(activity).map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs.some((h) => h.startsWith('/log/'))).toBe(true);
+    expect(hrefs.some((h) => h.startsWith(`/crates/${crate.id}/logs/`))).toBe(true);
 
     // Every exercise members logged, tagged with who: the latest six, then the rest on request.
     const exerciseRows = () =>
@@ -106,7 +161,7 @@ describe('CrateDetailPage', () => {
     expect(exercises.some((e) => e?.includes('From you'))).toBe(true);
 
     await show('peaches');
-    expect(headings()).toEqual(['Your vote needed', 'Peaches']);
+    expect(headings()).toEqual(['This week', 'Your vote needed', 'Peaches']);
     const members = el.querySelectorAll('.members pch-list-row');
     expect(members).toHaveLength(5);
     expect(members[0].textContent).toContain('Ada');
@@ -127,6 +182,9 @@ describe('CrateDetailPage', () => {
     });
     el = await render(crate.id);
     expect(el.textContent).toContain('No Season yet. Start one');
+    expect(el.querySelector('.week-note')?.textContent).toContain(
+      'No Season yet, so no matchup this week. Start one below.',
+    );
     expect(el.querySelector('button[matFab]')?.textContent).toContain('Season');
     await show('activity');
     expect(el.textContent).toContain('Nothing logged yet.');
@@ -201,7 +259,7 @@ describe('NewSeasonDialog', () => {
     await backend.container.votingService.castBallot(
       crate.id,
       DEMO_PEACH_ID,
-      { weights: categoryWeights({ ride: 100 }), lineup: DEFAULT_LINEUP_RULES },
+      { weights: categoryWeights({ ride: 100 }), plan: DEFAULT_PLAN_RULES },
       FIXED_NOW,
     );
     const close = vi.fn();
@@ -221,7 +279,9 @@ describe('NewSeasonDialog', () => {
     // Only its owner so far: every week would be a bye, so say so (with the code).
     expect(el.textContent).toContain('You’re the only Peach here');
     expect(el.textContent).toContain(crate.inviteCode);
-    expect(el.textContent).toContain('Ride 100; lineups of 3');
+    expect(el.textContent).toContain(
+      'Ride 100; plans earn +25% when hit and cost 50% of any shortfall',
+    );
     const options = Array.from(el.querySelectorAll('[role=radio]')).map((b) =>
       b.textContent?.trim(),
     );

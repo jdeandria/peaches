@@ -2,7 +2,7 @@ import { IdGenerator } from '../domain/core/ids';
 import { LocalDate, weekday } from '../domain/core/local-date';
 import { Crate, isActiveMembership } from '../domain/models/crate';
 import { withoutStruck } from '../domain/models/dispute';
-import { Lineup, WeekScore } from '../domain/models/lineup';
+import { WeekScore } from '../domain/models/commitment';
 import {
   isSeasonOpen,
   Matchup,
@@ -20,7 +20,7 @@ import { ScoringService } from '../domain/services/scoring-service';
 import { StandingsCalculator } from '../domain/services/standings-calculator';
 import { DisputeService, DisputeView } from './dispute-service';
 import { DomainError } from './errors';
-import { LineupService } from './lineup-service';
+import { PlanService } from './plan-service';
 import { roundContext, RoundContext } from './round-context';
 import { VotingService } from './voting-service';
 
@@ -29,7 +29,7 @@ export interface SeasonServiceDeps {
   readonly crates: CrateRepository;
   readonly logs: WorkoutLogRepository;
   readonly voting: VotingService;
-  readonly lineups: LineupService;
+  readonly plans: PlanService;
   readonly disputes: DisputeService;
   readonly ids: IdGenerator;
   readonly windows: RoundWindowService;
@@ -42,8 +42,8 @@ export interface MatchupSide {
   readonly peachId: string;
   /** The logs that count, as the Crate scores them (struck numbers removed). */
   readonly logs: readonly WorkoutLog[];
-  /** The lineup in force, or null if none (or a crate-mate's is still secret). */
-  readonly lineup: Lineup | null;
+  /** The points their plan committed them to; zero without one. */
+  readonly committed: number;
   readonly score: WeekScore;
 }
 
@@ -72,7 +72,7 @@ interface WeekState {
 /**
  * Season lifecycle: scheduling a week-by-week round robin, opening each
  * week, closing it (scoring every matchup from the logs its two Peaches
- * shared with the Crate that week and their lineups) and standings.
+ * shared with the Crate that week and their plans) and standings.
  */
 export class SeasonService {
   private readonly scoring: ScoringService;
@@ -141,7 +141,7 @@ export class SeasonService {
 
   /**
    * Scores every matchup in the week from the logs its Peaches shared with
-   * the Crate (less anything the Crate struck) and their lineups, using the
+   * the Crate (less anything the Crate struck) and their plans, using the
    * Season's frozen rules, and closes the round. Completes the Season when
    * its last round closes.
    */
@@ -178,7 +178,7 @@ export class SeasonService {
   }
 
   /**
-   * Both sides of a matchup with the logs that count so far, their lineups
+   * Both sides of a matchup with the logs that count so far, their commitments
    * and their points, scored with the Season's rules. Null if the matchup is
    * gone.
    */
@@ -200,7 +200,7 @@ export class SeasonService {
   /**
    * Opens weeks that have started and closes weeks whose grace period has
    * ended, so a Crate never has to press anything. Runs on app start and
-   * whenever the Today screen refreshes.
+   * whenever a screen refreshes.
    */
   async syncSeason(seasonId: string, now: Date): Promise<void> {
     const { seasons, crates, windows } = this.deps;
@@ -218,7 +218,11 @@ export class SeasonService {
     }
   }
 
-  /** {@link syncSeason} for every open Season in every Crate `peachId` belongs to. */
+  /**
+   * {@link syncSeason} for every open Season in every Crate `peachId`
+   * belongs to, then their commitments (a Season scheduled after they
+   * planned picks the plan up here).
+   */
   async syncPeach(peachId: string, now: Date): Promise<void> {
     const { seasons, crates } = this.deps;
     for (const membership of await crates.membershipsFor(peachId)) {
@@ -227,6 +231,7 @@ export class SeasonService {
         if (isSeasonOpen(season)) await this.syncSeason(season.id, now);
       }
     }
+    await this.deps.plans.syncCommitments(peachId, now);
   }
 
   async standings(seasonId: string): Promise<Standing[]> {
@@ -257,7 +262,7 @@ export class SeasonService {
   }
 
   /**
-   * Both sides of a matchup's week: each Peach's logs and lineup, scored
+   * Both sides of a matchup's week: each Peach's logs and commitment, scored
    * with the Season's rules. A Peach who logged nothing scores zero; a bye
    * has no away side.
    */
@@ -269,14 +274,13 @@ export class SeasonService {
     const side = async (peachId: string) => ({
       peachId,
       logs: week.logs.filter((l) => l.peachId === peachId),
-      lineup: await this.deps.lineups.inForce(season, week.rounds, round, peachId),
+      committed: await this.deps.plans.committed(season.id, round.id, peachId),
     });
     const [home, away] = await Promise.all([
       side(matchup.homePeachId),
       matchup.awayPeachId === null ? null : side(matchup.awayPeachId),
     ]);
-    const scoring = (s: typeof home) => ({ logs: s.logs, pledges: s.lineup?.pledges ?? [] });
-    const scores = this.scoring.scoreMatchup(scoring(home), away && scoring(away), season.rules);
+    const scores = this.scoring.scoreMatchup(home, away, season.rules);
     return {
       home: { ...home, score: scores.home },
       away: away && { ...away, score: scores.away! },

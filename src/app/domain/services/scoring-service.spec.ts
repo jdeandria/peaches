@@ -1,13 +1,12 @@
-import { Pledge } from '../models/lineup';
 import {
   categoryWeights,
-  DEFAULT_LINEUP_RULES,
+  DEFAULT_PLAN_RULES,
   DEFAULT_WEIGHTS,
   ScoringRules,
   ZERO_TOTALS,
 } from '../models/scoring';
 import { exerciseLogEntry, setLog, WorkoutLog, workoutLog } from '../models/workout-log';
-import { ScoringService } from './scoring-service';
+import { plannedSessionSeconds, ScoringService } from './scoring-service';
 
 describe('ScoringService', () => {
   const service = new ScoringService();
@@ -66,7 +65,27 @@ describe('ScoringService', () => {
     });
   });
 
-  describe('a week with a lineup', () => {
+  it('a plan is worth what its target sets would earn', () => {
+    const weights = categoryWeights({ runWalk: 25, activeMinutes: 25, reps: 50 });
+    // Same sets as the 5 km run: 5 km and 25 minutes of timed sets.
+    expect(service.scorePlan(run5k.entries, weights).total).toBe(38.89);
+    expect(service.scorePlan([], weights).total).toBe(0);
+    // Untimed sets count two minutes each with their rest: 2 sets = 4 of 45 minutes.
+    const lifts = service.scorePlan(lifting.entries, categoryWeights({ activeMinutes: 100 }));
+    expect(lifts.categories.find((c) => c.category === 'activeMinutes')).toEqual({
+      category: 'activeMinutes',
+      amount: 4,
+      points: 8.89,
+    });
+    // A timed set adds a minute's rest.
+    expect(
+      plannedSessionSeconds([
+        exerciseLogEntry({ exerciseId: 'plank', sets: [setLog({ seconds: 60 })] }),
+      ]),
+    ).toBe(120);
+  });
+
+  describe('a week with a plan', () => {
     const rules: ScoringRules = {
       weights: categoryWeights({
         runWalk: 25,
@@ -76,71 +95,51 @@ describe('ScoringService', () => {
         ride: 10,
         swimRow: 5,
       }),
-      lineup: DEFAULT_LINEUP_RULES,
+      plan: DEFAULT_PLAN_RULES,
     };
+    // 16.2 km = 81, 8,400 kg = 33.6, 195 min = 86.67: 201.27 points.
     const mine = { ...ZERO_TOTALS, runWalk: 16.2, weightMoved: 8400, activeMinutes: 195 };
-    const theirs = { ...ZERO_TOTALS, runWalk: 9, weightMoved: 12000, activeMinutes: 140 };
-    const pledges: Pledge[] = [
-      { category: 'runWalk', target: 15 },
-      { category: 'weightMoved', target: 10000 },
-      { category: 'activeMinutes', target: 180 },
-    ];
 
-    it('adds pledge bonuses for pledges hit and battles won to workout points', () => {
-      const week = service.scoreWeek(mine, theirs, pledges, rules);
-      // 16.2 km = 81, 8,400 kg = 33.6, 195 min = 86.67.
+    it('hitting the plan earns the bonus on what was committed', () => {
+      const week = service.scoreWeek(mine, 180, rules);
       expect(week.workouts.total).toBe(201.27);
-      // Half of what 15 km (75) and 180 min (80) are worth; 10,000 kg was missed.
-      expect(week.pledges.map((p) => [p.hit, p.points])).toEqual([
-        [true, 37.5],
-        [false, 0],
-        [true, 40],
-      ]);
-      // One par of each category won: running and minutes, not weight.
-      expect(week.battles.map((b) => [b.outcome, b.points])).toEqual([
-        ['win', 25],
-        ['loss', 0],
-        ['win', 20],
-      ]);
-      expect(week.total).toBe(323.77);
+      expect(week).toMatchObject({ committed: 180, hit: true, plan: 45 });
+      expect(week.total).toBe(246.27);
     });
 
-    it('the Crate’s rules size the bonuses', () => {
-      const richer = { ...rules, lineup: { slots: 3, pledgeBonus: 100, battlePars: 2 } };
-      const week = service.scoreWeek(mine, theirs, pledges, richer);
-      expect(week.pledges[0].points).toBe(75);
-      expect(week.battles[0].points).toBe(50);
+    it('falling short costs the penalty on every point missed', () => {
+      const week = service.scoreWeek(mine, 261.27, rules);
+      // 60 short at 50%.
+      expect(week).toMatchObject({ hit: false, plan: -30 });
+      expect(week.total).toBe(171.27);
     });
 
-    it('ties split a battle, but nothing for nothing', () => {
-      const both = [
-        { category: 'runWalk', target: 5 },
-        { category: 'ride', target: 20 },
-      ] as Pledge[];
-      const week = service.scoreWeek(mine, { ...theirs, runWalk: 16.2 }, both, rules);
-      expect(week.battles.map((b) => [b.outcome, b.points])).toEqual([
-        ['tie', 12.5],
-        ['tie', 0],
-      ]);
+    it('exactly hitting it counts as a hit', () => {
+      expect(service.scoreWeek(mine, 201.27, rules).hit).toBe(true);
     });
 
-    it('a bye has pledges but no battles', () => {
-      const week = service.scoreWeek(mine, null, pledges, rules);
-      expect(week.battles).toEqual([]);
-      expect(week.total).toBe(201.27 + 77.5);
+    it('no plan, no bonus and no penalty', () => {
+      const week = service.scoreWeek(mine, 0, rules);
+      expect(week).toMatchObject({ committed: 0, hit: true, plan: 0, total: 201.27 });
     });
 
-    it('scores both sides of a matchup against each other', () => {
+    it('the Crate’s rules size the bonus and penalty', () => {
+      const harsh = { ...rules, plan: { bonus: 50, penalty: 100 } };
+      expect(service.scoreWeek(mine, 200, harsh).plan).toBe(100);
+      expect(service.scoreWeek(mine, 300, harsh).plan).toBe(-98.73);
+      // A big enough miss scores below zero.
+      expect(service.scoreWeek(ZERO_TOTALS, 100, harsh).total).toBe(-100);
+    });
+
+    it('scores both sides of a matchup', () => {
       const { home, away } = service.scoreMatchup(
-        { logs: [run5k], pledges: [{ category: 'runWalk', target: 5 }] },
-        { logs: [lifting], pledges: [{ category: 'weightMoved', target: 5000 }] },
+        { logs: [run5k], committed: 20 },
+        { logs: [lifting], committed: 50 },
         rules,
       );
-      // Home hit 5 km and out-ran away; away missed 5,000 kg but out-lifted home.
-      expect(home.pledges[0].hit).toBe(true);
-      expect(home.battles[0].outcome).toBe('win');
-      expect(away!.pledges[0].hit).toBe(false);
-      expect(away!.battles[0].outcome).toBe('win');
+      expect(home.hit).toBe(true);
+      expect(away!.hit).toBe(false);
+      expect(service.scoreMatchup({ logs: [], committed: 0 }, null, rules).away).toBeNull();
     });
   });
 });

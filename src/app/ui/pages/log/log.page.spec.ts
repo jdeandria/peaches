@@ -440,8 +440,8 @@ describe('LogPage', () => {
   it('a finished workout stays editable, time included', async () => {
     const [latest] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
     const { f, el } = await render({ logId: latest.id });
-    expect(text(el.querySelector('h1'))).toBe('Sun, Oct 11');
-    expect(text(el)).toContain('Run');
+    expect(text(el.querySelector('h1'))).toBe('Mon, Oct 12');
+    expect(text(el)).toContain(latest.entries[0].exerciseName);
     expect(text(el.querySelector('.clock'))).toContain('Session time');
     expect(button(el, 'Add exercise')).toBeDefined();
     expect(
@@ -485,7 +485,7 @@ describe('LogPage', () => {
     await stable(f);
     expect(await backend.container.logs.getById(latest.id)).toBeNull();
     expect(TestBed.inject(Router).url).toBe('/');
-    expect(toast).toHaveBeenCalledWith('Deleted Sun, Oct 11’s workout.', expect.any(Function));
+    expect(toast).toHaveBeenCalledWith('Deleted Mon, Oct 12’s workout.', expect.any(Function));
     toast.mock.calls[0][1]!();
     await stable(f);
     expect((await backend.container.logs.getById(latest.id))?.entries).toEqual(latest.entries);

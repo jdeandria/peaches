@@ -158,3 +158,36 @@ pch-two-pane,
 .show-all {
   margin-top: 8px;
 }
+
+.switcher {
+  margin-bottom: 8px;
+}
+
+.hero {
+  margin-bottom: 16px;
+}
+
+.week-note {
+  --pch-card-padding: 16px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+
+  p {
+    flex: 1;
+    min-width: 200px;
+    margin: 0;
+  }
+
+  .material-symbols-rounded {
+    margin-inline-end: 8px;
+    font-size: 20px;
+  }
+}
+
+.record {
+  color: var(--mat-sys-on-surface-variant);
+  font-variant-numeric: tabular-nums;
+}

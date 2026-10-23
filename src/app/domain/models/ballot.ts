@@ -9,7 +9,7 @@ import { rulesFromJson, rulesToJson, ScoringRules } from './scoring';
 
 /**
  * One member's vote on how the Crate scores: the 100-point budget split
- * across the categories, and the lineup rules they want. A member has at
+ * across the categories, and the plan rules they want. A member has at
  * most one ballot per Crate and can change it at any time; the Crate's rules
  * are the tally of its active members' ballots.
  */

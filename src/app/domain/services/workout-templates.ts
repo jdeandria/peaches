@@ -128,13 +128,15 @@ const MAX_DIFFICULTY = 3;
  * often than tricky ones, the template's kit where it has any), picked by `seed`, with a few sets each.
  * Reps, hold times and distances vary a little with the seed too. Loads
  * come from the last time the Peach did that exercise (`previous`), else
- * they're left for the Peach to set.
+ * they're left for the Peach to set. With `available` (a location's
+ * equipment), only the template's kit that is there is used.
  */
 export function templateWorkout(
   template: WorkoutTemplate,
   catalog: ExerciseCatalog,
   seed: number,
   previous: (exerciseId: string) => ExerciseLogEntry | null | undefined = () => null,
+  available: ReadonlySet<Equipment> | null = null,
 ): ExerciseLogEntry[] {
   const random = new SeededRandom(seed);
   const pick = <T>(items: readonly T[]): T => items[random.nextInt(items.length)];
@@ -146,8 +148,8 @@ export function templateWorkout(
     return items[items.length - 1];
   };
   // A template with kit uses it: bodyweight moves only when nothing else fits.
-  const usesKit = template.equipment.some(isLoadEquipment);
-  const kit = new Set(template.equipment);
+  const kit = new Set(template.equipment.filter((e) => available === null || available.has(e)));
+  const usesKit = [...kit].some(isLoadEquipment);
   const chosen = new Set<string>();
   const families = new Set<string>();
   const workout: ExerciseLogEntry[] = [];

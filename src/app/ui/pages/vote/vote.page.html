@@ -76,13 +76,14 @@
       Even split
     </button>
 
-    <pch-section title="Lineups" />
-    <p class="pch-body-medium muted lineup-intro">
-      Each week Peaches pledge amounts in a few categories, before seeing their opponent’s. Hitting
-      a pledge and beating your opponent in it earn extra. For each rule, the middle vote wins.
+    <pch-section title="Plans" />
+    <p class="pch-body-medium muted plan-intro">
+      Each week you commit to what your plan is worth, and your opponent sees the number as you
+      plan. Hit it and you earn a bonus; fall short and you pay for every point you miss. For each
+      rule, the middle vote wins.
     </p>
     <pch-list-card [pchStagger]="2">
-      @for (r of lineupRules(); track r.key) {
+      @for (r of planRules(); track r.key) {
         <div class="category">
           <div class="what">
             <span class="pch-title-medium">{{ r.label }}</span>

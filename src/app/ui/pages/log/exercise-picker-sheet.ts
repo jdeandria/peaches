@@ -18,6 +18,8 @@ import {
 } from '@angular/material/bottom-sheet';
 import { firstValueFrom } from 'rxjs';
 
+import { AppContainer } from '../../../application/app-container';
+import { isPerformableWith } from '../../../domain/exercises/exercise';
 import { ExerciseCatalog, searchRank } from '../../../domain/exercises/exercise-catalog';
 import {
   customExercise,
@@ -26,9 +28,14 @@ import {
   LogTrack,
   MAX_CUSTOM_NAME,
 } from '../../../domain/exercises/loggable';
+import { Equipment } from '../../../domain/exercises/taxonomy';
 import { DistanceKind } from '../../../domain/models/scoring';
 import { UnitSystem } from '../../../domain/models/training';
-import { ExerciseLogEntry, loggableFromEntry } from '../../../domain/models/workout-log';
+import {
+  ExerciseLogEntry,
+  loggableFromEntry,
+  WorkoutLog,
+} from '../../../domain/models/workout-log';
 import { Fmt } from '../../format';
 
 /** An exercise crate-mates have logged, and who. */
@@ -49,6 +56,43 @@ export interface ExercisePickerData {
   readonly units: UnitSystem;
   /** A fresh id for an exercise the Peach makes up. */
   readonly newId: () => string;
+  /** Where the workout is planned: the catalog lists what its equipment allows. */
+  readonly kit?: { readonly name: string; readonly equipment: ReadonlySet<Equipment> } | null;
+}
+
+/**
+ * Exercises crate-mates have logged in any of `me`'s Crates, with who logged
+ * them, for the picker.
+ */
+export async function crateExercisesFor(app: AppContainer, me: string): Promise<CrateExercise[]> {
+  const shared = (await app.loggingService.crateExercises(me)).filter((s) => s.peachId !== me);
+  const peaches = await app.peaches.getByIds(new Set(shared.map((s) => s.peachId)));
+  const names = new Map(peaches.map((p) => [p.id, p.displayName]));
+  const byExercise = new Map<string, { exercise: LoggableExercise; from: Set<string> }>();
+  for (const s of shared) {
+    const row = byExercise.get(s.exercise.id) ?? {
+      exercise: { ...s.exercise, cues: app.catalog.byId(s.exercise.id)?.cues ?? null },
+      from: new Set<string>(),
+    };
+    row.from.add(names.get(s.peachId) ?? 'a crate-mate');
+    byExercise.set(s.exercise.id, row);
+  }
+  return [...byExercise.values()]
+    .map(({ exercise, from }) => ({ exercise, from: Fmt.names([...from].sort()) }))
+    .sort((a, b) => (a.exercise.name < b.exercise.name ? -1 : 1));
+}
+
+/** The latest entry for each exercise in `logs` (newest first), skipping one log. */
+export function recentEntries(
+  logs: readonly WorkoutLog[],
+  excludingLogId: string | null = null,
+): ExerciseLogEntry[] {
+  const seen = new Map<string, ExerciseLogEntry>();
+  for (const log of logs) {
+    if (log.id === excludingLogId) continue;
+    for (const e of log.entries) if (!seen.has(e.exerciseId)) seen.set(e.exerciseId, e);
+  }
+  return [...seen.values()];
 }
 
 const PICKER_HEIGHT = 'min(88dvh, 860px)';
@@ -186,6 +230,19 @@ export function openExercisePicker(
             </button>
           }
         </label>
+        @if (data.kit; as kit) {
+          <button
+            type="button"
+            class="kit pch-label-large"
+            [attr.aria-pressed]="!everything()"
+            (click)="everything.set(!everything())"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">{{
+              everything() ? 'filter_alt_off' : 'filter_alt'
+            }}</span>
+            {{ everything() ? 'Showing every exercise' : 'What fits ' + kit.name }}
+          </button>
+        }
       </header>
       <div #results class="results">
         @for (group of groups(); track group.title) {
@@ -273,6 +330,28 @@ export function openExercisePicker(
     }
     .clear:focus-visible {
       outline: 2px solid var(--mat-sys-primary);
+    }
+    .kit {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      margin: 0 0 4px 8px;
+      padding: 0 12px 0 8px;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 8px;
+      background: none;
+      color: var(--mat-sys-on-surface-variant);
+      cursor: pointer;
+      font: inherit;
+    }
+    .kit[aria-pressed='true'] {
+      border-color: transparent;
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+    }
+    .kit .material-symbols-rounded {
+      font-size: 18px;
     }
     .search input::-webkit-search-cancel-button {
       display: none;
@@ -379,7 +458,9 @@ export function openExercisePicker(
 export class ExercisePickerSheet {
   private readonly ref =
     inject<MatBottomSheetRef<ExercisePickerSheet, LoggableExercise>>(MatBottomSheetRef);
-  private readonly data = inject<ExercisePickerData>(MAT_BOTTOM_SHEET_DATA);
+  protected readonly data = inject<ExercisePickerData>(MAT_BOTTOM_SHEET_DATA);
+  /** With a kit: list every exercise, not just what fits it. */
+  readonly everything = signal(false);
   private readonly injector = inject(Injector);
 
   protected readonly kinds = CREATE_KINDS;
@@ -414,9 +495,12 @@ export class ExercisePickerSheet {
       ),
     );
     const crate = rows(fromCrates, (c) => row(c.exercise, `From ${c.from}`));
+    const kit = this.everything() ? null : (this.data.kit?.equipment ?? null);
     // The catalog's search already matched (and ranked) these.
     const all = rows(
-      q ? catalog.search(q) : catalog.all.sort((a, b) => (a.name < b.name ? -1 : 1)),
+      (q ? catalog.search(q) : catalog.all.sort((a, b) => (a.name < b.name ? -1 : 1))).filter(
+        (e) => kit === null || isPerformableWith(e, kit),
+      ),
       (e) => row(loggableFromCatalog(e), Fmt.pattern(e.pattern)),
       false,
     );
@@ -428,7 +512,10 @@ export class ExercisePickerSheet {
     return [
       { title: 'Recent', rows: mine },
       { title: 'From your Crates', rows: crate.slice(0, LIMIT) },
-      { title: 'All exercises', rows: all.slice(0, LIMIT) },
+      {
+        title: this.data.kit && !this.everything() ? `Fits ${this.data.kit.name}` : 'All exercises',
+        rows: all.slice(0, LIMIT),
+      },
     ].filter((g) => g.rows.length > 0);
   });
 

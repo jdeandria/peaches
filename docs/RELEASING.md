@@ -105,7 +105,7 @@ sign-in working).
 There is no store release any more: merging to `main` deploys. Installed
 copies of the PWA download the new version in the background and show
 "A new version of Peaches is ready — Reload". Bump `version` in
-`package.json` for a user-visible release; it is shown on the Profile page.
+`package.json` for a user-visible release; it is shown on the You tab's Settings.
 
 ## Firebase (Auth + Firestore) in the app
 

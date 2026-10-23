@@ -2,8 +2,8 @@ import {
   CategoryWeights,
   DEFAULT_RULES,
   DEFAULT_WEIGHTS,
-  LINEUP_RULE_KEYS,
-  LineupRules,
+  PLAN_RULE_KEYS,
+  PlanRules,
   SCORING_CATEGORIES,
   ScoringCategory,
   ScoringRules,
@@ -13,19 +13,19 @@ import {
 /**
  * Combines members' ballots into a Crate's rules.
  *
- * Each lineup rule is the middle vote (the lower of the two middle votes
+ * Each plan rule is the middle vote (the lower of the two middle votes
  * when there is an even number), so one extreme ballot can't drag it
  * anywhere. Weights are the mean of the budget ballots (see `tally`).
  */
 export const BallotTally = {
   rules(ballots: readonly ScoringRules[]): ScoringRules {
     if (ballots.length === 0) return DEFAULT_RULES;
-    const lineup = {} as Record<keyof LineupRules, number>;
-    for (const key of LINEUP_RULE_KEYS) {
-      const votes = ballots.map((b) => b.lineup[key]).sort((a, b) => a - b);
-      lineup[key] = votes[Math.floor((votes.length - 1) / 2)];
+    const plan = {} as Record<keyof PlanRules, number>;
+    for (const key of PLAN_RULE_KEYS) {
+      const votes = ballots.map((b) => b.plan[key]).sort((a, b) => a - b);
+      plan[key] = votes[Math.floor((votes.length - 1) / 2)];
     }
-    return { weights: BallotTally.tally(ballots.map((b) => b.weights)), lineup };
+    return { weights: BallotTally.tally(ballots.map((b) => b.weights)), plan };
   },
 
   /**

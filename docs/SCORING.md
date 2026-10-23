@@ -3,15 +3,17 @@
 How a workout turns into fantasy points, and how a week's matchup is
 decided. The code is in `src/app/domain/services/` (`metric-extractor.ts`,
 `scoring-service.ts`, `ballot-tally.ts`, `plausibility.ts`), the
-categories and rules in `src/app/domain/models/scoring.ts`, lineups in
-`models/lineup.ts` and disputes in `models/dispute.ts`. The reasoning is in
-[DECISIONS.md](DECISIONS.md) #3, #18, #19, #23 and #24–#28.
+categories and rules in `src/app/domain/models/scoring.ts`, plans in
+`models/week-plan.ts` and `models/commitment.ts` (kept in step by
+`application/plan-service.ts`) and disputes in `models/dispute.ts`. The
+reasoning is in [DECISIONS.md](DECISIONS.md) #3, #18, #19, #23, #24–#28
+and #35.
 
 A week's score has three parts, and the matchup page shows each one per
 side:
 
 ```
-week score = workout points + pledge bonuses + battles
+week score = workout points + plan bonus (or − plan penalty)
 ```
 
 ## 1. A log becomes category totals
@@ -50,44 +52,54 @@ A category's **weight** is the points for one par. With 25 on run & walk, a
 5 km run is worth 25 and a 10 km run 50. Points are linear, so a week of
 logs scores the same summed per log or all at once.
 
-## 3. Lineups add pledges and battles
+## 3. Plans add a bonus, or a penalty
 
-Before each week starts, a Peach sets a **lineup**: up to `slots`
-categories, each with a **pledge** (an amount they commit to that week). It
-can change until the week starts (Monday 00:00 in the Crate's zone), when
-it locks. Crate-mates can't see it until then, so opponents plan around a
-guess (the lineup page shows each side's recent weekly averages as a hint).
-A lineup carries over to later weeks until it is changed. Lineups open a
-week before their week starts.
-
-For each pledge in category `c` with target `T`, where `mine` and `theirs`
-are each side's amount of `c` that week:
+A Peach plans their week: workouts on days, each a list of exercises with
+target sets. In each Crate they play in, what that plan is worth under the
+Season's weights is their **commitment** for the week's matchup:
 
 ```
-pledge bonus = mine ≥ T ? pledgeBonus% × weight(c) × T / par(c) : 0
-battle       = mine > theirs ? battlePars × weight(c)
-             : mine = theirs > 0 ? battlePars × weight(c) / 2
-             : 0
+planned points = points(the planned sets, in a session as long as planned)
 ```
 
-* A pledge pays only if it is hit, and pays in proportion to its size: a
-  bigger pledge is worth more but is easier to miss.
-* A battle is won by doing more of that category than the opponent,
-  whatever they pledged. If both pledge the same category, both battle in
-  it and only one can win; pledging a category the opponent neglects is an
-  easier battle. A bye has no battles.
+The planned sets score like logged ones (§1–2). A plan has no clock, so
+its session time is estimated: two minutes for each set without a time
+(the set and its rest), a timed set's time plus a minute's rest, and a
+distance's own time. Active minutes then come from that, as they would
+from the clock on the day. One plan counts in every Crate, each pricing it
+with its own weights.
+
+The commitment follows the plan until the week starts (Monday 00:00 in the
+Crate's zone), then **locks**. After that the Peach can still move and
+change workouts, but not what they committed to. Commitments open a week
+before their week (so: next week's, during this one) and are written by
+the Peach's own device whenever their plan changes, or on the next sync if
+a Season was scheduled after they planned. Crate-mates see each other's
+commitments as they change (only the number; plans stay private), so
+opponents plan against each other until the lock.
+
+With `committed` points and `earned` workout points that week:
+
+```
+plan = earned ≥ committed ?  bonus% × committed
+                           : −penalty% × (committed − earned)
+```
+
+* Without a plan (committed 0) there is no bonus and no penalty.
+* Planning bigger raises the bonus but makes it easier to miss, and every
+  point missed costs. During the week the live score shows the penalty
+  for what's still to do, as if the week ended now.
+* A bye scores its plan too; it just has no opponent.
 
 Worked example (weights: run & walk 25, weight moved 20, active minutes 20;
-rules: 3 slots, 50% bonus, one-par battles):
+rules: 25% bonus, 50% penalty). Workouts: 16.2 km, 8,400 kg and 195 min,
+so 81 + 33.6 + 86.67 = 201.27 points.
 
-| Pledge | Did | Opponent did | Pledge bonus | Battle |
-| --- | --- | --- | --- | --- |
-| Run & walk 15 km | 16.2 km | 9 km | hit: 50% × 75 = 37.5 | won: 25 |
-| Weight moved 10,000 kg | 8,400 kg | 12,000 kg | missed: 0 | lost: 0 |
-| Active minutes 180 | 195 min | 140 min | hit: 50% × 80 = 40 | won: 20 |
-
-Workout points 81 + 33.6 + 86.67 = 201.27, so the week is
-201.27 + 77.5 + 45 = 323.77.
+| Committed | Hit? | Plan | Week |
+| --- | --- | --- | --- |
+| 180 | yes | +25% × 180 = +45 | 246.27 |
+| 261.27 | 60 short | −50% × 60 = −30 | 171.27 |
+| 0 | no plan | 0 | 201.27 |
 
 ## 4. Crates vote on the rules
 
@@ -99,10 +111,10 @@ time:
   ballots, rounded with the largest-remainder method so they still add up
   to 100 (ties go to the earlier category). With no ballots, the defaults
   are 20 / 10 / 10 / 20 / 20 / 20.
-* **Lineup rules**: `slots` (0–6; 0 turns lineups off), `pledgeBonus`
-  (0–100%) and `battlePars` (0–3). Each is the **middle** vote (the lower of
-  the two middle votes when there is an even number), so one extreme
-  ballot can't drag it. With no ballots: 3 slots, 50%, 1 par.
+* **Plan rules**: `bonus` (0–100%) and `penalty` (0–100%). Each is the
+  **middle** vote (the lower of the two middle votes when there is an even
+  number), so one extreme ballot can't drag it. With no ballots: 25% bonus,
+  50% penalty, so missing costs more than hitting earns.
 
 When a Season is scheduled it copies the current rules into
 `season.rules`; every week of that Season scores with them, so changing a
@@ -113,7 +125,7 @@ vote never re-scores the past.
 A Round is one week (Monday to Monday in the Crate's time zone). Each side
 of a matchup scores the logs its Peach **shared with the Crate** and
 **started** in that week, less anything the Crate struck (§6), plus its
-lineup. The round stays open for `loggingGraceHours` after the week ends
+plan bonus or penalty (§3). The round stays open for `loggingGraceHours` after the week ends
 for late logs and dispute votes, then `closeRound` stores the result.
 Results are final: logging, editing or striking anything after that
 changes nothing.

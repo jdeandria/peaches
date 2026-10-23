@@ -1,10 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { MatButton, MatFabButton, MatIconButton } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 
-import { LocalDate, localDateOfLocal } from '../../../domain/core/local-date';
+import { addDays, LocalDate, localDateOfLocal, startOfWeek } from '../../../domain/core/local-date';
 import { canManage, Crate } from '../../../domain/models/crate';
 import { onWinningStreak, streak } from '../../../domain/models/score';
 import {
@@ -15,6 +23,7 @@ import {
   Round,
   RoundStatus,
   Season,
+  winnerId,
 } from '../../../domain/models/season';
 import { AppState } from '../../../state/app-state';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
@@ -31,7 +40,9 @@ import { Stagger } from '../../layout/stagger';
 import { StandingsRow, StandingsTable } from '../../layout/standings-table';
 import { StatusLabel } from '../../layout/status-label';
 import { TwoPane } from '../../layout/two-pane';
+import { CrateSwitcher, rememberCrate } from '../crates/crate-switcher';
 import { DisputeCard } from '../workout/dispute-card';
+import { MatchupHeroCard, MatchupListRow } from './matchup-card';
 import { NewSeasonDialog } from './new-season-dialog';
 
 /** A Season's week as shown in the Weeks list. */
@@ -73,6 +84,66 @@ export function roundViews(args: {
   });
 }
 
+/** What the "This week" section shows: my live matchup, or why there isn't one. */
+export type ThisWeek =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'matchup'; readonly matchup: Matchup }
+  | { readonly kind: 'note'; readonly text: string; readonly plan: boolean };
+
+/** Works out the "This week" section from the Season and my matchups in it. */
+export function thisWeek(args: {
+  season: Season | null | undefined;
+  matchups: readonly Matchup[] | undefined;
+  me: string | null;
+  canManage: boolean;
+  today: LocalDate;
+}): ThisWeek {
+  const { season, matchups, me, canManage, today } = args;
+  if (season === undefined) return { kind: 'loading' };
+  if (season === null) {
+    return {
+      kind: 'note',
+      text: `No Season yet, so no matchup this week. ${canManage ? 'Start one below.' : 'The owner can start one.'}`,
+      plan: false,
+    };
+  }
+  const playing = me !== null && season.participantIds.includes(me);
+  if (season.status === 'scheduled') {
+    const nextWeek = addDays(startOfWeek(today), 7);
+    const soon = season.startWeek <= nextWeek;
+    return {
+      kind: 'note',
+      text: `${season.name} starts ${Fmt.day(season.startWeek)}.${
+        playing && soon ? ' Plan your first week: your opponent sees what you commit to.' : ''
+      }`,
+      plan: playing && soon,
+    };
+  }
+  if (season.status !== 'active') {
+    return {
+      kind: 'note',
+      text: `${season.name} is over. ${canManage ? 'Start the next one below.' : 'The next one starts when the owner starts it.'}`,
+      plan: false,
+    };
+  }
+  if (!playing) {
+    return {
+      kind: 'note',
+      text: 'You joined after this Season started, so you play from the next one.',
+      plan: false,
+    };
+  }
+  if (matchups === undefined) return { kind: 'loading' };
+  const live = matchups.find((m) => m.status === 'inProgress' && involves(m, me!));
+  if (live) return { kind: 'matchup', matchup: live };
+  return { kind: 'note', text: 'No matchup is open right now.', plan: false };
+}
+
+/** Results shown in the Season view. */
+const RESULTS_SHOWN = 5;
+/** Coming-up matchups shown in the Season view. */
+const UPCOMING_SHOWN = 3;
+
 /** Exercises listed before "Show all": the most recently logged first. */
 const EXERCISES_SHOWN = 6;
 
@@ -85,9 +156,11 @@ const VIEWS: readonly ButtonGroupOption<CrateView>[] = [
 ];
 
 /**
- * A Crate: what needs you on top (the rules vote, the invite code, disputes
- * waiting for your vote), then one of three views: the Season (standings
- * and weeks), Activity (what members have been logging, and every exercise
+ * A Crate's stats, the Crates tab: a switcher between my Crates, this
+ * week's matchup (or why there isn't one), what needs you (the rules vote,
+ * the invite code, disputes waiting for your vote), then one of three
+ * views: the Season (standings, my record and results, what's coming and
+ * the weeks), Activity (what members have been logging, and every exercise
  * they've logged, tagged with who) or the Peaches in it. Manager actions
  * sit where they apply.
  */
@@ -103,6 +176,9 @@ const VIEWS: readonly ButtonGroupOption<CrateView>[] = [
     ListCard,
     ListRow,
     LoadingIndicator,
+    CrateSwitcher,
+    MatchupHeroCard,
+    MatchupListRow,
     MatButton,
     MatFabButton,
     MatIconButton,
@@ -153,6 +229,14 @@ export class CrateDetailPage {
     () => this.crateId(),
     (id, app) => app.crates.getById(id),
   );
+
+  constructor() {
+    // The Crates tab reopens the Crate last looked at.
+    effect(() => {
+      const c = this.crate.value();
+      if (c) rememberCrate(c.id);
+    });
+  }
 
   /** Active members with their profiles, owner first. */
   protected readonly members = this.state.query(
@@ -303,6 +387,55 @@ export class CrateDetailPage {
       pointsFor: s.pointsFor,
       pointsAgainst: s.pointsAgainst,
     }));
+  });
+
+  protected readonly thisWeek = computed(() =>
+    thisWeek({
+      season: this.season(),
+      matchups: this.data()?.matchups,
+      me: this.me(),
+      canManage: this.canManage(),
+      today: this.state.today(),
+    }),
+  );
+
+  /** My matchups this Season, in week order. */
+  private readonly myMatchups = computed(() => {
+    const data = this.data();
+    const me = this.me();
+    if (!data || me === null) return [];
+    const index = new Map(data.rounds.map((r) => [r.id, r.index]));
+    return data.matchups
+      .filter((m) => involves(m, me))
+      .sort((a, b) => (index.get(a.roundId) ?? 0) - (index.get(b.roundId) ?? 0));
+  });
+
+  /** Finished weeks, the latest first. */
+  protected readonly results = computed(() =>
+    this.myMatchups()
+      .filter((m) => m.status === 'complete')
+      .reverse()
+      .slice(0, RESULTS_SHOWN),
+  );
+
+  protected readonly comingUp = computed(() =>
+    this.myMatchups()
+      .filter((m) => m.status === 'scheduled')
+      .slice(0, UPCOMING_SHOWN),
+  );
+
+  /** "3-1", or "3-1-1" with ties; byes don't count. */
+  protected readonly record = computed(() => {
+    const me = this.me();
+    let [w, l, t] = [0, 0, 0];
+    for (const m of this.myMatchups()) {
+      if (m.status !== 'complete' || m.result === null || isBye(m)) continue;
+      const winner = winnerId(m);
+      if (winner === null) t++;
+      else if (winner === me) w++;
+      else l++;
+    }
+    return `${w}-${l}${t > 0 ? `-${t}` : ''}`;
   });
 
   protected readonly rounds = computed(() => {

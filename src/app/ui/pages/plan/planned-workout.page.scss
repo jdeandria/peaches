@@ -1,0 +1,193 @@
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: var(--pch-radius-large);
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+.name {
+  width: 100%;
+}
+
+.label {
+  margin: 8px 4px 8px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.days {
+  display: block;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--pch-radius-small, 8px);
+  background: none;
+  color: var(--mat-sys-on-surface-variant);
+  text-decoration: none;
+  cursor: pointer;
+  font: var(--mat-sys-label-large);
+  transition: border-radius var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast);
+
+  &:hover,
+  &:focus-visible {
+    border-radius: 20px;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+  }
+
+  &[aria-pressed='true'] {
+    border-color: transparent;
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+
+  &.ghost {
+    border-style: dashed;
+  }
+
+  .material-symbols-rounded {
+    font-size: 18px;
+  }
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 12px 16px;
+
+  &.clickable {
+    cursor: pointer;
+  }
+
+  &.clickable:hover {
+    background: color-mix(
+      in srgb,
+      var(--mat-sys-on-surface) calc(var(--mat-sys-hover-state-layer-opacity) * 100%),
+      transparent
+    );
+  }
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.action.filled {
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+}
+
+.add {
+  width: 100%;
+  margin: 16px 0 8px;
+
+  .material-symbols-rounded {
+    margin-inline-end: 8px;
+    font-size: 20px;
+  }
+}
+
+.worth {
+  margin: 8px 4px 24px;
+  color: var(--mat-sys-on-surface-variant);
+
+  strong {
+    color: var(--mat-sys-primary);
+  }
+}
+
+.routine {
+  padding: 0 8px 0 0;
+}
+
+.routine-use {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 8px 12px 16px;
+  border: 0;
+  border-radius: var(--pch-radius-medium);
+  background: none;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(
+      in srgb,
+      var(--mat-sys-on-surface) calc(var(--mat-sys-hover-state-layer-opacity) * 100%),
+      transparent
+    );
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: -2px;
+  }
+}
+
+.kit {
+  margin-inline-start: 6px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  vertical-align: 2px;
+}
+
+.bottom-actions {
+  display: flex;
+}
+
+.submit {
+  flex: 1;
+
+  .material-symbols-rounded {
+    margin-inline-end: 8px;
+    font-size: 20px;
+  }
+}
+
+// Only where swiping is how you'd do it.
+.swipe-hint {
+  display: none;
+  margin: -4px 4px 8px;
+
+  @media (pointer: coarse) {
+    display: block;
+  }
+}
