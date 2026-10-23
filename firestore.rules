@@ -33,8 +33,11 @@ service cloud.firestore {
       allow delete: if false;
 
       match /memberships/{peachId} {
-        // Read through the collection-group rule below. Join yourself as a plain member, or manage others as owner/admin.
+        // Read through the collection-group rule below. Join yourself as a plain member
+        // (or as owner of the Crate you just created), or manage others as owner/admin.
         allow create: if isSelf(peachId) && request.resource.data.role == 'member'
+                      || isSelf(peachId) && request.resource.data.role == 'owner'
+                         && get(/databases/$(database)/documents/crates/$(crateId)).data.ownerPeachId == request.auth.uid
                       || canManage(crateId);
         allow update: if isSelf(peachId) && request.resource.data.role == resource.data.role
                       || canManage(crateId);

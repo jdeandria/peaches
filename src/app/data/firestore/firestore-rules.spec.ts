@@ -27,6 +27,8 @@ import {
 } from 'firebase/firestore';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { CrateService } from '../../application/crate-service';
+import { SequentialIdGenerator } from '../../domain/core/ids';
 import { sharedExercisesOf, sharedExerciseToJson } from '../../domain/models/crate-exercise';
 import { routineFromJson, routineToJson } from '../../domain/models/routine';
 import { categoryWeights, DEFAULT_RULES, rulesToJson } from '../../domain/models/scoring';
@@ -190,6 +192,32 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     expect(await new FirestoreWorkoutLogRepository(client('b')).forPeach('b')).toEqual([]);
     // Signed out, nothing.
     await expect(new FirestoreCrateRepository(client(null)).membershipsFor('b')).rejects.toThrow();
+  });
+
+  it('a Peach creates a Crate and becomes its owner, but can’t make themselves owner of another', async () => {
+    const service = new CrateService(
+      new FirestoreCrateRepository(client('c')),
+      new SequentialIdGenerator('crate'),
+    );
+    const crate = await service.createCrate({ ownerPeachId: 'c', name: 'Mine', now });
+    const mine = await getDoc(
+      doc(client('c'), COLLECTIONS.crates, crate.id, COLLECTIONS.memberships, 'c'),
+    );
+    expect(mine.data()?.['role']).toBe('owner');
+    // Not in someone else's Crate, as a newcomer or as a member.
+    const owner = (peachId: string) => ({
+      crateId: 'c1',
+      peachId,
+      role: 'owner',
+      status: 'active',
+      joinedAt: now.toISOString(),
+    });
+    await expect(
+      setDoc(doc(client('c'), COLLECTIONS.crates, 'c1', COLLECTIONS.memberships, 'c'), owner('c')),
+    ).rejects.toThrow();
+    await expect(
+      setDoc(doc(client('b'), COLLECTIONS.crates, 'c1', COLLECTIONS.memberships, 'b'), owner('b')),
+    ).rejects.toThrow();
   });
 
   it('a Peach’s own logs, drafts included, are private', async () => {
