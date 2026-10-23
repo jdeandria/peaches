@@ -89,46 +89,58 @@
             >{{ progress().done }} of {{ progress().total }} sets done</span
           >
         </pch-section>
+        <p class="swipe-hint pch-body-small muted">
+          Swipe an exercise right to edit, left to remove.
+        </p>
         <pch-list-card [pchStagger]="2">
           @for (p of planned(); track p.entry.exerciseId) {
-            <!-- The row is a larger mouse target; keyboard and screen readers use its buttons. -->
-            <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
-            <div class="item clickable" (click)="rowClick($event, p.entry)">
-              <div class="text">
-                <span class="pch-title-medium">{{ p.entry.exerciseName }}</span>
-                <span class="pch-body-medium muted">{{ p.summary }}</span>
+            <pch-swipe-row
+              editable
+              removable
+              (edit)="editEntry(p.entry)"
+              (remove)="removeEntry(p.entry)"
+            >
+              <!-- The row is a larger mouse target; keyboard and screen readers use its buttons. -->
+              <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+              <div class="item clickable" (click)="rowClick($event, p.entry)">
+                <div class="text">
+                  <span class="pch-title-medium">{{ p.entry.exerciseName }}</span>
+                  <span class="pch-body-medium muted">{{ p.summary }}</span>
+                </div>
+                <span
+                  class="done-count pch-label-large"
+                  [class.complete]="p.complete"
+                  [attr.aria-label]="p.done + ' of ' + p.entry.sets.length + ' sets done'"
+                >
+                  @if (p.complete) {
+                    <span class="material-symbols-rounded" aria-hidden="true">check</span>
+                  } @else {
+                    {{ p.done }}/{{ p.entry.sets.length }}
+                  }
+                </span>
+                <span class="pch-swipe-actions">
+                  <button
+                    matIconButton
+                    type="button"
+                    matTooltip="Remove"
+                    [attr.aria-label]="'Remove ' + p.entry.exerciseName"
+                    (click)="removeEntry(p.entry)"
+                  >
+                    <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                  </button>
+                  <button
+                    matIconButton
+                    type="button"
+                    class="action filled"
+                    matTooltip="Edit sets"
+                    [attr.aria-label]="'Edit sets: ' + p.entry.exerciseName"
+                    (click)="editEntry(p.entry)"
+                  >
+                    <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+                  </button>
+                </span>
               </div>
-              <span
-                class="done-count pch-label-large"
-                [class.complete]="p.complete"
-                [attr.aria-label]="p.done + ' of ' + p.entry.sets.length + ' sets done'"
-              >
-                @if (p.complete) {
-                  <span class="material-symbols-rounded" aria-hidden="true">check</span>
-                } @else {
-                  {{ p.done }}/{{ p.entry.sets.length }}
-                }
-              </span>
-              <button
-                matIconButton
-                type="button"
-                matTooltip="Remove"
-                [attr.aria-label]="'Remove ' + p.entry.exerciseName"
-                (click)="removeEntry(p.entry)"
-              >
-                <span class="material-symbols-rounded" aria-hidden="true">delete</span>
-              </button>
-              <button
-                matIconButton
-                type="button"
-                class="action filled"
-                matTooltip="Edit sets"
-                [attr.aria-label]="'Edit sets: ' + p.entry.exerciseName"
-                (click)="editEntry(p.entry)"
-              >
-                <span class="material-symbols-rounded" aria-hidden="true">edit</span>
-              </button>
-            </div>
+            </pch-swipe-row>
           }
         </pch-list-card>
       } @else {
@@ -146,21 +158,25 @@
           <pch-section title="Your routines" />
           <pch-list-card [pchStagger]="2">
             @for (r of routines(); track r.routine.id) {
-              <div class="item routine">
-                <button type="button" class="routine-use" (click)="useRoutine(r.routine)">
-                  <span class="pch-title-medium">{{ r.routine.name }}</span>
-                  <span class="pch-body-medium muted">{{ r.summary }}</span>
-                </button>
-                <button
-                  matIconButton
-                  type="button"
-                  matTooltip="Delete routine"
-                  [attr.aria-label]="'Delete routine ' + r.routine.name"
-                  (click)="deleteRoutine(r.routine)"
-                >
-                  <span class="material-symbols-rounded" aria-hidden="true">delete</span>
-                </button>
-              </div>
+              <pch-swipe-row removable removeLabel="Delete" (remove)="deleteRoutine(r.routine)">
+                <div class="item routine">
+                  <button type="button" class="routine-use" (click)="useRoutine(r.routine)">
+                    <span class="pch-title-medium">{{ r.routine.name }}</span>
+                    <span class="pch-body-medium muted">{{ r.summary }}</span>
+                  </button>
+                  <span class="pch-swipe-actions">
+                    <button
+                      matIconButton
+                      type="button"
+                      matTooltip="Delete routine"
+                      [attr.aria-label]="'Delete routine ' + r.routine.name"
+                      (click)="deleteRoutine(r.routine)"
+                    >
+                      <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                    </button>
+                  </span>
+                </div>
+              </pch-swipe-row>
             }
           </pch-list-card>
         }
@@ -194,35 +210,47 @@
       }
     } @else if (entries().length > 0) {
       <pch-section title="Exercises" />
+      <p class="swipe-hint pch-body-small muted">
+        Swipe an exercise right to edit, left to remove.
+      </p>
       <pch-list-card [pchStagger]="2">
         @for (v of entries(); track v.entry.exerciseId) {
-          <!-- The row is a larger mouse target; keyboard and screen readers use its buttons. -->
-          <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
-          <div class="item clickable" (click)="rowClick($event, v.entry)">
-            <div class="text">
-              <span class="pch-title-medium">{{ v.entry.exerciseName }}</span>
-              <span class="pch-body-medium muted">{{ v.summary }}</span>
+          <pch-swipe-row
+            editable
+            removable
+            (edit)="editEntry(v.entry)"
+            (remove)="removeEntry(v.entry)"
+          >
+            <!-- The row is a larger mouse target; keyboard and screen readers use its buttons. -->
+            <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+            <div class="item clickable" (click)="rowClick($event, v.entry)">
+              <div class="text">
+                <span class="pch-title-medium">{{ v.entry.exerciseName }}</span>
+                <span class="pch-body-medium muted">{{ v.summary }}</span>
+              </div>
+              <span class="pch-swipe-actions">
+                <button
+                  matIconButton
+                  type="button"
+                  matTooltip="Remove"
+                  [attr.aria-label]="'Remove ' + v.entry.exerciseName"
+                  (click)="removeEntry(v.entry)"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                </button>
+                <button
+                  matIconButton
+                  type="button"
+                  class="action filled"
+                  matTooltip="Edit sets"
+                  [attr.aria-label]="'Edit sets: ' + v.entry.exerciseName"
+                  (click)="editEntry(v.entry)"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+                </button>
+              </span>
             </div>
-            <button
-              matIconButton
-              type="button"
-              matTooltip="Remove"
-              [attr.aria-label]="'Remove ' + v.entry.exerciseName"
-              (click)="removeEntry(v.entry)"
-            >
-              <span class="material-symbols-rounded" aria-hidden="true">delete</span>
-            </button>
-            <button
-              matIconButton
-              type="button"
-              class="action filled"
-              matTooltip="Edit sets"
-              [attr.aria-label]="'Edit sets: ' + v.entry.exerciseName"
-              (click)="editEntry(v.entry)"
-            >
-              <span class="material-symbols-rounded" aria-hidden="true">edit</span>
-            </button>
-          </div>
+          </pch-swipe-row>
         }
       </pch-list-card>
     }

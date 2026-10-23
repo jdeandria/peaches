@@ -50,6 +50,7 @@ import { ListCard } from '../../layout/list-card';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
+import { SwipeRow } from '../../layout/swipe-row';
 import { DisputeCard } from '../workout/dispute-card';
 import { CrateExercise, openExercisePicker } from './exercise-picker-sheet';
 import { LogDetailsData, LogDetailsDialog, LogDetailsResult } from './log-details-dialog';
@@ -95,6 +96,7 @@ interface PlannedView extends EntryView {
     Section,
     SessionRunner,
     Stagger,
+    SwipeRow,
   ],
   templateUrl: './log.page.html',
   styleUrl: './log.page.scss',
@@ -430,13 +432,14 @@ export class LogPage {
     if (!log || !this.mine()) return;
     const logged = entryFor(log, entry.exerciseId);
     const planned = plannedFor(log, entry.exerciseId);
+    const at = log.plan.findIndex((e) => e.exerciseId === entry.exerciseId);
     const removed = await this.state.run((app) =>
       app.loggingService.removeEntry(log.id, entry.exerciseId),
     );
     if (!removed) return;
     this.state.toast(`Removed ${entry.exerciseName}.`, () => {
       void this.state.run(async (app) => {
-        if (planned) await app.loggingService.planExercise(log.id, planned);
+        if (planned) await app.loggingService.planExercise(log.id, planned, at);
         if (logged) await app.loggingService.recordEntry(log.id, logged);
       });
     });

@@ -382,6 +382,35 @@ describe('LogPage', () => {
     expect(text(overlay().querySelector('h2'))).toBe('Bodyweight Squat');
   });
 
+  it('swiping a planned exercise left removes it, and Undo puts it back in place', async () => {
+    const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
+    const { f, el } = await render();
+    el.querySelectorAll<HTMLButtonElement>('.routine-use:not(.template-use)')[0].click();
+    await stable(f);
+    const names = () => Array.from(el.querySelectorAll('.item .pch-title-medium')).map(text);
+    const before = names();
+    const content = el.querySelectorAll<HTMLElement>('pch-swipe-row .content')[1];
+    let t = 0;
+    const fire = (type: string, x: number) => {
+      const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: 10 });
+      Object.defineProperties(e, {
+        pointerId: { value: 1 },
+        pointerType: { value: 'touch' },
+        timeStamp: { value: (t += 16) },
+      });
+      content.dispatchEvent(e);
+    };
+    fire('pointerdown', 300);
+    for (let x = 280; x >= 100; x -= 20) fire('pointermove', x);
+    fire('pointerup', 100);
+    await settle(400);
+    await stable(f);
+    expect(names()).toEqual(before.filter((_, i) => i !== 1));
+    toast.mock.calls.find(([m]) => m === `Removed ${before[1]}.`)![1]!();
+    await stable(f);
+    expect(names()).toEqual(before);
+  });
+
   it('makes up an exercise on the spot', async () => {
     const { f, el } = await render();
     await pick(f, el, 'Rucking');

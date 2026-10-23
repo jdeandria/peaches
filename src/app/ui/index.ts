@@ -14,6 +14,7 @@ export * from './layout/status-label';
 export * from './layout/card';
 export * from './layout/list-card';
 export * from './layout/list-row';
+export * from './layout/swipe-row';
 export * from './layout/empty-state';
 export * from './layout/two-pane';
 export * from './layout/date-badge';

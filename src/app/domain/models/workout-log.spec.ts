@@ -140,5 +140,8 @@ describe('a session plan', () => {
     const changed = upsertPlanned(planned, squat(8, 8, 8));
     expect(changed.plan.map((e) => e.sets.length)).toEqual([3, 1]);
     expect(removePlanned(changed, 'squat').plan).toEqual([plank]);
+    // Put back where it was, as Undo does.
+    const back = upsertPlanned(removePlanned(planned, 'squat'), planned.plan[0], 0);
+    expect(back.plan.map((e) => e.exerciseId)).toEqual(['squat', 'plank']);
   });
 });

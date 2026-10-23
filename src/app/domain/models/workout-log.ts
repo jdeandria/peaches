@@ -279,12 +279,16 @@ export function planProgress(log: WorkoutLog): { done: number; total: number } {
   return { done, total };
 }
 
-/** Adds an exercise to the plan, or replaces its target sets. */
-export function upsertPlanned(log: WorkoutLog, planned: ExerciseLogEntry): WorkoutLog {
+/**
+ * Adds an exercise to the plan (at the end, or at `at` to put one back
+ * where it was), or replaces its target sets where it is.
+ */
+export function upsertPlanned(log: WorkoutLog, planned: ExerciseLogEntry, at?: number): WorkoutLog {
   const i = log.plan.findIndex((e) => e.exerciseId === planned.exerciseId);
   const plan = [...log.plan];
-  if (i < 0) plan.push(planned);
-  else plan[i] = planned;
+  if (i >= 0) plan[i] = planned;
+  else if (at === undefined) plan.push(planned);
+  else plan.splice(Math.max(0, Math.min(at, plan.length)), 0, planned);
   return { ...log, plan };
 }
 

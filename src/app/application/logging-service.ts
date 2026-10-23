@@ -104,12 +104,15 @@ export class LoggingService {
     return this.update(logId, (log) => upsertEntry(log, entry));
   }
 
-  /** Plans an exercise for the session, or changes its target sets. */
-  async planExercise(logId: string, planned: ExerciseLogEntry): Promise<WorkoutLog> {
+  /**
+   * Plans an exercise for the session (at the end, or at `at`: putting one
+   * back where it was), or changes its target sets.
+   */
+  async planExercise(logId: string, planned: ExerciseLogEntry, at?: number): Promise<WorkoutLog> {
     const problem = implausibility(planned);
     if (problem) throw new DomainError(problem);
     if (planned.sets.length === 0) throw new DomainError('Plan at least one set.');
-    return this.updateDraft(logId, (log) => upsertPlanned(log, planned));
+    return this.updateDraft(logId, (log) => upsertPlanned(log, planned, at));
   }
 
   /** Plans these exercises after the ones already planned (a routine, say), skipping repeats. */
@@ -117,7 +120,7 @@ export class LoggingService {
     return this.updateDraft(logId, (log) =>
       exercises
         .filter((e) => e.sets.length > 0 && !plannedFor(log, e.exerciseId))
-        .reduce(upsertPlanned, log),
+        .reduce((plan, e) => upsertPlanned(plan, e), log),
     );
   }
 

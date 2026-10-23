@@ -159,6 +159,24 @@ content = headline (body-large). Slots: `[rowLeading]` (avatar/icon),
 </pch-list-card>
 ```
 
+### `pch-swipe-row` — `SwipeRow`
+
+Wrap a list row to make it swipe: inputs `editable` (swipe right, output
+`edit`) and `removable` (swipe left, output `remove`), `editLabel` /
+`removeLabel` ("Edit" / "Remove"). The row follows the finger over a tinted
+layer naming the action; past 35% of its width (or on a quick flick) it acts
+on release, else it springs back. Removing slides the row away first, so
+pair it with an Undo. Vertical drags still scroll. Keep a button per action
+in the row and wrap them in `.pch-swipe-actions`: hidden on touch screens
+until a keyboard or screen reader focuses them. CSS var `--pch-swipe-surface`
+(the row's background, default the elevated card colour).
+
+```html
+<pch-swipe-row editable removable (edit)="edit(e)" (remove)="remove(e)">
+  <div class="item">… <span class="pch-swipe-actions"><button …>…</button></span></div>
+</pch-swipe-row>
+```
+
 ### `pch-empty-state` — `EmptyState`
 
 Inputs: `icon: string` (Material Symbols name, required), `title: string`

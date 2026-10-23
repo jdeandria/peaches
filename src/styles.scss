@@ -32,3 +32,17 @@ html {
   max-height: none;
   overflow: hidden;
 }
+
+// A swipeable row's buttons (pch-swipe-row): on touch screens the swipe is
+// the control, so they stay out of sight until a keyboard or screen reader
+// reaches them.
+@media (pointer: coarse) {
+  .pch-swipe-actions:not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

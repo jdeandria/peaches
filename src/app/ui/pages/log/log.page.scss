@@ -288,3 +288,13 @@
   color: var(--mat-sys-on-secondary-container);
   vertical-align: 2px;
 }
+
+// Only where swiping is how you'd do it.
+.swipe-hint {
+  display: none;
+  margin: -4px 4px 8px;
+
+  @media (pointer: coarse) {
+    display: block;
+  }
+}

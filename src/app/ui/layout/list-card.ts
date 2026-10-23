@@ -17,6 +17,8 @@ import { Card, CardVariant } from './card';
     }
     .pch-list-card__card {
       --pch-card-padding: 4px 0;
+      /* Rows that swipe stay inside the rounded corners. */
+      overflow: hidden;
     }
     .pch-list-card__card > * {
       position: relative;
