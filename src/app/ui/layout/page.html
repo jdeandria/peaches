@@ -1,4 +1,4 @@
-<header class="toolbar">
+<header class="toolbar" [class.flush]="!showBack()" [class.collapsed]="collapsed()">
   <div class="column toolbar-row" [class.with-back]="showBack()">
     @if (showBack()) {
       <button mat-icon-button type="button" aria-label="Back" matTooltip="Back" (click)="back()">
@@ -12,24 +12,26 @@
         }}</span>
       }
     </div>
-    <ng-content select="[pageActions]" />
-    @if (refreshable()) {
-      <button
-        mat-icon-button
-        type="button"
-        aria-label="Refresh"
-        matTooltip="Refresh"
-        [disabled]="refreshing()"
-        [attr.aria-busy]="refreshing()"
-        (click)="refresh.emit()"
-      >
-        <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
-      </button>
-    }
+    <div #actions class="actions">
+      <ng-content select="[pageActions]" />
+      @if (refreshable()) {
+        <button
+          mat-icon-button
+          type="button"
+          aria-label="Refresh"
+          matTooltip="Refresh"
+          [disabled]="refreshing()"
+          [attr.aria-busy]="refreshing()"
+          (click)="refresh.emit()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
+        </button>
+      }
+    </div>
   </div>
 </header>
 
-<div class="column header">
+<div class="column header" [class.flush]="!showBack()">
   <h1 #headline class="pch-headline-medium">{{ title() }}</h1>
   @if (subtitle()) {
     <p class="subtitle pch-body-large">{{ subtitle() }}</p>

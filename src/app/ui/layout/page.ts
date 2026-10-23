@@ -23,7 +23,8 @@ import { MatTooltip } from '@angular/material/tooltip';
  * - A sticky toolbar whose back button, title and actions sit in the same
  *   centred column as the content.
  * - A large headline (and optional subtitle) that scrolls away; the toolbar
- *   title fades in once it has.
+ *   title fades in once it has. Without a back button the headline sits in
+ *   the toolbar's row, beside the actions, so a tab's content starts high.
  * - Content projected into a column capped at `maxWidth`, with the M3
  *   margin for the window size class (16px compact, 24px otherwise).
  * - Slots: `[pageActions]` (toolbar), `[pageFab]` (floating action button),
@@ -60,17 +61,33 @@ export class Page {
 
   protected readonly collapsed = signal(false);
   private readonly headline = viewChild.required<ElementRef<HTMLElement>>('headline');
+  private readonly actions = viewChild.required<ElementRef<HTMLElement>>('actions');
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly location = inject(Location);
   private readonly router = inject(Router);
 
   constructor() {
     const destroyRef = inject(DestroyRef);
     afterNextRender(() => {
+      // Room for the actions beside a headline that shares their row.
+      if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(([entry]) =>
+          this.host.nativeElement.style.setProperty(
+            '--pch-actions-width',
+            `${entry.contentRect.width}px`,
+          ),
+        );
+        ro.observe(this.actions().nativeElement);
+        destroyRef.onDestroy(() => ro.disconnect());
+      }
       if (typeof IntersectionObserver === 'undefined') return;
-      // Collapsed once the headline has scrolled under the 64px toolbar.
+      // Collapsed once the headline has scrolled under the 64px toolbar, or,
+      // when it starts in the toolbar's row, off the top.
+      const top = this.showBack() ? 64 : 0;
       const io = new IntersectionObserver(
-        ([entry]) => this.collapsed.set(!entry.isIntersecting && entry.boundingClientRect.top < 64),
-        { rootMargin: '-64px 0px 0px 0px' },
+        ([entry]) =>
+          this.collapsed.set(!entry.isIntersecting && entry.boundingClientRect.top < top),
+        { rootMargin: `-${top}px 0px 0px 0px` },
       );
       io.observe(this.headline().nativeElement);
       destroyRef.onDestroy(() => io.disconnect());

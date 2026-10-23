@@ -33,6 +33,22 @@
     padding-inline-start: calc(var(--pch-gutter) - 12px);
   }
 }
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+// Without a back button the headline shares the toolbar's row, beside the
+// actions; the toolbar takes its background (and the small title) once the
+// headline has scrolled away.
+.toolbar.flush:not(.collapsed) {
+  background: transparent;
+}
+.header.flush {
+  margin-top: -64px;
+  padding-top: 14px;
+  padding-inline-end: calc(var(--pch-gutter) + var(--pch-actions-width, 0px));
+}
 .toolbar-title {
   flex: 1;
   min-width: 0;

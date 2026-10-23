@@ -76,6 +76,11 @@ Slots: default (page content), `[pageActions]` (toolbar, use `mat-icon-button`s
 with `aria-label`), `[pageFab]` (fixed bottom-end; use `mat-fab extended`),
 `[pageBottomBar]` (sticky bar on surface-container, constrained to the column).
 
+Without `showBack` (the tabs), the headline sits in the toolbar's row beside
+the actions, so content starts high; the toolbar takes its background and the
+small title once the headline scrolls off. With `showBack`, the back button
+and actions get their own row above the headline.
+
 ```html
 <pch-page
   title="Crate"
