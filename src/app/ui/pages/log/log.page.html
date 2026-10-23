@@ -39,35 +39,20 @@
         <span class="material-symbols-rounded" aria-hidden="true">delete</span>
       </button>
     }
-    <div class="clock" [class.running]="draft() && started()" [pchStagger]="0">
-      <span class="material-symbols-rounded" aria-hidden="true">timer</span>
-      <span class="pch-display-small time" [attr.aria-label]="'Session time ' + clock()">{{
-        clock()
-      }}</span>
-      <span class="pch-body-small hint">{{ clockHint() }}</span>
-      @if (!draft()) {
-        <button matButton type="button" class="edit-details" (click)="editDetails()">
-          <span class="material-symbols-rounded" aria-hidden="true">edit_calendar</span>
-          Edit details
-        </button>
-      }
-    </div>
-
-    @if (pledges().length > 0) {
-      <h2 id="pledges-caption" class="caption pch-label-large" [pchStagger]="0">
-        Your pledges this week
-      </h2>
-      <ul class="pledges" [pchStagger]="0" aria-labelledby="pledges-caption">
-        @for (p of pledges(); track p.key) {
-          <li class="pledge" [class.hit]="p.hit">
-            <span class="material-symbols-rounded" aria-hidden="true">{{
-              p.hit ? 'check_circle' : p.icon
-            }}</span>
-            <span class="pch-label-large">{{ p.label }}</span>
-            <span class="pch-body-small">{{ p.progress }}{{ p.crate ? ' · ' + p.crate : '' }}</span>
-          </li>
+    @if (!draft() || started()) {
+      <div class="clock" [class.running]="draft() && started()" [pchStagger]="0">
+        <span class="material-symbols-rounded" aria-hidden="true">timer</span>
+        <span class="pch-display-small time" [attr.aria-label]="'Session time ' + clock()">{{
+          clock()
+        }}</span>
+        <span class="pch-body-small hint">{{ clockHint() }}</span>
+        @if (!draft()) {
+          <button matButton type="button" class="edit-details" (click)="editDetails()">
+            <span class="material-symbols-rounded" aria-hidden="true">edit_calendar</span>
+            Edit details
+          </button>
         }
-      </ul>
+      </div>
     }
 
     @if (totals().length > 0) {
@@ -156,16 +141,17 @@
           }
         </pch-list-card>
       } @else {
-        <pch-card variant="outlined" class="start" [pchStagger]="1">
-          <span class="peach" aria-hidden="true">🍑</span>
-          <div>
-            <h2 class="pch-title-large">What are you doing?</h2>
-            <p class="pch-body-medium muted">
-              Plan your sets, then tick them off one at a time.
-              {{ inCrates() ? 'It scores in every Crate you’re in.' : '' }}
-            </p>
-          </div>
-        </pch-card>
+        <pch-section title="Build your own" [top]="8" />
+        <button
+          matButton="filled"
+          type="button"
+          class="add add-first"
+          [pchStagger]="1"
+          (click)="addExercise()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">add</span>
+          Add exercise
+        </button>
         @if (routines().length > 0) {
           <pch-section title="Your routines" />
           <pch-list-card [pchStagger]="2">
@@ -192,7 +178,7 @@
             }
           </pch-list-card>
         }
-        <pch-section title="Or try one of these" />
+        <pch-section title="Templates" />
         <pch-list-card [pchStagger]="3">
           @for (t of templates(); track t.template.id) {
             <div class="item routine">
@@ -267,10 +253,12 @@
       </pch-list-card>
     }
 
-    <button matButton="tonal" type="button" class="add" (click)="addExercise()">
-      <span class="material-symbols-rounded" aria-hidden="true">add</span>
-      Add exercise
-    </button>
+    @if (!draft() || planned().length > 0) {
+      <button matButton="tonal" type="button" class="add" (click)="addExercise()">
+        <span class="material-symbols-rounded" aria-hidden="true">add</span>
+        Add exercise
+      </button>
+    }
 
     @if (disputes().length > 0) {
       <pch-section title="Disputed" />

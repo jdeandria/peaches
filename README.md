@@ -49,7 +49,7 @@ npm start                    # http://localhost:4200, seeded demo
 ```
 
 The app starts in demo mode with a seeded Crate in the third week of a
-Season, so there is a matchup to win on the Today tab straight away. The
+Season, so there is a matchup to win on the Compete tab straight away. The
 demo runs entirely in the browser; nothing is saved between visits. Add
 `?demo=signed-out` to the URL to start on the sign-in screen.
 
@@ -92,10 +92,11 @@ src/environments/ demo (default), firebase and emulator build configurations
 src/testing/     the lifecycle suite shared by both backends, TestBed helpers
 scripts/         theme palette generator, icon font subsetter
 e2e/             Playwright journeys
-docs/            architecture, scoring, decisions, releasing
+docs/            architecture, user flow, scoring, decisions, releasing
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the data model,
+[docs/FLOW.md](docs/FLOW.md) for the tabs and the paths through them,
 [docs/SCORING.md](docs/SCORING.md) for how workouts become points,
 [docs/DECISIONS.md](docs/DECISIONS.md) for product
 decisions, and [docs/RELEASING.md](docs/RELEASING.md) for the CI/CD

@@ -1,0 +1,201 @@
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
+}
+
+.workout {
+  --pch-card-padding: 24px;
+  --pch-card-radius: var(--pch-radius-extra-large);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+
+  h2,
+  p {
+    margin: 0;
+  }
+}
+
+.workout-text {
+  flex: 1;
+  min-width: 180px;
+}
+
+.progress {
+  flex: 1 0 100%;
+}
+
+.workout-actions {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 8px;
+}
+
+.workout-cta {
+  flex: 1;
+
+  .material-symbols-rounded {
+    margin-inline-end: 8px;
+    font-size: 20px;
+  }
+}
+
+.quick {
+  display: flex;
+  flex: 1 0 100%;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px 0 12px;
+  border-radius: var(--pch-radius-small, 8px);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  text-decoration: none;
+  transition: border-radius var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast);
+
+  &:hover,
+  &:focus-visible {
+    border-radius: 20px;
+  }
+
+  .material-symbols-rounded {
+    font-size: 18px;
+  }
+}
+
+.peach {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+  }
+}
+
+.stat {
+  --pch-card-padding: 14px 16px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+
+  .value {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .label {
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.one-line {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.log-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+
+.amount {
+  color: var(--mat-sys-primary);
+}
+
+.caption {
+  margin: 20px 4px 8px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.week:first-of-type {
+  margin-top: 0;
+}
+
+.pledges {
+  --pch-card-padding: 4px 16px;
+
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+}
+
+.pledge {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 12px 0;
+
+  & + & {
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+}
+
+.pledge-icon {
+  color: var(--mat-sys-on-surface-variant);
+
+  .hit & {
+    color: var(--mat-sys-tertiary);
+  }
+}
+
+.pledge-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.pledge-bar {
+  grid-column: 2;
+}
+
+.show-more {
+  display: flex;
+  margin: 8px auto 0;
+}
+
+// Only where swiping is how you'd do it.
+.swipe-hint {
+  display: none;
+  margin: 0 4px 8px;
+  color: var(--mat-sys-on-surface-variant);
+
+  @media (pointer: coarse) {
+    display: block;
+  }
+}

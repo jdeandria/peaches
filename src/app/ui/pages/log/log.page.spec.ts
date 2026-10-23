@@ -34,9 +34,11 @@ describe('LogPage', () => {
     TestBed.inject(MatDialog).closeAll();
   });
 
-  async function render(inputs: { logId?: string } = {}) {
+  async function render(inputs: { logId?: string; mode?: string; routine?: string } = {}) {
     const f = TestBed.createComponent(LogPage);
     if (inputs.logId) f.componentRef.setInput('logId', inputs.logId);
+    if (inputs.mode) f.componentRef.setInput('mode', inputs.mode);
+    if (inputs.routine) f.componentRef.setInput('routine', inputs.routine);
     await stable(f);
     return { f, el: f.nativeElement as HTMLElement };
   }
@@ -89,11 +91,13 @@ describe('LogPage', () => {
 
   it('plans a run, starts the clock with the workout, logs it set by set and finishes', async () => {
     const { f, el } = await render();
-    expect(text(el.querySelector('h1'))).toBe('Log a workout');
+    expect(text(el.querySelector('h1'))).toBe('Plan your workout');
     expect(text(el.querySelector('.subtitle'))).toBe('Counts in 2 Crates');
-    expect(text(el.querySelector('.clock'))).toContain('0:00');
-    expect(text(el.querySelector('.clock'))).toContain('Starts when you start');
-    expect(text(el)).toContain('What are you doing?');
+    // No clock until there's a workout going; building your own comes first.
+    expect(el.querySelector('.clock')).toBeNull();
+    const sections = Array.from(el.querySelectorAll('pch-section h2')).map(text);
+    expect(sections).toEqual(['Build your own', 'Your routines', 'Templates']);
+    expect(el.querySelector('button.add-first')).not.toBeNull();
     expect(button(el, 'Start workout')).toBeUndefined();
     // Planning doesn't count: the clock waits.
     const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
@@ -211,7 +215,7 @@ describe('LogPage', () => {
       Array.from(el.querySelectorAll<HTMLButtonElement>('.template-use')).find((b) =>
         text(b.querySelector('.pch-title-medium'))?.startsWith(name),
       )!;
-    expect(text(el)).toContain('Or try one of these');
+    expect(text(el)).toContain('Templates');
     expect(text(template('Full body').querySelector('.kit'))).toBe('Dumbbells');
     expect(text(template('Easy run'))).toMatch(/1 exercise · (Run|Easy Jog)/);
 
@@ -490,5 +494,40 @@ describe('LogPage', () => {
   it('says when a workout does not exist', async () => {
     const { el } = await render({ logId: 'nope' });
     expect(text(el)).toContain('Workout not found');
+  });
+
+  it('plans the routine a link names into an empty draft, once', async () => {
+    const pushUp = loggableFromCatalog(backend.container.catalog.require('bw-push-up'));
+    const routine = await backend.container.routineService.create(
+      DEMO_PEACH_ID,
+      'Push day',
+      [entryOf(pushUp, { sets: [setLog({ reps: 20 }), setLog({ reps: 20 })] })],
+      TestBed.inject(AppState).now(),
+    );
+    const { f, el } = await render({ routine: routine.id });
+    expect(text(el.querySelector('.item'))).toContain('Push Up');
+    expect(el.querySelectorAll('.item.clickable')).toHaveLength(1);
+    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    expect(draft.plan.map((e) => e.exerciseId)).toEqual(['bw-push-up']);
+    // Not planned again on a later pass.
+    await stable(f);
+    expect((await backend.container.logs.getById(draft.id))!.plan).toHaveLength(1);
+  });
+
+  it('opening the runner straight from a link starts the clock', async () => {
+    const squat = loggableFromCatalog(backend.container.catalog.require('bb-back-squat'));
+    const fresh = await backend.container.loggingService.openDraft(
+      DEMO_PEACH_ID,
+      TestBed.inject(AppState).now(),
+    );
+    await backend.container.loggingService.planExercise(
+      fresh.id,
+      entryOf(squat, { sets: [setLog({ reps: 5, loadKg: 100 })] }),
+    );
+    // Planned, not started.
+    expect(fresh.timerStartedAt).toBeNull();
+    const { el } = await render({ mode: 'log' });
+    expect(text(el.querySelector('h1'))).toBe(squat.name);
+    expect((await backend.container.logs.getById(fresh.id))!.timerStartedAt).not.toBeNull();
   });
 });

@@ -19,12 +19,12 @@ function nav(page: Page, name: string) {
 
 test('core journey: log solo, see it score, vote on the rules', async ({ page }) => {
   await openApp(page);
-  await expect(page.getByRole('heading', { name: 'Log a workout' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'vs Cho' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Start a workout' })).toBeVisible();
 
-  // Plan a 5 km run: the clock waits for the workout to start.
-  await page.getByRole('link', { name: 'Start' }).click();
-  await expect(page.getByText('Starts when you start')).toBeVisible();
+  // Plan a 5 km run: building your own comes first, and no clock runs yet.
+  await page.getByRole('link', { name: 'Plan a workout' }).click();
+  await expect(page.getByRole('heading', { name: 'Plan your workout' })).toBeVisible();
+  await expect(page.getByText('Session time')).toBeHidden();
   await page.getByRole('button', { name: 'Add exercise' }).click();
   const picker = page.getByRole('dialog');
   await expect(picker.getByRole('heading', { name: 'Recent' })).toBeVisible();
@@ -57,7 +57,8 @@ test('core journey: log solo, see it score, vote on the rules', async ({ page })
   await expect(page.getByText(/pts in Weekend Warriors/)).toBeVisible();
 
   // It counts in this week's matchup, line by line.
-  await nav(page, 'Today').click();
+  await nav(page, 'Compete').click();
+  await expect(page.getByRole('heading', { name: 'vs Cho' })).toBeVisible();
   await page.getByRole('link', { name: /View matchup/ }).click();
   await expect(page.getByRole('heading', { name: 'You vs Cho' })).toBeVisible();
   await expect(page.getByText(/Live · You lead/)).toBeVisible();
@@ -96,13 +97,15 @@ test('make up an exercise while logging; crate-mates see it came from you', asyn
 
   await nav(page, 'Crates').click();
   await page.getByRole('link', { name: /Weekend Warriors/ }).click();
+  await page.getByRole('radio', { name: 'Activity' }).click();
   const rucking = page.locator('.exercises pch-list-row', { hasText: 'Rucking' });
   await expect(rucking).toContainText('From you');
 });
 
-test('plan from a routine and tick it off, resting between sets', async ({ page }) => {
-  await openApp(page, '/log');
-  await page.getByRole('button', { name: /^Swing day/ }).click();
+test('start a routine from Train and tick it off, resting between sets', async ({ page }) => {
+  await openApp(page);
+  // One tap plans the routine.
+  await page.getByRole('link', { name: 'Swing day' }).click();
   await expect(page.getByText('0 of 6 sets done')).toBeVisible();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByText('Exercise 1 of 2 · Set 1 of 3')).toBeVisible();
@@ -115,11 +118,19 @@ test('plan from a routine and tick it off, resting between sets', async ({ page 
   await expect(page.getByText('1 of 6 sets done')).toBeVisible();
   await page.getByRole('button', { name: /^Continue/ }).click();
   await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
+  // Train shows how far along it is; Continue goes straight back into the sets.
+  await page.getByRole('button', { name: 'Back to plan' }).click();
+  await nav(page, 'Train').click();
+  await expect(page.getByRole('heading', { name: 'Workout in progress' })).toBeVisible();
+  await expect(page.getByText('1 of 6 sets done.')).toBeVisible();
+  await page.getByRole('link', { name: 'Continue' }).click();
+  await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
 });
 
 test('set next week’s lineup', async ({ page }) => {
   await openApp(page);
-  await page.getByRole('link', { name: 'Set lineup' }).click();
+  await nav(page, 'Compete').click();
+  await page.getByRole('link', { name: 'Set lineup' }).first().click();
   await expect(page.getByRole('heading', { name: 'Week 4 lineup' })).toBeVisible();
   // This week's lineup carries over and fills every slot: swap minutes for reps.
   await expect(page.getByRole('checkbox', { name: 'Pledge Reps' })).toBeDisabled();
@@ -206,7 +217,7 @@ test('signed-out demo signs in from the sign-in page', async ({ page }) => {
   await openApp(page, '/?demo=signed-out');
   await expect(page).toHaveURL(/\/sign-in/);
   await page.getByRole('button', { name: 'Continue with Google' }).click();
-  await expect(page.getByRole('heading', { name: 'Log a workout' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Start a workout' })).toBeVisible();
 });
 
 test('deep links work on a fresh load', async ({ page }) => {
@@ -218,7 +229,7 @@ test.describe('progressive web app', () => {
   test('is installable and keeps working offline', async ({ page, context, browserName }) => {
     test.skip(browserName !== 'chromium', 'service worker checks run in Chromium');
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Log a workout' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Start a workout' })).toBeVisible();
 
     const manifest = await page.evaluate(async () => {
       const href = document.querySelector('link[rel=manifest]')?.getAttribute('href');
@@ -238,7 +249,7 @@ test.describe('progressive web app', () => {
 
     await context.setOffline(true);
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Log a workout' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Start a workout' })).toBeVisible();
     await nav(page, 'Crates').click();
     await expect(page.getByRole('heading', { name: 'Crates', level: 1 })).toBeVisible();
   });
@@ -247,8 +258,8 @@ test.describe('progressive web app', () => {
 test('every icon renders as a glyph from the subset font', async ({ page }) => {
   // A name missing from src/assets/fonts/icons.json falls back to its text
   // ("inventory_2"), which is far wider than one 24px glyph.
-  const pages = ['/', '/log', '/crates', '/profile'];
-  await openApp(page);
+  const pages = ['/', '/compete', '/log', '/crates', '/profile'];
+  await openApp(page, '/compete');
   await page.getByRole('link', { name: /View matchup/ }).click();
   await expect(page.getByRole('heading', { name: 'How the score adds up' })).toBeVisible();
   const check = async (where: string) => {
@@ -262,8 +273,8 @@ test('every icon renders as a glyph from the subset font', async ({ page }) => {
     expect(wide, `icons rendered as text on ${where}`).toEqual([]);
   };
   await check('matchup');
-  await page.goto('/');
-  await page.getByRole('link', { name: 'Set lineup' }).click();
+  await page.goto('/compete');
+  await page.getByRole('link', { name: 'Set lineup' }).first().click();
   await expect(page.getByRole('heading', { name: 'Week 4 lineup' })).toBeVisible();
   await check('lineup');
   await page.goto('/crates');

@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
@@ -30,9 +30,12 @@ describe('CrateDetailPage', () => {
     TestBed.configureTestingModule({ providers: backend.providers });
   });
 
-  async function render(crateId: string) {
-    const f = TestBed.createComponent(CrateDetailPage);
+  let fixture: ComponentFixture<CrateDetailPage>;
+
+  async function render(crateId: string, view?: string) {
+    const f = (fixture = TestBed.createComponent(CrateDetailPage));
     f.componentRef.setInput('crateId', crateId);
+    if (view) f.componentRef.setInput('view', view);
     await settle();
     await f.whenStable();
     await settle();
@@ -40,7 +43,14 @@ describe('CrateDetailPage', () => {
     return f.nativeElement as HTMLElement;
   }
 
-  it('shows disputes to vote on, the Season, activity, shared exercises and members', async () => {
+  /** Switches to a view the way the router does when its query param changes. */
+  async function show(view: string) {
+    fixture.componentRef.setInput('view', view);
+    await settle();
+    await fixture.whenStable();
+  }
+
+  it('shows disputes to vote on, then the Season, activity or members', async () => {
     const crate = await myCrate(backend, 'Weekend Warriors');
     const el = await render(crate.id);
     expect(el.querySelector('h1')?.textContent).toBe('Weekend Warriors');
@@ -49,15 +59,11 @@ describe('CrateDetailPage', () => {
     expect(el.querySelector('a.chip')?.getAttribute('href')).toBe(`/crates/${crate.id}/vote`);
     expect(el.textContent).toContain(`Code ${crate.inviteCode}`);
 
-    const headings = Array.from(el.querySelectorAll('h2')).map((h) => h.textContent?.trim());
-    expect(headings).toEqual([
-      'Your vote needed',
-      'Autumn Kick-off',
-      'Weeks',
-      'Recent workouts',
-      'Exercises',
-      'Peaches',
-    ]);
+    const headings = () => Array.from(el.querySelectorAll('h2')).map((h) => h.textContent?.trim());
+    expect(headings()).toEqual(['Your vote needed', 'Autumn Kick-off', 'Weeks']);
+    const views = Array.from(el.querySelectorAll('pch-button-group [role=radio]'));
+    expect(views.map((v) => v.textContent?.trim())).toEqual(['Season', 'Activity', 'Peaches']);
+    expect(views[0].getAttribute('aria-checked')).toBe('true');
     // Ben disputed one of Ada's workouts; it links to the workout.
     const dispute = el.querySelector<HTMLAnchorElement>('a.dispute-link')!;
     expect(dispute.textContent).toContain('Ben disputed it');
@@ -75,6 +81,8 @@ describe('CrateDetailPage', () => {
     // Played and current weeks link to my matchups; later ones don't yet.
     expect(el.querySelectorAll('.weeks a.stretched')).toHaveLength(3);
 
+    await show('activity');
+    expect(headings()).toEqual(['Your vote needed', 'Recent workouts', 'Exercises']);
     // Every workout opens: mine to edit, crate-mates' to view and dispute.
     const activity = el.querySelectorAll<HTMLAnchorElement>('.activity a[pch-list-row]');
     expect(activity).toHaveLength(8);
@@ -97,6 +105,8 @@ describe('CrateDetailPage', () => {
     expect(exercises).toContain('Reservoir hill loop From Ada');
     expect(exercises.some((e) => e?.includes('From you'))).toBe(true);
 
+    await show('peaches');
+    expect(headings()).toEqual(['Your vote needed', 'Peaches']);
     const members = el.querySelectorAll('.members pch-list-row');
     expect(members).toHaveLength(5);
     expect(members[0].textContent).toContain('Ada');
@@ -118,6 +128,7 @@ describe('CrateDetailPage', () => {
     el = await render(crate.id);
     expect(el.textContent).toContain('No Season yet. Start one');
     expect(el.querySelector('button[matFab]')?.textContent).toContain('Season');
+    await show('activity');
     expect(el.textContent).toContain('Nothing logged yet.');
   });
 

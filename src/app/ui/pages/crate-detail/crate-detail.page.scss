@@ -130,8 +130,17 @@
   text-overflow: ellipsis;
 }
 
-pch-two-pane {
+pch-two-pane,
+.single {
   padding-bottom: 96px;
+}
+
+.single {
+  max-width: 640px;
+}
+
+.views {
+  margin: 24px 0 8px;
 }
 
 .disputes {

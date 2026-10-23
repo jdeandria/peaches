@@ -1,16 +1,22 @@
 @switch (phase()) {
   @case ('loading') {
-    <pch-page title="Matchup" showBack backLink="/">
+    <pch-page title="Matchup" showBack backLink="/compete">
       <div class="loading"><pch-loading-indicator /></div>
     </pch-page>
   }
   @case ('missing') {
-    <pch-page title="Matchup" showBack backLink="/">
+    <pch-page title="Matchup" showBack backLink="/compete">
       <pch-empty-state icon="search_off" title="Matchup not found" />
     </pch-page>
   }
   @default {
-    <pch-page [title]="headline()" [subtitle]="subtitle()" showBack backLink="/" [maxWidth]="880">
+    <pch-page
+      [title]="headline()"
+      [subtitle]="subtitle()"
+      showBack
+      backLink="/compete"
+      [maxWidth]="880"
+    >
       @if (score(); as s) {
         <div class="scoreboard" [pchStagger]="0" role="status" aria-live="polite">
           <div class="side">

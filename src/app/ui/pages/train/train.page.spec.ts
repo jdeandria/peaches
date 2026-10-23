@@ -7,18 +7,18 @@ import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { AppState } from '../../../state/app-state';
 import { exerciseLogEntry, setLog } from '../../../domain/models/workout-log';
 import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
-import { TodayPage } from './today.page';
+import { TrainPage } from './train.page';
 
 @Component({ template: '' })
 class Blank {}
 
-describe('TodayPage', () => {
+describe('TrainPage', () => {
   let backend: TestBackend;
 
-  async function render(options: { seed?: boolean } = {}): Promise<ComponentFixture<TodayPage>> {
+  async function render(options: { seed?: boolean } = {}): Promise<ComponentFixture<TrainPage>> {
     backend = await seededBackend({ ...options, routes: [{ path: '**', component: Blank }] });
     TestBed.configureTestingModule({ providers: backend.providers });
-    const f = TestBed.createComponent(TodayPage);
+    const f = TestBed.createComponent(TrainPage);
     await stable(f);
     return f;
   }
@@ -32,42 +32,25 @@ describe('TodayPage', () => {
 
   const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim();
 
-  it('leads with logging, then this week’s matchup as a hero card', async () => {
+  it('leads with the workout card, then the week, then history by week', async () => {
     const f = await render();
     const el: HTMLElement = f.nativeElement;
-    expect(text(el.querySelector('h1'))).toBe('Today');
+    expect(text(el.querySelector('h1'))).toBe('Train');
     expect(text(el.querySelector('.subtitle'))).toBe('Monday, October 12');
     const sections = Array.from(el.querySelectorAll('pch-section h2')).map(text);
-    expect(sections).toEqual(['This week', 'Coming up', 'Your workouts']);
+    expect(sections).toEqual(['This week', 'History']);
 
-    const log = el.querySelector('pch-card.log')!;
-    expect(text(log.querySelector('h2'))).toBe('Log a workout');
-    expect(log.querySelector('a')?.getAttribute('href')).toBe('/log');
-    expect(text(log.querySelector('a'))).toBe('play_arrow Start');
-
-    const heroes = el.querySelectorAll('pch-matchup-hero-card');
-    expect(heroes).toHaveLength(1);
-    const hero = heroes[0];
-    expect(text(hero.querySelector('h3'))).toBe('vs Cho');
-    expect(text(hero)).toContain('Week 3 · Oct 12 – 18');
-    expect(text(hero)).toContain('Weekend Warriors');
-    expect(text(hero)).toContain('closes in 6 d');
-    // Cho has logged this week already; I haven't.
-    expect(text(hero)).toContain('Trailing');
-    expect(text(hero)).toContain('35.8');
-    const cta = hero.querySelector<HTMLAnchorElement>('a')!;
-    expect(text(cta)).toContain('View matchup');
-    expect(cta.getAttribute('href')).toMatch(/^\/matchups\/.+/);
-    // The only interactive element in the card is the link.
-    expect(hero.querySelectorAll('a, button')).toHaveLength(1);
-
-    // Lineups for next week are open and I haven't set mine.
-    const lineup = el.querySelector('pch-card.lineup')!;
-    expect(text(lineup.querySelector('h2'))).toBe('Set your lineup');
-    expect(lineup.querySelector('a')?.getAttribute('href')).toMatch(/^\/matchups\/.+\/lineup$/);
+    const card = el.querySelector('pch-card.workout')!;
+    expect(text(card.querySelector('h2'))).toBe('Start a workout');
+    const cta = card.querySelector('a.workout-cta')!;
+    expect(cta.getAttribute('href')).toBe('/log');
+    expect(text(cta)).toBe('add Plan a workout');
+    // Nothing planned yet: no Edit plan, and matchups live on Compete.
+    expect(card.querySelector('a.edit-plan')).toBeNull();
+    expect(el.querySelector('pch-matchup-hero-card')).toBeNull();
   });
 
-  it('shows the week stats, what is coming and my workouts', async () => {
+  it('shows the week’s stats and pledges, and every workout a week at a time', async () => {
     const f = await render();
     const el: HTMLElement = f.nativeElement;
     const stats = Array.from(el.querySelectorAll('.stat')).map((s) => [
@@ -75,32 +58,48 @@ describe('TodayPage', () => {
       text(s.querySelector('.label')),
     ]);
     expect(stats).toEqual([
-      ['0', 'Workouts this week'],
-      ['0', 'Sets this week'],
-      ['0-2', 'Season record'],
+      ['0', 'Workouts'],
+      ['0', 'Sets'],
+      ['0', 'Active min'],
     ]);
 
-    const rows = Array.from(el.querySelectorAll('pch-matchup-row'));
-    expect(rows).toHaveLength(4);
-    // Sorted by week: the badges' days are in order.
-    const days = rows.map((r) => Number(text(r.querySelector('pch-date-badge .day'))));
-    expect(days).toEqual([19, 19, 26, 26]);
-    const cho = rows.find((r) => text(r.querySelector('.headline')) === 'vs Cho')!;
-    expect(text(cho.querySelector('.subtitle'))).toBe('Lunch Break Lifters · Oct 19 – 25');
-    expect(rows.some((r) => text(r.querySelector('.headline')) === 'Bye round')).toBe(true);
-
-    // Upcoming matchups open; so does every workout.
-    expect(rows.every((r) => r.querySelector('a[href^="/matchups/"]'))).toBe(true);
-    const recent = el.querySelectorAll('a[pch-list-row][href^="/log"]');
-    expect(recent).toHaveLength(6);
-    expect(recent[0].getAttribute('href')).toMatch(/^\/log\/.+/);
-    expect(text(recent[0])).toContain('Run');
-    expect(text(recent[0])).toMatch(/\d+ sets?/);
+    const weeks = Array.from(el.querySelectorAll('h3.week')).map(text);
+    expect(weeks[0]).toBe('Last week');
+    expect(weeks.length).toBeGreaterThan(1);
+    const recent = () => el.querySelectorAll('a[pch-list-row][href^="/log"]');
+    expect(recent()).toHaveLength(8);
+    expect(recent()[0].getAttribute('href')).toMatch(/^\/log\/.+/);
+    expect(text(recent()[0])).toContain('Run');
+    expect(text(recent()[0])).toMatch(/\d+ sets?/);
     // Cardio rows sum up by distance, like lifting rows by weight moved.
-    expect(text(recent[0].querySelector('.amount'))).toMatch(/^[\d.]+ km$/);
+    expect(text(recent()[0].querySelector('.amount'))).toMatch(/^[\d.]+ km$/);
+    // All of them fit before "Show more" is needed.
+    expect(el.querySelector('button.show-more')).toBeNull();
   });
 
-  it('offers to continue a workout in progress', async () => {
+  it('starts a saved routine in one tap', async () => {
+    const f = await render();
+    const routine = await backend.container.routineService.create(
+      DEMO_PEACH_ID,
+      'Push day',
+      [
+        exerciseLogEntry({
+          exerciseId: 'bw-push-up',
+          exerciseName: 'Push Up',
+          sets: [setLog({ reps: 20 })],
+        }),
+      ],
+      FIXED_NOW,
+    );
+    await stable(f);
+    const el: HTMLElement = f.nativeElement;
+    const chip = Array.from(el.querySelectorAll('.quick a.chip')).find((a) =>
+      text(a)?.includes('Push day'),
+    )!;
+    expect(chip.getAttribute('href')).toBe(`/log?routine=${routine.id}`);
+  });
+
+  it('offers to pick a workout in progress back up', async () => {
     const f = await render();
     const { container } = backend;
     const log = await container.loggingService.startLog(DEMO_PEACH_ID, FIXED_NOW);
@@ -113,14 +112,20 @@ describe('TodayPage', () => {
       }),
     );
     await stable(f);
-    const card = f.nativeElement.querySelector('pch-card.log');
+    const card = f.nativeElement.querySelector('pch-card.workout');
     expect(text(card.querySelector('h2'))).toBe('Workout in progress');
     expect(text(card)).toContain('1 exercise logged so far.');
-    expect(text(card.querySelector('a'))).toContain('Continue');
-    // The draft is listed, linking back to the log page.
-    expect(
-      f.nativeElement.querySelector('a[pch-list-row][href^="/log"]')?.getAttribute('href'),
-    ).toBe('/log');
+    // No sets planned are left: the runner wraps it up.
+    const cta = card.querySelector('a.workout-cta');
+    expect(text(cta)).toContain('Finish up');
+    // Straight back into the runner; Edit plan goes to the planner.
+    expect(cta.getAttribute('href')).toBe('/log?mode=log');
+    expect(card.querySelector('a.edit-plan').getAttribute('href')).toBe('/log');
+    // The draft heads the history, linking back to the log page.
+    const first = f.nativeElement.querySelector('a[pch-list-row][href^="/log"]');
+    expect(first?.getAttribute('href')).toBe('/log');
+    expect(text(first)).toContain('In progress');
+    expect(text(f.nativeElement.querySelector('h3.week'))).toBe('This week');
   });
 
   it('shows a planned workout, then how far through it you are', async () => {
@@ -134,15 +139,19 @@ describe('TodayPage', () => {
     });
     await container.loggingService.planExercise(draft.id, pushUps);
     await stable(f);
-    const card = () => f.nativeElement.querySelector('pch-card.log');
+    const card = () => f.nativeElement.querySelector('pch-card.workout');
     expect(text(card().querySelector('h2'))).toBe('Workout planned');
-    expect(text(card())).toContain('1 exercise lined up.');
-    expect(text(card().querySelector('a'))).toContain('Start');
+    expect(text(card())).toContain('1 exercise, 2 sets.');
+    const start = card().querySelector('a.workout-cta');
+    expect(text(start)).toContain('Start');
+    expect(start.getAttribute('href')).toBe('/log?mode=log');
 
     await container.loggingService.logSet(draft.id, 'bw-push-up', setLog({ reps: 18 }), FIXED_NOW);
     await stable(f);
     expect(text(card().querySelector('h2'))).toBe('Workout in progress');
     expect(text(card())).toContain('1 of 2 sets done.');
+    expect(text(card().querySelector('a.workout-cta'))).toContain('Continue');
+    expect(card().querySelector('pch-wavy-progress')).not.toBeNull();
   });
 
   it('swipes a workout left to delete it (with Undo), right to edit it', async () => {
@@ -189,9 +198,10 @@ describe('TodayPage', () => {
   it('invites a new Peach to log, with empty history', async () => {
     const f = await render({ seed: false });
     const el: HTMLElement = f.nativeElement;
-    expect(text(el.querySelector('pch-card.log h2'))).toBe('Log a workout');
+    expect(text(el.querySelector('pch-card.workout h2'))).toBe('Start a workout');
+    expect(el.querySelector('.quick')).toBeNull();
     expect(text(el)).toContain('Nothing logged yet.');
-    expect(Array.from(el.querySelectorAll('pch-section h2')).map(text)).toEqual(['Your workouts']);
-    expect(Array.from(el.querySelectorAll('.stat .value')).map(text)).toEqual(['0', '0', '0-0']);
+    expect(el.querySelector('.pledges')).toBeNull();
+    expect(Array.from(el.querySelectorAll('.stat .value')).map(text)).toEqual(['0', '0', '0']);
   });
 });

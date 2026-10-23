@@ -11,7 +11,7 @@ import { Card } from '../../layout/card';
 /**
  * Sign in or create an account (port of `SignInScreen`). The providers
  * offered come from the auth service. Once signed in, the root component
- * moves on to Today by itself.
+ * moves on to Train by itself.
  */
 @Component({
   selector: 'pch-sign-in-page',

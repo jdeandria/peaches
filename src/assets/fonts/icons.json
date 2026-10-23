@@ -3,6 +3,7 @@
   "add_circle",
   "arrow_back",
   "block",
+  "bookmark",
   "bookmark_add",
   "check",
   "check_circle",
@@ -43,6 +44,5 @@
   "shuffle",
   "skip_next",
   "timer",
-  "today",
   "undo"
 ]

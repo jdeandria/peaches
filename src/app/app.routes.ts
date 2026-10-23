@@ -22,8 +22,13 @@ export const routes: Routes = [
       {
         path: '',
         pathMatch: 'full',
-        title: 'Today',
-        loadComponent: () => import('./ui/pages/today/today.page').then((m) => m.TodayPage),
+        title: 'Train',
+        loadComponent: () => import('./ui/pages/train/train.page').then((m) => m.TrainPage),
+      },
+      {
+        path: 'compete',
+        title: 'Compete',
+        loadComponent: () => import('./ui/pages/compete/compete.page').then((m) => m.CompetePage),
       },
       {
         path: 'crates',

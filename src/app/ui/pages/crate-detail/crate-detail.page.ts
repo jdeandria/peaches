@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatButton, MatFabButton, MatIconButton } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
@@ -17,6 +17,7 @@ import {
   Season,
 } from '../../../domain/models/season';
 import { AppState } from '../../../state/app-state';
+import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { ShapedAvatar } from '../../expressive/shaped-avatar';
 import { Fmt } from '../../format';
@@ -72,18 +73,30 @@ export function roundViews(args: {
   });
 }
 
-/**
- * A Crate: disputes waiting for your vote, the current Season's standings
- * and weeks, what members have been logging (and every exercise they've
- * logged, tagged with who), members, and manager actions.
- */
 /** Exercises listed before "Show all": the most recently logged first. */
 const EXERCISES_SHOWN = 6;
+
+export type CrateView = 'season' | 'activity' | 'peaches';
+
+const VIEWS: readonly ButtonGroupOption<CrateView>[] = [
+  { value: 'season', label: 'Season' },
+  { value: 'activity', label: 'Activity' },
+  { value: 'peaches', label: 'Peaches' },
+];
+
+/**
+ * A Crate: what needs you on top (the rules vote, the invite code, disputes
+ * waiting for your vote), then one of three views: the Season (standings
+ * and weeks), Activity (what members have been logging, and every exercise
+ * they've logged, tagged with who) or the Peaches in it. Manager actions
+ * sit where they apply.
+ */
 
 @Component({
   selector: 'pch-crate-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    ButtonGroup,
     Card,
     DisputeCard,
     EmptyState,
@@ -111,6 +124,24 @@ export class CrateDetailPage {
   private readonly dialog = inject(MatDialog);
 
   readonly crateId = input.required<string>();
+  /** Query param: which view shows (`season` when absent). */
+  readonly view = input<string>();
+
+  private readonly router = inject(Router);
+  protected readonly views = VIEWS;
+  protected readonly shown = computed<CrateView>(
+    () => VIEWS.find((v) => v.value === this.view())?.value ?? 'season',
+  );
+
+  /** Switches views in place, keeping the choice in the URL for Back. */
+  protected showView(view: CrateView | null): void {
+    if (!view) return;
+    void this.router.navigate([], {
+      queryParams: { view: view === 'season' ? null : view },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
 
   protected readonly fmt = Fmt;
   protected readonly me = this.state.peachId;

@@ -160,7 +160,7 @@ describe('SignInPage', () => {
   });
 });
 
-/** The app-level sign-in journey: sign in, land on Today, sign out. */
+/** The app-level sign-in journey: sign in, land on Train, sign out. */
 describe('Sign-in journey', () => {
   it('signed-out users see sign in; signing in creates a Peach', async () => {
     const auth = new FakeAuth();
@@ -207,7 +207,7 @@ describe('Sign-in journey', () => {
     signIn().click();
     await stable();
     expect(router.url).toBe('/');
-    expect(el.querySelector('h1')?.textContent).toBe('Today');
+    expect(el.querySelector('h1')?.textContent).toBe('Train');
     const peach = await backend.container.peaches.getById('u1');
     expect(peach?.displayName).toBe('Uma');
     expect(peach?.email).toBe('uma@example.com');

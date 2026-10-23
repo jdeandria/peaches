@@ -1,10 +1,10 @@
 @let d = data.value();
 @if (d === undefined) {
-  <pch-page title="Lineup" showBack backLink="/">
+  <pch-page title="Lineup" showBack backLink="/compete">
     <div class="loading"><pch-loading-indicator /></div>
   </pch-page>
 } @else if (d === null) {
-  <pch-page title="Lineup" showBack backLink="/">
+  <pch-page title="Lineup" showBack backLink="/compete">
     <pch-empty-state icon="search_off" title="Matchup not found" />
   </pch-page>
 } @else {

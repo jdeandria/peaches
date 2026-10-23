@@ -13,7 +13,8 @@ export interface NavDestination {
 }
 
 export const NAV_DESTINATIONS: readonly NavDestination[] = [
-  { label: 'Today', icon: 'today', link: '/', matches: ['', 'matchups', 'log'] },
+  { label: 'Train', icon: 'fitness_center', link: '/', matches: ['', 'log'] },
+  { label: 'Compete', icon: 'emoji_events', link: '/compete', matches: ['compete', 'matchups'] },
   { label: 'Crates', icon: 'inventory_2', link: '/crates', matches: ['crates'] },
   { label: 'Profile', icon: 'person', link: '/profile', matches: ['profile'] },
 ];

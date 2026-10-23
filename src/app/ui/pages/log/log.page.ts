@@ -3,9 +3,11 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   input,
   signal,
+  untracked,
 } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
@@ -43,7 +45,6 @@ import { MetricExtractor } from '../../../domain/services/metric-extractor';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { Fmt } from '../../format';
-import { Card } from '../../layout/card';
 import { confirmDialog } from '../../layout/confirm-dialog';
 import { EmptyState } from '../../layout/empty-state';
 import { ListCard } from '../../layout/list-card';
@@ -84,7 +85,6 @@ interface PlannedView extends EntryView {
   selector: 'pch-log-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Card,
     DisputeCard,
     EmptyState,
     ListCard,
@@ -104,8 +104,10 @@ interface PlannedView extends EntryView {
 export class LogPage {
   /** Route param for a specific log; without it, the draft. */
   readonly logId = input<string>();
-  /** Query param: `log` while doing the sets, else planning. */
+  /** Query param: `log` while doing the sets (which starts the clock), else planning. */
   readonly mode = input<string>();
+  /** Query param: a routine of mine to plan, when nothing is planned yet. */
+  readonly routine = input<string>();
 
   private readonly state = inject(AppState);
   private readonly sheet = inject(MatBottomSheet);
@@ -152,7 +154,7 @@ export class LogPage {
   protected readonly title = computed(() => {
     const log = this.log();
     if (log && isSubmitted(log)) return Fmt.day(localDateOfLocal(log.startedAt));
-    return 'Log a workout';
+    return this.started() ? 'Workout in progress' : 'Plan your workout';
   });
 
   protected readonly clockHint = computed(() => {
@@ -258,8 +260,7 @@ export class LogPage {
   });
 
   /**
-   * This week's matchups: the Season's weights, for points per Crate, and
-   * my pledges with how much of each the logs shared so far have done.
+   * This week's matchups: the Season's weights, for points per Crate.
    */
   private readonly boards = this.state.query(
     () => {
@@ -272,7 +273,7 @@ export class LogPage {
       return boards.flatMap((b) => {
         if (!b) return [];
         const side = b.home.peachId === me ? b.home : b.away;
-        return side ? [{ crate: b.crate, weights: b.season.rules.weights, side }] : [];
+        return side ? [{ crate: b.crate, weights: b.season.rules.weights }] : [];
       });
     },
   );
@@ -285,28 +286,6 @@ export class LogPage {
       name: crate.name,
       points: Fmt.points(this.pointsIn(log, weights)),
     }));
-  });
-
-  /** While a workout is on: my pledges this week, counting it. */
-  protected readonly pledges = computed(() => {
-    const log = this.log();
-    if (!log || !this.draft()) return [];
-    const extra = MetricExtractor.extract(log);
-    const units = this.state.units();
-    const boards = this.boards.value() ?? [];
-    return boards.flatMap(({ crate, side }) =>
-      side.score.pledges.map((p) => {
-        const done = p.amount + extra[p.category];
-        return {
-          key: `${crate.id}:${p.category}`,
-          crate: boards.length > 1 ? crate.name : null,
-          icon: Fmt.categoryIcon(p.category),
-          label: Fmt.category(p.category),
-          progress: `${Fmt.amount(p.category, done, units)} of ${Fmt.amount(p.category, p.target, units)}`,
-          hit: done >= p.target,
-        };
-      }),
-    );
   });
 
   /** Disputes crate-mates raised about this log, in every Crate it is shared with. */
@@ -366,6 +345,23 @@ export class LogPage {
     destroyRef.onDestroy(() => clearInterval(timer));
     if (this.logId()) return;
 
+    // Opening the runner starts the workout (links from Train go straight there).
+    effect(() => {
+      const log = this.log();
+      if (!log || !this.running() || hasStarted(log) || this.starting === log.id) return;
+      this.starting = log.id;
+      void this.state.run((app) => app.loggingService.startSession(log.id, this.state.now()));
+    });
+
+    // A routine to start from: plan it into an empty draft, once.
+    effect(() => {
+      const id = this.routine();
+      const log = this.log();
+      const routines = this.routineList.value();
+      if (!id || !log || routines === undefined) return;
+      untracked(() => void this.planRoutineOnce(log, routines.find((r) => r.id === id) ?? null));
+    });
+
     // The draft's clock runs only while this page is open and visible.
     void this.openDraft();
     const onVisibility = () =>
@@ -374,6 +370,22 @@ export class LogPage {
     destroyRef.onDestroy(() => {
       document.removeEventListener('visibilitychange', onVisibility);
       void this.pause();
+    });
+  }
+
+  /** The draft whose clock is being started, so it's started once. */
+  private starting: string | null = null;
+  private routinePlanned = false;
+  private async planRoutineOnce(log: WorkoutLog, routine: Routine | null): Promise<void> {
+    if (this.routinePlanned) return;
+    this.routinePlanned = true;
+    if (routine && log.plan.length === 0 && log.entries.length === 0) {
+      await this.state.run((app) => app.loggingService.addToPlan(log.id, routine.exercises));
+    }
+    await this.router.navigate([], {
+      queryParams: { routine: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
     });
   }
 
@@ -590,9 +602,6 @@ export class LogPage {
       'Workout updated.',
     );
   }
-
-  /** Whether the Peach is in any Crate (for the empty-state hint). */
-  protected readonly inCrates = computed(() => (this.state.myCrates.value() ?? []).length > 0);
 
   /** Row clicks edit too (pointer convenience; the buttons are the controls). */
   protected rowClick(event: MouseEvent, entry: ExerciseLogEntry): void {
