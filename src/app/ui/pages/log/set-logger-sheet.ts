@@ -74,7 +74,8 @@ const MAX_SETS = 20;
  * along one to turn it, fling it to cover ground, tap it to type. It starts
  * from last time's sets (marked on the dials), so repeating a workout is one
  * tap. Sets are picked from a strip, added and removed; when logging, an
- * optional RPE rates the whole exercise.
+ * optional RPE rates the whole exercise. It's laid out like the runner's
+ * set screen (`_set-screen.scss`), so planning a set looks like doing it.
  */
 @Component({
   selector: 'pch-set-logger-sheet',
