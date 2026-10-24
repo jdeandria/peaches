@@ -117,7 +117,7 @@ describe('SetLoggerSheet', () => {
 
   async function goToSet(root: HTMLElement, n: number): Promise<void> {
     await click(buttons(root, `Set ${n}`)[0]);
-    expect(text(root.querySelector('.set-label'))).toBe(`Set ${n}`);
+    expect(text(root.querySelector('.set-label'))).toMatch(new RegExp(`^Set ${n} of \\d+$`));
   }
 
   async function save(dialog: HTMLElement, result: Promise<ExerciseLogEntry | undefined>) {
@@ -144,11 +144,11 @@ describe('SetLoggerSheet', () => {
     const { dialog } = await open(squat, { previous: lifts(50, 60, 60) });
     expect(chips(dialog)).toEqual(['1 8 × 50', '2 8 × 60', '3 8 × 60']);
     expect(buttons(dialog, 'Set 1')[0].getAttribute('aria-current')).toBe('true');
-    expect(text(dialog.querySelector('.set-label'))).toBe('Set 1');
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 1 of 3');
     expect(valueOf(dialog, 'Weight in kg')).toBe(50);
 
     await click(buttons(dialog, 'Next set')[0]);
-    expect(text(dialog.querySelector('.set-label'))).toBe('Set 2');
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 2 of 3');
     expect(valueOf(dialog, 'Weight in kg')).toBe(60);
     expect(buttons(dialog, 'Set 2')[0].getAttribute('aria-current')).toBe('true');
     expect(buttons(dialog, 'Set 1')[0].getAttribute('aria-current')).toBeNull();
@@ -299,12 +299,12 @@ describe('SetLoggerSheet', () => {
     await click(buttons(dialog, 'Add set')[0]);
     // The new set is a copy of set 2, and it's the one shown.
     expect(chips(dialog)).toEqual(['1 13 reps', '2 8 reps', '3 8 reps']);
-    expect(text(dialog.querySelector('.set-label'))).toBe('Set 3');
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 3 of 3');
 
     await goToSet(dialog, 1);
     await click(buttons(dialog, 'Remove set 1')[0]);
     expect(chips(dialog)).toEqual(['1 8 reps', '2 8 reps']);
-    expect(text(dialog.querySelector('.set-label'))).toBe('Set 1');
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 1 of 2');
 
     await click(buttons(dialog, 'Remove set 1')[0]);
     // The last one can't go.

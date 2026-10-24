@@ -210,6 +210,9 @@ describe('LogPage', () => {
 
     // A rest, which can be stretched or skipped.
     expect(heading()).toBe('Rest');
+    // Laid out like the set: which one it was, and what was done.
+    expect(where()).toBe(`${squat.name} · Set 1 of 2`);
+    expect(text(el.querySelector('.target'))).toBe('Done 4 × 100 kg');
     expect(el.querySelector('[role=timer]')?.getAttribute('aria-label')).toBe('Rest 1:30');
     button(el, 'Rest 15 seconds more')!.click();
     await stable(f);

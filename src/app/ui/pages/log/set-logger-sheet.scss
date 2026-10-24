@@ -1,5 +1,8 @@
+@use 'set-screen';
+
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
   max-width: 560px;
   margin: 0 auto;
   padding: 0 8px 16px;
@@ -24,28 +27,65 @@ h2:focus {
   outline: none;
 }
 
-.target {
-  margin-top: 4px;
+@include set-screen.set-screen($gutter: 8px);
+
+.muted {
   color: var(--mat-sys-on-surface-variant);
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title {
+  flex: 1;
+  overflow: hidden;
+}
+
+.set-label.slide {
+  animation: set-screen-slide var(--pch-spring-spatial-default-duration)
+    var(--pch-spring-spatial-default) both;
+}
+
+.remove {
+  flex: none;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.cues {
+  margin-top: 4px;
 }
 
 .last-time {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
-  color: var(--mat-sys-primary);
+  margin-top: 4px;
 
   .material-symbols-rounded {
     font-size: 16px;
   }
 }
 
+// The dials as tall as the sheet allows, like the runner's.
+.set {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+
+.stage {
+  --pch-dial-height: clamp(200px, 36dvh, 320px);
+  min-height: 0;
+}
+
 // The strip of sets: the chosen one morphs from a rounded square to a pill.
 .chips {
   display: flex;
   gap: 6px;
-  margin: 12px -8px 10px;
+  margin: 12px -8px;
   padding: 2px 8px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -120,79 +160,12 @@ h2:focus {
   }
 }
 
-// The set being logged.
-.card {
-  padding: 4px 8px 12px;
-  border-radius: var(--pch-radius-extra-large);
-  background: var(--mat-sys-surface-container-lowest);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  padding-inline-start: 12px;
-  overflow: hidden;
-}
-
-.card-title {
-  flex: 1;
-  min-width: 0;
-
-  &.slide {
-    animation: slide-in var(--pch-spring-spatial-default-duration) var(--pch-spring-spatial-default)
-      both;
-  }
-}
-
-@keyframes slide-in {
-  from {
-    transform: translateX(calc(var(--dir, 1) * 32px));
-    opacity: 0;
-  }
-}
-
-.ghost-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--mat-sys-tertiary);
-}
-
-.ghost-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--mat-sys-tertiary);
-}
-
-.remove {
-  flex: none;
-  color: var(--mat-sys-on-surface-variant);
-}
-
 h3#pch-rpe-label {
   margin: 16px 0 8px;
 }
 
-.card + .actions {
-  margin-top: 20px;
-}
-
 .actions {
-  display: flex;
-  gap: 12px;
   margin-top: 16px;
-
-  .material-symbols-rounded {
-    margin-inline-end: 4px;
-    font-size: 18px;
-  }
-
-  .save {
-    flex: 1;
-  }
 }
 
 .problem {

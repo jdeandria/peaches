@@ -1,0 +1,107 @@
+// The anatomy every set-by-set screen shares, so moving between them only
+// changes what's in the middle: planning a set (the set logger), doing it
+// (the runner) and resting after it (the runner's timer). From the top:
+//
+//   .title        the exercise (or Rest), and a muted line saying where you are
+//   .target       a tertiary line with a dot: what the dials' ghost marks
+//   .stage        the dials, or the rest ring: takes the room there is
+//   .actions      a small tonal button beside the big filled one, 72px tall
+//   .up-next      a muted line saying what comes after
+//
+// Include `set-screen` at the top level of a component's styles.
+
+@mixin set-screen($gutter: 16px) {
+  .title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    :focus {
+      outline: none;
+    }
+
+    &.slide {
+      animation: set-screen-slide var(--pch-spring-spatial-default-duration)
+        var(--pch-spring-spatial-default) both;
+    }
+  }
+
+  .target {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--mat-sys-tertiary);
+  }
+
+  .ghost-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--mat-sys-tertiary);
+  }
+
+  // Edge to edge: the dials' rims sit just off the screen's sides.
+  .stage {
+    flex: 1 1 auto;
+    min-height: 240px;
+    margin: 0 calc(-1 * #{$gutter});
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+
+    .material-symbols-rounded {
+      margin-inline-end: 6px;
+      font-size: 20px;
+    }
+  }
+
+  // The one thing to press: big, at thumb height.
+  .big {
+    --mat-button-filled-container-height: 72px;
+    flex: 1;
+    min-height: 72px;
+    font: var(--mat-sys-title-large);
+
+    .material-symbols-rounded {
+      font-size: 28px;
+    }
+  }
+
+  // The other way on (skip, undo, the next set): small beside it, as tall.
+  .side {
+    --mat-button-tonal-container-height: 72px;
+    flex: none;
+    min-height: 72px;
+    padding: 0 16px;
+  }
+
+  .up-next {
+    margin: 0;
+    color: var(--mat-sys-on-surface-variant);
+    text-align: center;
+
+    strong {
+      color: var(--mat-sys-on-surface);
+      font-weight: 500;
+    }
+  }
+
+  @keyframes set-screen-slide {
+    from {
+      transform: translateX(calc(var(--dir, 1) * 32px));
+      opacity: 0;
+    }
+  }
+}

@@ -1,3 +1,5 @@
+@use 'set-screen';
+
 // Full screen, over the navigation: the workout is the only thing on.
 :host {
   position: fixed;
@@ -33,16 +35,26 @@ h1:focus {
   color: var(--mat-sys-on-surface-variant);
 }
 
+// Nothing moves when Finish turns up after the first set: the clock stays
+// dead centre, the rest timer at the end, and the row keeps its height.
 .top {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-rows: 48px;
   align-items: center;
   gap: 4px;
   padding: 8px 8px 0;
 }
 
+.top-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
 .clock {
   display: flex;
-  flex: 1;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -52,10 +64,6 @@ h1:focus {
     font-size: 20px;
     color: var(--mat-sys-primary);
   }
-}
-
-.finish {
-  margin-inline-start: 4px;
 }
 
 .rest-toggle {
@@ -101,41 +109,6 @@ section {
   gap: 12px;
 }
 
-.title {
-  &.slide {
-    animation: slide-in var(--pch-spring-spatial-default-duration) var(--pch-spring-spatial-default)
-      both;
-  }
-}
-
-@keyframes slide-in {
-  from {
-    transform: translateX(32px);
-    opacity: 0;
-  }
-}
-
-// The dials take the room there is, edge to edge.
-.dials {
-  flex: 1 1 auto;
-  min-height: 240px;
-  margin: 0 -16px;
-}
-
-.target {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--mat-sys-tertiary);
-}
-
-.ghost-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--mat-sys-tertiary);
-}
-
 .row {
   display: flex;
   justify-content: center;
@@ -150,58 +123,22 @@ button .material-symbols-rounded {
   margin-inline-end: 6px;
 }
 
-// The one thing to press between sets: big, at thumb height.
-.big {
-  --mat-button-filled-container-height: 72px;
-  width: 100%;
-  min-height: 72px;
-  margin-top: auto;
-  font: var(--mat-sys-title-large);
+@include set-screen.set-screen;
 
-  .material-symbols-rounded {
-    font-size: 28px;
-  }
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-
-  .big {
-    flex: 1;
-    margin-top: 0;
-  }
-}
-
-// Skipping is the exception: a small button beside Done, the same height.
-.skip {
-  --mat-button-tonal-container-height: 72px;
-  flex: none;
-  min-height: 72px;
-  padding: 0 16px;
-}
-
-.up-next {
+// The ring sits where the dials were, with its nudges under it.
+.resting .stage {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  text-align: center;
-}
-
-.resting {
   align-items: center;
-  text-align: center;
-
-  .big {
-    margin-top: auto;
-  }
+  justify-content: center;
+  gap: 16px;
+  margin: 0;
 }
 
 .ring {
   position: relative;
-  width: min(240px, 60vw);
+  width: min(260px, 64vw);
   aspect-ratio: 1;
-  margin: 8px 0;
 
   svg {
     display: block;
@@ -248,6 +185,8 @@ button .material-symbols-rounded {
   padding-top: 24px;
 
   .big {
+    flex: none;
+    width: 100%;
     margin-top: 24px;
   }
 }

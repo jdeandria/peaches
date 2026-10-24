@@ -76,13 +76,18 @@ interface Rest {
   readonly total: number;
   /** The exercise whose last set this was, to rate it. */
   readonly finished: ExerciseLogEntry | null;
+  /** The set just done, where it was ("Back Squat · Set 1 of 3") and what it was. */
+  readonly after: string;
+  readonly logged: string;
 }
 
 /**
  * Log mode: the planned workout one set at a time, full screen and
  * one-handed. The dials start on the target; Done records what's on them
  * (adjust them first if the set went differently), then a rest countdown
- * runs (optional, remembered per device) before the next set. Finishing an
+ * runs (optional, remembered per device) before the next set. The rest
+ * keeps the set's layout (`_set-screen.scss`), with the ring where the
+ * dials were, so only the middle of the screen changes. Finishing an
  * exercise asks how hard it was. Sets can be skipped and taken back; what
  * the plan holds is changed back in plan mode.
  * Keeps the screen awake while open.
@@ -290,6 +295,8 @@ export class SessionRunner {
         endsAt: timed ? Date.now() + seconds * 1000 : null,
         total: seconds,
         finished,
+        after: `${next.exercise.exerciseName} · Set ${next.index + 1} of ${next.exercise.sets.length}`,
+        logged: format.describe(draft),
       });
     }
   }

@@ -1,11 +1,37 @@
 <div class="handle" aria-hidden="true"></div>
 
-<h2 class="pch-headline-small">{{ exercise.name }}</h2>
+<!-- Laid out like the runner's set screen (_set-screen.scss), so planning a set looks like doing it. -->
+<div class="heading">
+  <div class="title">
+    <h2 class="pch-headline-small">{{ exercise.name }}</h2>
+    @for (k of [selected()]; track k) {
+      <h3
+        id="pch-set-heading"
+        class="set-label pch-label-large muted"
+        [class.slide]="moved()"
+        [style.--dir]="direction()"
+      >
+        Set {{ k + 1 }} of {{ sets().length }}
+      </h3>
+    }
+  </div>
+  <button
+    matIconButton
+    type="button"
+    class="remove"
+    [disabled]="!canRemove()"
+    [matTooltip]="'Remove set ' + (selected() + 1)"
+    [attr.aria-label]="'Remove set ' + (selected() + 1)"
+    (click)="removeSet()"
+  >
+    <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+  </button>
+</div>
 @if (exercise.cues) {
-  <p class="target pch-body-small">{{ exercise.cues }}</p>
+  <p class="cues pch-body-small muted">{{ exercise.cues }}</p>
 }
 @if (lastTime) {
-  <p class="last-time pch-label-medium">
+  <p class="last-time pch-body-small muted">
     <span class="material-symbols-rounded" aria-hidden="true">history</span>{{ lastTime }}
   </p>
 }
@@ -27,32 +53,14 @@
   }
 </div>
 
-<section class="card" [style.--dir]="direction()" aria-labelledby="pch-set-heading">
-  <div class="card-header">
-    @for (k of [selected()]; track k) {
-      <div class="card-title" [class.slide]="moved()">
-        <h3 id="pch-set-heading" class="set-label pch-title-medium">Set {{ k + 1 }}</h3>
-        @if (ghostSummary(); as ghost) {
-          <p class="ghost-note pch-label-medium">
-            <span class="ghost-dot" aria-hidden="true"></span>Last time {{ ghost }}
-          </p>
-        }
-      </div>
-    }
-    <button
-      matIconButton
-      type="button"
-      class="remove"
-      [disabled]="!canRemove()"
-      [matTooltip]="'Remove set ' + (selected() + 1)"
-      [attr.aria-label]="'Remove set ' + (selected() + 1)"
-      (click)="removeSet()"
-    >
-      <span class="material-symbols-rounded" aria-hidden="true">delete</span>
-    </button>
-  </div>
+@if (ghostSummary(); as ghost) {
+  <p class="target ghost-note pch-label-large">
+    <span class="ghost-dot" aria-hidden="true"></span>Last time {{ ghost }}
+  </p>
+}
 
-  <pch-set-dials [dials]="dials()" [joiner]="format.joiner" />
+<section class="set" aria-labelledby="pch-set-heading">
+  <pch-set-dials class="stage" [dials]="dials()" [joiner]="format.joiner" />
 </section>
 
 @if (!planning) {
@@ -73,12 +81,18 @@
 
 <div class="actions">
   @if (isLast()) {
-    <button matButton="tonal" type="button" [disabled]="!canAdd()" (click)="addSet()">
+    <button matButton="tonal" type="button" class="side" [disabled]="!canAdd()" (click)="addSet()">
       <span class="material-symbols-rounded" aria-hidden="true">add</span>
       Add set
     </button>
   } @else {
-    <button matButton="tonal" type="button" (click)="next()">Next set</button>
+    <button matButton="tonal" type="button" class="side" (click)="next()">
+      <span class="material-symbols-rounded" aria-hidden="true">skip_next</span>
+      Next set
+    </button>
   }
-  <button matButton="filled" type="button" class="save" (click)="save()">Save</button>
+  <button matButton="filled" type="button" class="big save" (click)="save()">
+    <span class="material-symbols-rounded" aria-hidden="true">check</span>
+    Save
+  </button>
 </div>
