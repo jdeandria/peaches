@@ -297,6 +297,20 @@ export function removePlanned(log: WorkoutLog, exerciseId: string): WorkoutLog {
 }
 
 /**
+ * Puts the plan in the order of `exerciseIds`, which decides what's next;
+ * planned exercises it leaves out keep their order after those it names.
+ */
+export function reorderPlan(log: WorkoutLog, exerciseIds: readonly string[]): WorkoutLog {
+  const left = new Map(log.plan.map((e) => [e.exerciseId, e]));
+  const ordered = exerciseIds.flatMap((id) => {
+    const e = left.get(id);
+    left.delete(id);
+    return e ? [e] : [];
+  });
+  return { ...log, plan: [...ordered, ...left.values()] };
+}
+
+/**
  * Puts every logged exercise in the plan (as done), so a draft logged
  * before plans existed, or partly logged, reads as one list.
  */

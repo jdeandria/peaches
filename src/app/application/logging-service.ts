@@ -13,6 +13,7 @@ import {
   plannedFor,
   removeEntry,
   removePlanned,
+  reorderPlan,
   resumeTimer,
   SetLog,
   skipPlannedSet,
@@ -137,6 +138,11 @@ export class LoggingService {
       if (problem) throw new DomainError(problem);
       return logged;
     });
+  }
+
+  /** Changes the order the planned exercises are done in (`exerciseIds`, first to last). */
+  async reorderPlan(logId: string, exerciseIds: readonly string[]): Promise<WorkoutLog> {
+    return this.updateDraft(logId, (log) => reorderPlan(log, exerciseIds));
   }
 
   /** Takes back the last set logged of an exercise. */

@@ -12,13 +12,12 @@ import { Router, RouterLink } from '@angular/router';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
-import { MatFormField, MatLabel } from '@angular/material/form-field';
-import { MatInput } from '@angular/material/input';
 import { MatTooltip } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
 import { LocalDate, parseLocalDate, startOfWeek } from '../../../domain/core/local-date';
 import { stableHash } from '../../../domain/core/stable-hash';
+import { isPerformableWith } from '../../../domain/exercises/exercise';
 import { LoggableExercise } from '../../../domain/exercises/loggable';
 import { isSeasonOpen } from '../../../domain/models/season';
 import {
@@ -54,6 +53,19 @@ import { openSetLogger } from '../log/set-logger-sheet';
 
 const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' });
 
+/** Where the templates list being open or closed is kept, per device. */
+const TEMPLATES_KEY = 'pch-templates-open';
+/** Crate-mates' latest workouts offered at the top of the templates. */
+const CRATE_WORKOUTS = 5;
+
+function readTemplatesOpen(): boolean {
+  try {
+    return localStorage.getItem(TEMPLATES_KEY) !== 'closed';
+  } catch {
+    return true;
+  }
+}
+
 /** "Mon" for a date. */
 function weekdayOf(date: LocalDate): string {
   return WEEKDAY.format(new Date(`${date}T00:00:00Z`));
@@ -69,7 +81,7 @@ function exercisesSummary(exercises: readonly ExerciseLogEntry[]): string {
 /** "Squat & Bench Press", "Run", "Squat, Row & more": a name from the exercises. */
 function suggestName(exercises: readonly ExerciseLogEntry[]): string {
   const names = exercises.map((e) => e.exerciseName);
-  if (names.length === 0) return 'Workout';
+  if (names.length === 0) return 'New workout';
   const name = names.length <= 2 ? names.join(' & ') : `${names.slice(0, 2).join(', ')} & more`;
   return name.length <= PLANNED_NAME_MAX ? name : `${names[0]} & more`.slice(0, PLANNED_NAME_MAX);
 }
@@ -90,10 +102,7 @@ function suggestName(exercises: readonly ExerciseLogEntry[]): string {
     ListCard,
     LoadingIndicator,
     MatButton,
-    MatFormField,
     MatIconButton,
-    MatInput,
-    MatLabel,
     MatTooltip,
     Page,
     Section,
@@ -187,12 +196,12 @@ export class PlannedWorkoutPage {
     });
   }
 
-  protected readonly title = computed(() =>
-    this.isNew() ? 'Plan a workout' : (this.existing()?.name ?? 'Workout'),
-  );
+  /** The name as typed, else the one it'll be saved with; shown in the toolbar. */
+  protected readonly title = computed(() => this.name().trim() || this.placeholder());
+  /** "Wednesday, October 21": the day it's on. */
   protected readonly subtitle = computed(() => {
-    const monday = this.monday();
-    return monday ? Fmt.week(monday) : undefined;
+    const date = this.date();
+    return date ? Fmt.headerDay(date) : undefined;
   });
   protected readonly done = computed(() => {
     const logId = this.existing()?.logId;
@@ -285,6 +294,74 @@ export class PlannedWorkoutPage {
     }).filter((t) => t.exercises.length > 0);
   });
 
+  /** Crate-mates' latest workouts (one of each), newest first, with who did them. */
+  private readonly crateLogs = this.state.query(
+    () => {
+      const me = this.me();
+      const crates = this.state.myCrates.value();
+      return me && crates && crates.length > 0 ? { me, crates } : undefined;
+    },
+    async ({ me, crates }, app) => {
+      const lists = await Promise.all(crates.map((c) => app.logs.recentlySharedWith(c.id, 8)));
+      const seen = new Set<string>();
+      const logs = lists
+        .flat()
+        .filter((log) => log.peachId !== me)
+        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+        .filter((log) => {
+          // The same workout twice (two Crates, or a regular) shows once.
+          const key = log.entries
+            .map((e) => e.exerciseId)
+            .sort()
+            .join();
+          if (seen.has(log.id) || seen.has(key)) return false;
+          seen.add(log.id).add(key);
+          return true;
+        })
+        .slice(0, CRATE_WORKOUTS);
+      const peaches = await app.peaches.getByIds(new Set(logs.map((l) => l.peachId)));
+      const names = new Map(peaches.map((p) => [p.id, p.displayName]));
+      return logs.map((log) => ({ log, from: names.get(log.peachId) ?? 'A crate-mate' }));
+    },
+  );
+  /**
+   * Crate-mates' workouts to plan from, at the top of the templates: what
+   * they did, at your working weights where you have them, keeping only
+   * what fits where it's planned.
+   */
+  protected readonly crateWorkouts = computed(() => {
+    const logs = this.myLogs() ?? [];
+    const kit = this.kit()?.equipment ?? null;
+    const fits = (id: string) => {
+      const exercise = this.state.catalog.byId(id);
+      return kit === null || !exercise || isPerformableWith(exercise, kit);
+    };
+    return (this.crateLogs.value() ?? []).flatMap(({ log, from }) => {
+      const exercises = log.entries
+        .filter((e) => e.sets.length > 0 && fits(e.exerciseId))
+        .map((e): ExerciseLogEntry => {
+          const mine = e.takesLoad
+            ? lastEntry(logs, e.exerciseId, null)?.sets.at(-1)?.loadKg
+            : null;
+          const sets = mine == null ? e.sets : e.sets.map((s) => ({ ...s, loadKg: mine }));
+          return { ...e, sets, rpe: null, notes: null };
+        });
+      if (exercises.length === 0) return [];
+      return [
+        {
+          id: log.id,
+          from,
+          name: suggestName(exercises),
+          exercises,
+          summary: exercisesSummary(exercises),
+        },
+      ];
+    });
+  });
+
+  /** Whether the templates (and crate-mates' workouts) are listed; kept per device. */
+  protected readonly templatesOpen = signal(readTemplatesOpen());
+
   private readonly fromCrates = this.state.query(
     () => this.me() ?? undefined,
     (me, app) => crateExercisesFor(app, me),
@@ -296,6 +373,16 @@ export class PlannedWorkoutPage {
 
   protected setLocation(id: string | null): void {
     this.locationId.set(id);
+  }
+
+  protected toggleTemplates(): void {
+    const open = !this.templatesOpen();
+    this.templatesOpen.set(open);
+    try {
+      localStorage.setItem(TEMPLATES_KEY, open ? 'open' : 'closed');
+    } catch {
+      // Private mode or blocked storage: it lasts this visit only.
+    }
   }
 
   protected shuffle(template: WorkoutTemplate): void {

@@ -84,6 +84,18 @@
           <span sectionTrailing class="pch-label-large muted"
             >{{ progress().done }} of {{ progress().total }} sets done</span
           >
+          @if (planned().length > 1) {
+            <button
+              sectionTrailing
+              matIconButton
+              type="button"
+              matTooltip="Exercise order"
+              aria-label="Exercise order"
+              (click)="reorder()"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">swap_vert</span>
+            </button>
+          }
         </pch-section>
         <p class="swipe-hint pch-body-small muted">
           Swipe an exercise right to edit, left to remove.

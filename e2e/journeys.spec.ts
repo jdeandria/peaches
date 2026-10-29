@@ -30,8 +30,9 @@ test('core journey: plan against your opponent, launch a workout, see it score',
 
   // Plan a 5 km run on Tuesday: no clock, just targets.
   await page.getByRole('link', { name: 'Plan a workout on Tue, Oct 20' }).click();
-  await expect(page.getByRole('heading', { name: 'Plan a workout' })).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Tue' })).toHaveAttribute('aria-checked', 'true');
+  // On the day it was added to, named in place.
+  await expect(page.getByText('Tuesday, October 20')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Workout name' })).toBeVisible();
   await page.getByRole('button', { name: 'Add exercise' }).click();
   const picker = page.getByRole('dialog');
   await picker.getByRole('searchbox').fill('run');

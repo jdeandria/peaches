@@ -1,13 +1,26 @@
 <header class="top">
-  <button
-    matIconButton
-    type="button"
-    matTooltip="Back to plan"
-    aria-label="Back to plan"
-    (click)="backToPlan.emit()"
-  >
-    <span class="material-symbols-rounded" aria-hidden="true">close</span>
-  </button>
+  <div class="top-start">
+    <button
+      matIconButton
+      type="button"
+      matTooltip="Back to plan"
+      aria-label="Back to plan"
+      (click)="backToPlan.emit()"
+    >
+      <span class="material-symbols-rounded" aria-hidden="true">close</span>
+    </button>
+    @if (next() && log().plan.length > 1) {
+      <button
+        matIconButton
+        type="button"
+        matTooltip="Exercise order"
+        aria-label="Exercise order"
+        (click)="reorder()"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">swap_vert</span>
+      </button>
+    }
+  </div>
   <div class="clock pch-title-medium" [attr.aria-label]="'Session time ' + clock()">
     <span class="material-symbols-rounded" aria-hidden="true">timer</span>{{ clock() }}
   </div>
@@ -76,85 +89,13 @@
         </div>
       }
     </section>
-  } @else if (rest(); as r) {
-    <!-- The set screen's frame, with the rest ring where the dials were. -->
-    <section class="resting" aria-labelledby="pch-runner-heading">
-      <div class="title slide">
-        <h1 id="pch-runner-heading" #heading tabindex="-1" class="pch-headline-small">
-          {{ r.endsAt === null ? 'Nice set' : 'Rest' }}
-        </h1>
-        <p class="pch-label-large muted">{{ r.after }}</p>
-      </div>
-      <p class="target pch-label-large">
-        <span class="ghost-dot" aria-hidden="true"></span>Done {{ r.logged }}
-      </p>
-      <div class="stage">
-        @if (r.endsAt !== null) {
-          <div class="ring" role="timer" [attr.aria-label]="'Rest ' + remainingText()">
-            <svg viewBox="0 0 200 200" aria-hidden="true">
-              <circle class="track" cx="100" cy="100" r="88" />
-              <circle
-                class="left"
-                cx="100"
-                cy="100"
-                r="88"
-                [attr.stroke-dasharray]="ring"
-                [attr.stroke-dashoffset]="ringOffset()"
-              />
-            </svg>
-            <span class="time pch-display-large" aria-hidden="true">{{ remainingText() }}</span>
-          </div>
-          <div class="row">
-            <button
-              matButton="tonal"
-              type="button"
-              [attr.aria-label]="'Rest ' + restStep + ' seconds less'"
-              (click)="nudgeRest(-restStep)"
-            >
-              −{{ restStep }}s
-            </button>
-            <button
-              matButton="tonal"
-              type="button"
-              [attr.aria-label]="'Rest ' + restStep + ' seconds more'"
-              (click)="nudgeRest(restStep)"
-            >
-              +{{ restStep }}s
-            </button>
-          </div>
-        }
-      </div>
-      @if (r.finished; as finished) {
-        <ng-container
-          [ngTemplateOutlet]="rating"
-          [ngTemplateOutletContext]="{ name: finished.exerciseName }"
-        />
-      }
-      <div class="actions">
-        @if (canUndo()) {
-          <button
-            matButton="tonal"
-            type="button"
-            class="side"
-            [disabled]="busy()"
-            aria-label="Undo last set"
-            (click)="undo()"
-          >
-            <span class="material-symbols-rounded" aria-hidden="true">undo</span>
-            Undo
-          </button>
-        }
-        <button matButton="filled" type="button" class="big" (click)="endRest()">
-          <span class="material-symbols-rounded" aria-hidden="true">skip_next</span>
-          {{ r.endsAt === null ? 'Next set' : 'Skip rest' }}
-        </button>
-      </div>
-      <p class="up-next pch-body-medium">
-        Up next: <strong>{{ next()!.exercise.exerciseName }}</strong> · {{ upNextAfterRest() }}
-      </p>
-    </section>
   } @else {
     @let pos = position()!;
+    @let resting = counting();
+    <!--
+      One screen for the set and the rest after it: the timer pops in between
+      the dials, pushing them out to the sides, and goes again for the next set.
+    -->
     <section class="set" aria-labelledby="pch-runner-heading">
       @for (k of [pos.exercise + ':' + pos.set]; track k) {
         <div class="title slide">
@@ -169,32 +110,105 @@
       <p class="target pch-label-large">
         <span class="ghost-dot" aria-hidden="true"></span>Target {{ targetText() }}
       </p>
-      <pch-set-dials class="stage" fill [dials]="dials()" [joiner]="format()!.joiner" />
-      <div class="actions">
-        <button
-          matButton="tonal"
-          type="button"
-          class="side"
-          [disabled]="busy()"
-          [attr.aria-label]="'Skip set ' + pos.set"
-          (click)="skip()"
-        >
-          <span class="material-symbols-rounded" aria-hidden="true">skip_next</span>
-          Skip
-        </button>
-        <button
-          matButton="filled"
-          type="button"
-          class="big"
-          [disabled]="busy()"
-          [attr.aria-label]="'Done: set ' + pos.set + ' of ' + next()!.exercise.exerciseName"
-          (click)="done()"
-        >
-          <span class="material-symbols-rounded" aria-hidden="true">check</span>
-          Done
-        </button>
+      <div class="stage" [class.resting]="resting">
+        <pch-set-dials fill [apart]="resting" [dials]="dials()" [joiner]="format()!.joiner" />
+        @if (resting) {
+          <div class="rest" animate.enter="rest-in" animate.leave="rest-out">
+            <div class="ring" role="timer" [attr.aria-label]="'Rest ' + remainingText()">
+              <svg viewBox="0 0 200 200" aria-hidden="true">
+                <circle class="track" cx="100" cy="100" r="88" />
+                <circle
+                  class="left"
+                  cx="100"
+                  cy="100"
+                  r="88"
+                  [attr.stroke-dasharray]="ring"
+                  [attr.stroke-dashoffset]="ringOffset()"
+                />
+              </svg>
+              <span class="time" aria-hidden="true">
+                <span class="pch-label-large muted">Rest</span>
+                <span class="pch-display-small">{{ remainingText() }}</span>
+              </span>
+            </div>
+            <div class="nudges">
+              <button
+                matButton="tonal"
+                type="button"
+                [attr.aria-label]="'Rest ' + restStep + ' seconds less'"
+                (click)="nudgeRest(-restStep)"
+              >
+                −{{ restStep }}s
+              </button>
+              <button
+                matButton="tonal"
+                type="button"
+                [attr.aria-label]="'Rest ' + restStep + ' seconds more'"
+                (click)="nudgeRest(restStep)"
+              >
+                +{{ restStep }}s
+              </button>
+            </div>
+          </div>
+        }
       </div>
-      <p class="up-next pch-body-medium">Then: {{ upNext() }}</p>
+      @if (rest()?.finished; as finished) {
+        <ng-container
+          [ngTemplateOutlet]="rating"
+          [ngTemplateOutletContext]="{ name: finished.exerciseName }"
+        />
+      }
+      <div class="actions">
+        @if (resting) {
+          @if (canUndo()) {
+            <button
+              matButton="tonal"
+              type="button"
+              class="side"
+              [disabled]="busy()"
+              aria-label="Undo last set"
+              (click)="undo()"
+            >
+              <span class="material-symbols-rounded" aria-hidden="true">undo</span>
+              Undo
+            </button>
+          }
+          <button matButton="filled" type="button" class="big" (click)="endRest()">
+            <span class="material-symbols-rounded" aria-hidden="true">skip_next</span>
+            Skip rest
+          </button>
+        } @else {
+          <button
+            matButton="tonal"
+            type="button"
+            class="side"
+            [disabled]="busy()"
+            [attr.aria-label]="'Skip set ' + pos.set"
+            (click)="skip()"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">skip_next</span>
+            Skip
+          </button>
+          <button
+            matButton="filled"
+            type="button"
+            class="big"
+            [disabled]="busy()"
+            [attr.aria-label]="'Done: set ' + pos.set + ' of ' + next()!.exercise.exerciseName"
+            (click)="done()"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">check</span>
+            Done
+          </button>
+        }
+      </div>
+      <p class="up-next pch-body-medium">
+        @if (resting) {
+          Done <strong>{{ rest()!.logged }}</strong> · {{ rest()!.after }}
+        } @else {
+          Then: {{ upNext() }}
+        }
+      </p>
     </section>
   }
 </div>

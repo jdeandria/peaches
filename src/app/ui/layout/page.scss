@@ -2,8 +2,8 @@
   --pch-gutter: 16px;
   display: flex;
   flex-direction: column;
-  // Fill the viewport above the navigation bar so the bottom bar sits low.
-  min-height: calc(100dvh - var(--pch-bottom-inset, 0px));
+  // Fill the shell's scrolling area so the bottom bar sits low.
+  min-height: 100%;
   @media (min-width: 600px) {
     --pch-gutter: 24px;
   }
@@ -76,7 +76,8 @@
 
 .header {
   padding-bottom: 8px;
-  h1 {
+  // The headline, or a `[pageTitle]` standing in for it (a name to edit).
+  .headline > ::ng-deep * {
     margin: 0;
   }
 }
@@ -113,7 +114,7 @@
 
 .bottom-bar {
   position: sticky;
-  bottom: var(--pch-bottom-inset, 0px);
+  bottom: 0;
   z-index: 2;
   background: var(--mat-sys-surface-container);
   padding: 12px 0 calc(12px + var(--pch-safe-bottom, env(safe-area-inset-bottom, 0px)));

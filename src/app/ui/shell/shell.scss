@@ -1,16 +1,25 @@
+// Like a native app, the frame never moves: the shell fills the screen and
+// only `main` scrolls, without rubber-banding, so the navigation (and each
+// page's toolbar and bottom bar) stays put however the page is dragged.
+//
 // Compact (< 600px): bottom navigation bar.
 :host {
-  // Pages keep FABs / bottom bars above the bar; the bar owns the safe area.
+  // Pages keep FABs above the bar; the bar owns the safe area.
   --pch-bottom-inset: calc(68px + env(safe-area-inset-bottom, 0px));
   --pch-safe-bottom: 0px;
-  display: block;
-  min-height: 100dvh;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .main {
   display: block;
-  min-height: 100dvh;
-  padding-bottom: var(--pch-bottom-inset);
-  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: none;
   outline: none;
 }
 .skip-link {
@@ -32,10 +41,11 @@
 }
 
 .nav {
-  position: fixed;
+  position: relative;
   z-index: 5;
-  inset: auto 0 0;
+  order: 1;
   display: flex;
+  flex: none;
   height: 68px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--mat-sys-surface-container);
@@ -128,18 +138,15 @@
     --pch-rail-width: 80px;
     display: grid;
     grid-template-columns: var(--pch-rail-width) minmax(0, 1fr);
-  }
-  .main {
-    padding-bottom: 0;
+    grid-template-rows: minmax(0, 1fr);
   }
   .nav {
-    position: sticky;
-    top: 0;
-    inset: 0 auto auto;
+    order: 0;
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
-    height: 100dvh;
+    height: auto;
+    overflow-y: auto;
     padding: 0 0 env(safe-area-inset-bottom, 0px);
     background: var(--mat-sys-surface-container-low);
   }

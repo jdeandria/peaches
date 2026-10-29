@@ -32,7 +32,11 @@
 </header>
 
 <div class="column header" [class.flush]="!showBack()">
-  <h1 #headline class="pch-headline-medium">{{ title() }}</h1>
+  <div #headline class="headline">
+    <ng-content select="[pageTitle]"
+      ><h1 class="pch-headline-medium">{{ title() }}</h1></ng-content
+    >
+  </div>
   @if (subtitle()) {
     <p class="subtitle pch-body-large">{{ subtitle() }}</p>
   }

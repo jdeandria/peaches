@@ -46,6 +46,12 @@ h1:focus {
   padding: 8px 8px 0;
 }
 
+.top-start {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .top-end {
   display: flex;
   align-items: center;
@@ -125,20 +131,69 @@ button .material-symbols-rounded {
 
 @include set-screen.set-screen;
 
-// The ring sits where the dials were, with its nudges under it.
-.resting .stage {
+.stage {
+  // How big the rest timer is. The dials' rims already sit ~64px apart (the
+  // joiner and their insets), so each moves out by what's left of half the
+  // timer, keeping their values on screen.
+  --pch-rest-size: min(168px, 41vw);
+  --pch-dials-apart: calc(var(--pch-rest-size) / 2 - 26px);
+  position: relative;
+  display: flex;
+  // The dials slide part-way off the sides while the timer is up.
+  overflow-x: clip;
+
+  pch-set-dials {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+// The timer, between the dials, with its nudges under it.
+.rest {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin: 0;
+  gap: 12px;
+  width: var(--pch-rest-size);
+  transform: translate(-50%, -50%);
+}
+
+// Pops in on the spatial spring, from small, as the dials part; it shrinks
+// away faster, on the emphasized exit.
+.rest-in {
+  animation:
+    rest-pop var(--pch-spring-spatial-default-duration) var(--pch-spring-spatial-default) both,
+    rest-fade var(--pch-spring-effects-fast-duration) linear both;
+}
+
+.rest-out {
+  animation:
+    rest-pop var(--pch-duration-short) var(--pch-ease-emphasized-accelerate) reverse both,
+    rest-fade var(--pch-duration-short) linear reverse both;
+}
+
+@keyframes rest-pop {
+  from {
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+}
+
+@keyframes rest-fade {
+  from {
+    opacity: 0;
+  }
 }
 
 .ring {
   position: relative;
-  width: min(260px, 64vw);
+  width: 100%;
   aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--mat-sys-surface);
 
   svg {
     display: block;
@@ -165,9 +220,21 @@ button .material-symbols-rounded {
   .time {
     position: absolute;
     inset: 0;
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     font-variant-numeric: tabular-nums;
+  }
+}
+
+.nudges {
+  display: flex;
+  gap: 8px;
+
+  button {
+    --mat-button-tonal-horizontal-padding: 12px;
+    min-width: 0;
   }
 }
 

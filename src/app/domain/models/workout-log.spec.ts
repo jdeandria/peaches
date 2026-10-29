@@ -11,6 +11,7 @@ import {
   plannedFor,
   planProgress,
   removePlanned,
+  reorderPlan,
   resumeTimer,
   setLog,
   skipPlannedSet,
@@ -143,5 +144,20 @@ describe('a session plan', () => {
     // Put back where it was, as Undo does.
     const back = upsertPlanned(removePlanned(planned, 'squat'), planned.plan[0], 0);
     expect(back.plan.map((e) => e.exerciseId)).toEqual(['squat', 'plank']);
+  });
+
+  it('can be done in another order', () => {
+    const ids = (log: typeof planned) => log.plan.map((e) => e.exerciseId);
+    const swapped = reorderPlan(planned, ['plank', 'squat']);
+    expect(ids(swapped)).toEqual(['plank', 'squat']);
+    // The order decides what's next, even part way through an exercise.
+    const started = logPlannedSet(planned, 'squat', setLog({ reps: 5, loadKg: 60 }));
+    expect(nextPlannedSet(reorderPlan(started, ['plank', 'squat']))).toEqual({
+      exercise: plank,
+      index: 0,
+    });
+    // Unknown ids are ignored; planned ones left out keep their place after.
+    expect(ids(reorderPlan(planned, ['plank', 'nope']))).toEqual(['plank', 'squat']);
+    expect(ids(reorderPlan(planned, []))).toEqual(['squat', 'plank']);
   });
 });
