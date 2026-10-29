@@ -28,7 +28,9 @@ import { MatTooltip } from '@angular/material/tooltip';
  * - Content projected into a column capped at `maxWidth`, with the M3
  *   margin for the window size class (16px compact, 24px otherwise).
  * - Slots: `[pageActions]` (toolbar), `[pageFab]` (floating action button),
- *   `[pageBottomBar]` (pinned bar constrained to the column).
+ *   `[pageBottomBar]` (pinned bar constrained to the column), `[pageTitle]`
+ *   (in place of the headline, such as a name to edit in place; `title`
+ *   still names the page in the toolbar).
  */
 @Component({
   selector: 'pch-page',

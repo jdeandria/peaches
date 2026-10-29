@@ -60,7 +60,10 @@ A **This week | Next week** switch at the top (kept in `?week=`).
    plan (with Undo).
 
 Start launches the workout: a draft log with the planned exercises as its
-session plan, straight into the runner (`/log?mode=log`). Back to plan in
+session plan, straight into the runner (`/log?mode=log`). Between sets the
+rest timer pops in between the dials, which already show the next set;
+the exercises can be put in another order from the runner's top bar (or
+the workout's list). Back to plan in
 the runner shows the workout's exercises at `/log`, where one can be added
 or changed for this session. Finish leads to the workout's summary at
 `/log/:id`, and the day shows it done. With nothing launched, `/log` says
@@ -68,10 +71,14 @@ so and links back to the plan.
 
 ### Planning a workout `/plan/:week/:id` (`new`, with `?day=`)
 
-Name (suggested from the exercises), **Day** (Mon to Sun), **Where**
-(Anywhere, or one of your equipment locations; it filters the exercise
-picker and fits templates to the kit), then **Exercises**: Add exercise,
-or start from **Your routines** or **Templates**. Each exercise's target
+The name is the headline, typed over in place (suggested from the
+exercises). A new workout goes on the day its **+** was on (the subtitle
+says which); one already planned can move with **Day** (Mon to Sun).
+**Where** (Anywhere, or one of your equipment locations; it filters the
+exercise picker and fits templates to the kit), then **Exercises**: Add
+exercise, or start from **Your routines** or **Templates**, which fold
+away (remembered on the device) and lead with crate-mates' latest
+workouts, tagged with who did them. Each exercise's target
 sets are set on the dials, as before. Once there are exercises it shows
 what the workout is worth in each Crate with a Season on. Save as routine
 and Take off the plan sit in the top bar; **Add to plan** (or Save) in the

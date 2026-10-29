@@ -42,6 +42,10 @@ and layout primitives. Everything is standalone, OnPush and signal-based. Import
   snackbars 8 (and above the nav bar), strong focus indicators.
 - `--pch-bottom-inset` (set by the shell): height covered by the bottom nav
   bar on compact windows. Use it for anything `position: fixed` at the bottom.
+- The window never scrolls: the shell is fixed to the screen and `main`
+  scrolls (no rubber-banding), like a native app; `MainViewportScroller`
+  points the router's scroll restoration at it. Double-tap zoom is off
+  everywhere (`touch-action: manipulation`).
 
 ## Shell
 
@@ -74,7 +78,8 @@ button. Used as the parent route component in `app.routes.ts`.
 
 Slots: default (page content), `[pageActions]` (toolbar, use `mat-icon-button`s
 with `aria-label`), `[pageFab]` (fixed bottom-end; use `mat-fab extended`),
-`[pageBottomBar]` (sticky bar on surface-container, constrained to the column).
+`[pageBottomBar]` (sticky bar on surface-container, constrained to the column),
+`[pageTitle]` (in place of the headline, such as a name edited in place).
 
 Without `showBack` (the tabs), the headline sits in the toolbar's row beside
 the actions, so content starts high; the toolbar takes its background and the

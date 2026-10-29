@@ -5,6 +5,7 @@ import {
   isDevMode,
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
+import { ViewportScroller } from '@angular/common';
 import { MAT_SNACK_BAR_DEFAULT_OPTIONS } from '@angular/material/snack-bar';
 import { Title } from '@angular/platform-browser';
 import {
@@ -18,6 +19,7 @@ import {
 import { provideServiceWorker } from '@angular/service-worker';
 
 import { routes } from './app.routes';
+import { MainViewportScroller } from './ui/shell/main-scroller';
 
 /** "Crates · Peaches", or just "Peaches" for untitled routes. */
 @Injectable({ providedIn: 'root' })
@@ -40,6 +42,8 @@ export const appConfig: ApplicationConfig = {
       withViewTransitions({ skipInitialTransition: true }),
       withInMemoryScrolling({ scrollPositionRestoration: 'enabled' }),
     ),
+    // Pages scroll inside the shell's `main`, not the window.
+    { provide: ViewportScroller, useClass: MainViewportScroller },
     { provide: TitleStrategy, useClass: PeachesTitleStrategy },
     {
       provide: MAT_SNACK_BAR_DEFAULT_OPTIONS,

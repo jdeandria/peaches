@@ -15,6 +15,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { MatButton, MatIconButton } from '@angular/material/button';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatTooltip } from '@angular/material/tooltip';
 import { NgTemplateOutlet } from '@angular/common';
 
@@ -29,6 +30,7 @@ import {
 import { AppState } from '../../../state/app-state';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { WavyProgress } from '../../expressive/wavy-progress';
+import { exerciseOrderItems, openExerciseOrder } from './exercise-order-sheet';
 import { SetDials } from './set-dials';
 import { SetDraft, SetFormat } from './set-format';
 
@@ -85,11 +87,13 @@ interface Rest {
  * Log mode: the planned workout one set at a time, full screen and
  * one-handed. The dials start on the target; Done records what's on them
  * (adjust them first if the set went differently), then a rest countdown
- * runs (optional, remembered per device) before the next set. The rest
- * keeps the set's layout (`_set-screen.scss`), with the ring where the
- * dials were, so only the middle of the screen changes. Finishing an
- * exercise asks how hard it was. Sets can be skipped and taken back; what
- * the plan holds is changed back in plan mode.
+ * runs (optional, remembered per device) before the next set. The rest is
+ * a pause on the same screen (`_set-screen.scss`): the next set comes up
+ * on the dials as the timer pops in between them, pushing them out to the
+ * sides, and they close up again when it's over. Finishing an exercise
+ * asks how hard it was. Sets can be skipped and taken back, and the
+ * exercises done in another order; what the plan holds is changed back in
+ * plan mode.
  * Keeps the screen awake while open.
  */
 @Component({
@@ -117,6 +121,7 @@ export class SessionRunner {
   readonly finish = output<void>();
 
   private readonly state = inject(AppState);
+  private readonly sheet = inject(MatBottomSheet);
   private readonly destroyRef = inject(DestroyRef);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
@@ -214,6 +219,9 @@ export class SessionRunner {
     return `Set ${next.index + 1} · ${format.describe(target)}`;
   });
 
+  /** Whether a rest is counting down (the timer is up between the dials). */
+  protected readonly counting = computed(() => (this.rest()?.endsAt ?? null) !== null);
+
   /** Ticks while a rest counts down. */
   private readonly now = signal(Date.now());
   protected readonly remaining = computed(() => {
@@ -298,6 +306,8 @@ export class SessionRunner {
         after: `${next.exercise.exerciseName} · Set ${next.index + 1} of ${next.exercise.sets.length}`,
         logged: format.describe(draft),
       });
+    } else {
+      this.rest.set(null);
     }
   }
 
@@ -316,9 +326,26 @@ export class SessionRunner {
   protected async skip(): Promise<void> {
     const next = this.next();
     if (!next || this.busy()) return;
+    this.rest.set(null);
     await this.state.run((app) =>
       app.loggingService.skipSet(this.log().id, next.exercise.exerciseId),
     );
+  }
+
+  /** Changes the order of the exercises; whatever is first with sets left is next. */
+  protected async reorder(): Promise<void> {
+    const id = this.log().id;
+    // One move at a time, in the order they were made.
+    let saving: Promise<unknown> = Promise.resolve();
+    await openExerciseOrder(this.sheet, {
+      items: exerciseOrderItems(this.log()),
+      reorder: (ids) => {
+        saving = saving.then(() =>
+          this.state.run((app) => app.loggingService.reorderPlan(id, ids)),
+        );
+      },
+    });
+    await saving;
   }
 
   protected async rate(rpe: number | null): Promise<void> {

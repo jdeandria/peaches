@@ -7,13 +7,19 @@ import { DialSpec } from './set-format';
  * A set's numbers on dials: two side by side, reading as one quantity with
  * `joiner` between them (8 × 60, 1 : 30), or one with its unit beside it
  * ("12 reps"). Captions sit over each dial's faded top edge. With `fill`
- * the dials grow to whatever space they're given.
+ * the dials grow to whatever space they're given. With `apart` they slide
+ * out to the sides on the spatial spring, `--pch-dials-apart` each, to
+ * make room for something between them (the rest timer); they stay live.
  */
 @Component({
   selector: 'pch-set-dials',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Dial],
-  host: { '[class.single]': 'dials().length === 1', '[class.fill]': 'fill()' },
+  host: {
+    '[class.single]': 'dials().length === 1',
+    '[class.fill]': 'fill()',
+    '[class.apart]': 'apart()',
+  },
   template: `@for (d of dials(); track d.key; let first = $first) {
     @if (!first && joiner()) {
       <span class="joiner" [class.word]="joiner() === 'in'" aria-hidden="true">{{ joiner() }}</span>
@@ -94,6 +100,24 @@ import { DialSpec } from './set-format';
       min-height: 0;
       height: auto;
     }
+    .dial-column,
+    .joiner,
+    .solo {
+      transition:
+        transform var(--pch-spring-spatial-default-duration) var(--pch-spring-spatial-default),
+        opacity var(--pch-spring-effects-fast-duration) linear;
+    }
+    :host(.apart) .dial-column {
+      transform: translateX(calc(-1 * var(--pch-dials-apart, 96px)));
+    }
+    :host(.apart) .dial-column.end,
+    :host(.apart) .solo {
+      transform: translateX(var(--pch-dials-apart, 96px));
+    }
+    :host(.apart) .joiner {
+      opacity: 0;
+      transform: scale(0.4);
+    }
   `,
 })
 export class SetDials {
@@ -101,4 +125,6 @@ export class SetDials {
   readonly joiner = input<string | null>(null);
   /** Grow to fill the space given, rather than the dials' own height. */
   readonly fill = input(false, { transform: booleanAttribute });
+  /** Slide the dials out to the sides, leaving room between them. */
+  readonly apart = input(false, { transform: booleanAttribute });
 }

@@ -45,6 +45,7 @@ import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
 import { SwipeRow } from '../../layout/swipe-row';
 import { DisputeCard } from '../workout/dispute-card';
+import { exerciseOrderItems, openExerciseOrder } from './exercise-order-sheet';
 import { crateExercisesFor, openExercisePicker, recentEntries } from './exercise-picker-sheet';
 import { LogDetailsData, LogDetailsDialog, LogDetailsResult } from './log-details-dialog';
 import { SessionRunner } from './session-runner';
@@ -344,6 +345,23 @@ export class LogPage {
   }
 
   /** Removes at once (it's one tap from the row), with Undo to put the sets back. */
+  /** Changes the order the workout's exercises are done in. */
+  protected async reorder(): Promise<void> {
+    const log = this.log();
+    if (!log || !this.mine()) return;
+    // One move at a time, in the order they were made.
+    let saving: Promise<unknown> = Promise.resolve();
+    await openExerciseOrder(this.sheet, {
+      items: exerciseOrderItems(log),
+      reorder: (ids) => {
+        saving = saving.then(() =>
+          this.state.run((app) => app.loggingService.reorderPlan(log.id, ids)),
+        );
+      },
+    });
+    await saving;
+  }
+
   protected async removeEntry(entry: ExerciseLogEntry): Promise<void> {
     const log = this.log();
     if (!log || !this.mine()) return;

@@ -11,6 +11,23 @@
   }
   @default {
     <pch-page [title]="title()" [subtitle]="subtitle()" showBack backLink="/">
+      <!-- The name is the headline, edited in place. -->
+      <h1 pageTitle class="name pch-headline-medium">
+        <label class="name-field">
+          <input
+            class="name-input"
+            autocomplete="off"
+            enterkeyhint="done"
+            aria-label="Workout name"
+            [attr.maxlength]="nameMax"
+            [placeholder]="placeholder()"
+            [value]="name()"
+            (input)="name.set($any($event.target).value)"
+            (keydown.enter)="$any($event.target).blur()"
+          />
+          <span class="material-symbols-rounded edit" aria-hidden="true">edit</span>
+        </label>
+      </h1>
       @if (exercises().length > 0) {
         <button
           pageActions
@@ -43,27 +60,18 @@
         </p>
       }
 
-      <mat-form-field appearance="outline" class="name" [pchStagger]="0">
-        <mat-label>Name</mat-label>
-        <input
-          matInput
-          autocomplete="off"
-          [attr.maxlength]="nameMax"
-          [placeholder]="placeholder()"
-          [value]="name()"
-          (input)="name.set($any($event.target).value)"
+      <!-- A new workout is planned on the day it was added to; one already planned can move. -->
+      @if (!isNew()) {
+        <h2 class="label pch-title-small" id="day-label">Day</h2>
+        <pch-button-group
+          class="days"
+          label="Day"
+          [options]="dayOptions()"
+          [selected]="date()"
+          [height]="40"
+          (selectionChange)="setDay($event)"
         />
-      </mat-form-field>
-
-      <h2 class="label pch-title-small" id="day-label">Day</h2>
-      <pch-button-group
-        class="days"
-        label="Day"
-        [options]="dayOptions()"
-        [selected]="date()"
-        [height]="40"
-        (selectionChange)="setDay($event)"
-      />
+      }
 
       <h2 class="label pch-title-small" id="where-label">Where</h2>
       <div class="chips" role="group" aria-labelledby="where-label">
@@ -194,33 +202,67 @@
             }
           </pch-list-card>
         }
-        <pch-section title="Templates" />
-        <pch-list-card [pchStagger]="3">
-          @for (t of templates(); track t.template.id) {
-            <div class="item routine">
-              <button
-                type="button"
-                class="routine-use template-use"
-                (click)="use(t.exercises, t.template.name)"
-              >
-                <span class="pch-title-medium"
-                  >{{ t.template.name }}
-                  <span class="kit pch-label-medium">{{ t.template.kit }}</span></span
+        <h2 class="collapse-head pch-title-medium">
+          <button
+            type="button"
+            class="collapse"
+            aria-controls="pch-templates"
+            [attr.aria-expanded]="templatesOpen()"
+            (click)="toggleTemplates()"
+          >
+            <span class="collapse-title">Templates</span>
+            <span class="pch-label-large muted">{{
+              templates().length + crateWorkouts().length
+            }}</span>
+            <span class="material-symbols-rounded chevron" aria-hidden="true">expand_more</span>
+          </button>
+        </h2>
+        @if (templatesOpen()) {
+          <pch-list-card id="pch-templates" class="templates" [pchStagger]="3">
+            @for (c of crateWorkouts(); track c.id) {
+              <div class="item routine">
+                <button
+                  type="button"
+                  class="routine-use crate-use"
+                  (click)="use(c.exercises, c.name)"
                 >
-                <span class="pch-body-medium muted">{{ t.summary }}</span>
-              </button>
-              <button
-                matIconButton
-                type="button"
-                matTooltip="Shuffle"
-                [attr.aria-label]="'Shuffle ' + t.template.name"
-                (click)="shuffle(t.template)"
-              >
-                <span class="material-symbols-rounded" aria-hidden="true">shuffle</span>
-              </button>
-            </div>
-          }
-        </pch-list-card>
+                  <span class="pch-title-medium"
+                    >{{ c.name }}
+                    <span class="kit from pch-label-medium">
+                      <span class="material-symbols-rounded" aria-hidden="true">group</span
+                      >{{ c.from }}</span
+                    ></span
+                  >
+                  <span class="pch-body-medium muted">{{ c.summary }}</span>
+                </button>
+              </div>
+            }
+            @for (t of templates(); track t.template.id) {
+              <div class="item routine">
+                <button
+                  type="button"
+                  class="routine-use template-use"
+                  (click)="use(t.exercises, t.template.name)"
+                >
+                  <span class="pch-title-medium"
+                    >{{ t.template.name }}
+                    <span class="kit pch-label-medium">{{ t.template.kit }}</span></span
+                  >
+                  <span class="pch-body-medium muted">{{ t.summary }}</span>
+                </button>
+                <button
+                  matIconButton
+                  type="button"
+                  matTooltip="Shuffle"
+                  [attr.aria-label]="'Shuffle ' + t.template.name"
+                  (click)="shuffle(t.template)"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">shuffle</span>
+                </button>
+              </div>
+            }
+          </pch-list-card>
+        }
       }
 
       <div pageBottomBar class="bottom-actions">

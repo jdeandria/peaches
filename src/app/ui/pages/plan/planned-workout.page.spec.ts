@@ -61,15 +61,17 @@ describe('PlannedWorkoutPage', () => {
     Array.from(el.querySelectorAll('.item.clickable .pch-title-medium')).map(text);
   const checkedDay = (el: HTMLElement) =>
     text(el.querySelector('pch-button-group.days [role=radio][aria-checked=true]'));
+  const nameInput = (el: HTMLElement) => el.querySelector<HTMLInputElement>('h1 input.name-input')!;
   const pressed = (el: HTMLElement) =>
     Array.from(el.querySelectorAll('.chips .chip[aria-pressed=true]')).map(text);
 
   it('plans a new workout from a template, on the day asked for', async () => {
     const f = await render({ week: nextMonday, workoutId: 'new', day: '2026-10-21' });
     const el: HTMLElement = f.nativeElement;
-    expect(text(el.querySelector('h1'))).toBe('Plan a workout');
-    expect(text(el.querySelector('.subtitle'))).toBe('Oct 19 – 25');
-    expect(checkedDay(el)).toBe('Wed');
+    // The headline is the name, to type in place; the day is the one asked for.
+    expect(nameInput(el).placeholder).toBe('New workout');
+    expect(text(el.querySelector('.subtitle'))).toBe('Wednesday, October 21');
+    expect(el.querySelector('pch-button-group.days')).toBeNull();
     expect(pressed(el)).toEqual(['Anywhere']);
     expect(button(el, 'Add to plan')!.disabled).toBe(true);
 
@@ -140,9 +142,9 @@ describe('PlannedWorkoutPage', () => {
     const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
     const el: HTMLElement = f.nativeElement;
     const routines = () =>
-      Array.from(el.querySelectorAll('.routine-use:not(.template-use) .pch-title-medium')).map(
-        text,
-      );
+      Array.from(
+        el.querySelectorAll('.routine-use:not(.template-use, .crate-use) .pch-title-medium'),
+      ).map(text);
     expect(routines()).toEqual(['Full body', 'Swing day']);
     button(el, 'Delete routine Swing day')!.click();
     await stable(f);
@@ -151,7 +153,9 @@ describe('PlannedWorkoutPage', () => {
     await stable(f);
     expect(routines()).toEqual(['Full body', 'Swing day']);
 
-    el.querySelectorAll<HTMLButtonElement>('.routine-use:not(.template-use)')[0].click();
+    el.querySelectorAll<HTMLButtonElement>(
+      '.routine-use:not(.template-use, .crate-use)',
+    )[0].click();
     await stable(f);
     expect(names(el)).toEqual([
       'Goblet Squat',
@@ -160,7 +164,11 @@ describe('PlannedWorkoutPage', () => {
       'Forearm Plank',
     ]);
     // The routine names the workout.
-    expect(el.querySelector<HTMLInputElement>('input[matInput]')!.value).toBe('Full body');
+    expect(nameInput(el).value).toBe('Full body');
+    // Typed over in place, it names the page.
+    type(nameInput(el), 'Upper & lower');
+    await stable(f);
+    expect(nameInput(el).value).toBe('Upper & lower');
 
     button(el, 'Save as routine')!.click();
     await stable(f);
@@ -176,6 +184,34 @@ describe('PlannedWorkoutPage', () => {
     const saved = await backend.container.routines.forPeach(DEMO_PEACH_ID);
     expect(saved.map((r) => r.name)).toEqual(['Full body', 'Swing day', 'Upper & lower']);
     expect(toast).toHaveBeenCalledWith('Saved “Upper & lower”.');
+  });
+
+  it('lists crate-mates’ workouts first, and folds the templates away', async () => {
+    localStorage.removeItem('pch-templates-open');
+    const f = await render({ week: nextMonday, workoutId: 'new' });
+    const el: HTMLElement = f.nativeElement;
+    const toggle = () => button(el, 'Templates')!;
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+
+    // Folded away, and remembered on this device.
+    toggle().click();
+    await stable(f);
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+    expect(el.querySelector('#pch-templates')).toBeNull();
+    expect(localStorage.getItem('pch-templates-open')).toBe('closed');
+    toggle().click();
+    await stable(f);
+    expect(localStorage.getItem('pch-templates-open')).toBe('open');
+
+    // Crate-mates' workouts lead, tagged with who did them.
+    const first = el.querySelector<HTMLButtonElement>('#pch-templates .item button')!;
+    expect(first.classList).toContain('crate-use');
+    expect(text(first.querySelector('.kit.from'))).toMatch(/^group ?[A-Z]\w+$/);
+    first.click();
+    await stable(f);
+    expect(names(el).length).toBeGreaterThan(0);
+    expect(nameInput(el).value).not.toBe('');
+    localStorage.removeItem('pch-templates-open');
   });
 
   it('offers templates, reshuffled on demand', async () => {

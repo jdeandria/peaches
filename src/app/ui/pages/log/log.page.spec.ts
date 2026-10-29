@@ -208,18 +208,22 @@ describe('LogPage', () => {
     // The first set started the clock.
     expect((await backend.container.logs.getById(draft.id))!.timerStartedAt).not.toBeNull();
 
-    // A rest, which can be stretched or skipped.
-    expect(heading()).toBe('Rest');
-    // Laid out like the set: which one it was, and what was done.
-    expect(where()).toBe(`${squat.name} · Set 1 of 2`);
-    expect(text(el.querySelector('.target'))).toBe('Done 4 × 100 kg');
+    // A rest, which can be stretched or skipped: a pause on the set screen,
+    // the next set already on the dials and the timer parting them.
+    expect(heading()).toBe(squat.name);
+    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
+    expect(text(el.querySelector('.target'))).toBe('Target 5 × 100 kg');
+    expect(el.querySelector('pch-set-dials')?.classList).toContain('apart');
     expect(el.querySelector('[role=timer]')?.getAttribute('aria-label')).toBe('Rest 1:30');
     button(el, 'Rest 15 seconds more')!.click();
     await stable(f);
     expect(el.querySelector('[role=timer]')?.getAttribute('aria-label')).toBe('Rest 1:45');
-    expect(text(el.querySelector('.up-next'))).toContain('Set 2 · 5 × 100 kg');
+    // What was just done.
+    expect(text(el.querySelector('.up-next'))).toBe(`Done 4 × 100 kg · ${squat.name} · Set 1 of 2`);
     button(el, 'Skip rest')!.click();
     await stable(f);
+    expect(el.querySelector('[role=timer]')).toBeNull();
+    expect(el.querySelector('pch-set-dials')?.classList).not.toContain('apart');
     expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
 
     // Changing the plan is for plan mode: here sets are only done or skipped.
@@ -229,7 +233,7 @@ describe('LogPage', () => {
     done();
     await stable(f);
     expect(text(el)).toContain(`How hard was ${squat.name}?`);
-    expect(text(el.querySelector('.up-next'))).toContain('Forearm Plank');
+    expect(heading()).toBe('Forearm Plank');
     button(el, 'Undo last set')!.click();
     await stable(f);
     expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
@@ -243,19 +247,51 @@ describe('LogPage', () => {
     expect(restToggle.getAttribute('aria-pressed')).toBe('false');
     done();
     await stable(f);
-    expect(heading()).toBe('Nice set');
+    // Straight on to the next set, asking on the way.
+    expect(heading()).toBe('Forearm Plank');
     expect(el.querySelector('[role=timer]')).toBeNull();
     radio(el, '9').click();
     await stable(f);
     expect((await backend.container.logs.getById(draft.id))!.entries[0].rpe).toBe(9);
-    button(el, 'Next set')!.click();
-    await stable(f);
-    expect(heading()).toBe('Forearm Plank');
 
     button(el, 'Skip set 1')!.click();
     await stable(f);
     expect(heading()).toBe('Workout complete');
     expect(text(el)).toContain('2 sets in');
+  });
+
+  it('log mode takes the exercises in another order', async () => {
+    const { f, el } = await render();
+    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    const exercise = (id: string) => loggableFromCatalog(backend.container.catalog.require(id));
+    const squat = exercise('bb-back-squat');
+    await backend.container.loggingService.planExercise(
+      draft.id,
+      entryOf(squat, { sets: [1, 2].map(() => setLog({ reps: 5, loadKg: 100 })) }),
+    );
+    await backend.container.loggingService.planExercise(
+      draft.id,
+      entryOf(exercise('bw-forearm-plank'), { sets: [setLog({ seconds: 60 })] }),
+    );
+    f.componentRef.setInput('mode', 'log');
+    await stable(f);
+    expect(text(el.querySelector('h1'))).toBe(squat.name);
+
+    button(el, 'Exercise order')!.click();
+    await stable(f);
+    const order = () => Array.from(overlay().querySelectorAll('.row .pch-title-medium')).map(text);
+    expect(order()).toEqual([squat.name, 'Forearm Plank']);
+    expect(button(overlay(), `Move ${squat.name} up`)!.disabled).toBe(true);
+    button(overlay(), 'Move Forearm Plank up')!.click();
+    await stable(f);
+    expect(order()).toEqual(['Forearm Plank', squat.name]);
+    button(overlay(), 'Done')!.click();
+    await stable(f);
+    // The plank is next now.
+    const log = (await backend.container.logs.getById(draft.id))!;
+    expect(log.plan.map((e) => e.exerciseName)).toEqual(['Forearm Plank', squat.name]);
+    expect(text(el.querySelector('h1'))).toBe('Forearm Plank');
+    expect(text(el.querySelector('.title p'))).toBe('Exercise 1 of 2 · Set 1 of 1');
   });
 
   it('finishing early from log mode asks first, and logs what was done', async () => {
