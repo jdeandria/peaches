@@ -182,6 +182,13 @@ in the row and wrap them in `.pch-swipe-actions`: hidden on touch screens
 until a keyboard or screen reader focuses them. CSS var `--pch-swipe-surface`
 (the row's background, default the elevated card colour).
 
+To let rows be put in order too, make the `pch-list-card` a `cdkDropList`
+(`cdkDropListLockAxis="y"`) and each row `cdkDrag` with
+`[cdkDragStartDelay]="HOLD_TO_DRAG"`: on touch a row is held still first,
+so swipes and scrolls are untouched; once picked up it stops swiping and
+lifts off the list. For keyboards, move rows on Alt and an arrow and call
+`keepFocus(injector)` first, so focus stays in the moved row.
+
 ```html
 <pch-swipe-row editable removable (edit)="edit(e)" (remove)="remove(e)">
   <div class="item">… <span class="pch-swipe-actions"><button …>…</button></span></div>

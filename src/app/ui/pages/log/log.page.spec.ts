@@ -394,6 +394,34 @@ describe('LogPage', () => {
     expect(names()).toEqual(before);
   });
 
+  it('planned exercises move up and down the list, saved as they go', async () => {
+    const [routine] = await backend.container.routines.forPeach(DEMO_PEACH_ID);
+    const { f, el } = await render({ plan: routine.exercises });
+    const names = () => Array.from(el.querySelectorAll('.item .pch-title-medium')).map(text);
+    const before = names().map((n) => n ?? '');
+    expect(before.length).toBeGreaterThan(1);
+    const edit = (name: string) => button(el, `Edit sets: ${name}`)!;
+    const alt = (target: HTMLElement, name: string) =>
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key: name, altKey: true, bubbles: true, cancelable: true }),
+      );
+
+    edit(before[0]).focus();
+    alt(edit(before[0]), 'ArrowDown');
+    await stable(f);
+    const moved = [before[1], before[0], ...before.slice(2)];
+    expect(names()).toEqual(moved);
+    // Focus goes with it, to move it again.
+    expect(document.activeElement).toBe(edit(before[0]));
+    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    expect(draft.plan.map((e) => e.exerciseName)).toEqual(moved);
+
+    // Nowhere further up for the first.
+    alt(edit(before[1]), 'ArrowUp');
+    await stable(f);
+    expect(names()).toEqual(moved);
+  });
+
   it('makes up an exercise on the spot', async () => {
     const { f, el } = await render();
     await pick(f, el, 'Rucking');

@@ -5,9 +5,12 @@ import {
   DestroyRef,
   effect,
   inject,
+  Injector,
   input,
+  linkedSignal,
   signal,
 } from '@angular/core';
+import { CdkDrag, CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Location } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { MatButton, MatIconButton } from '@angular/material/button';
@@ -43,7 +46,7 @@ import { ListCard } from '../../layout/list-card';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
-import { SwipeRow } from '../../layout/swipe-row';
+import { HOLD_TO_DRAG, keepFocus, SwipeRow } from '../../layout/swipe-row';
 import { DisputeCard } from '../workout/dispute-card';
 import { exerciseOrderItems, openExerciseOrder } from './exercise-order-sheet';
 import { crateExercisesFor, openExercisePicker, recentEntries } from './exercise-picker-sheet';
@@ -66,7 +69,8 @@ interface PlannedView extends EntryView {
 
 /**
  * The workout launched from the plan, in two modes. Its exercises, with
- * how far along each is (add one, change targets, take one out); and Log
+ * how far along each is (add one, change targets, take one out, drag
+ * them into another order); and Log
  * (`?mode=log`): a full-screen runner that takes you through the sets one
  * at a time; the clock starts then and runs only while the page is open.
  * Finish shares it with your Crates. With nothing launched it points back
@@ -78,6 +82,8 @@ interface PlannedView extends EntryView {
   selector: 'pch-log-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    CdkDrag,
+    CdkDropList,
     DisputeCard,
     EmptyState,
     ListCard,
@@ -106,6 +112,10 @@ export class LogPage {
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
+  private readonly injector = inject(Injector);
+  protected readonly holdToDrag = HOLD_TO_DRAG;
+  /** Changes to the plan's order, saved one at a time in the order they were made. */
+  private saving: Promise<unknown> = Promise.resolve();
 
   protected readonly busy = signal(false);
 
@@ -160,12 +170,21 @@ export class LogPage {
     return this.started() ? 'Runs while this screen is open' : 'Starts when you start';
   });
 
+  /** The plan's order: as last dragged, until the saved log catches up. */
+  private readonly order = linkedSignal(() => this.log()?.plan.map((e) => e.exerciseId) ?? []);
+
   /** The session's plan, exercise by exercise, with how much is done. */
   protected readonly planned = computed<PlannedView[]>(() => {
     const log = this.log();
     if (!log) return [];
     const units = this.state.units();
-    return log.plan.map((entry) => {
+    const order = this.order();
+    const at = (id: string) => {
+      const i = order.indexOf(id);
+      return i < 0 ? order.length : i;
+    };
+    const plan = [...log.plan].sort((a, b) => at(a.exerciseId) - at(b.exerciseId));
+    return plan.map((entry) => {
       const done = doneCount(log, entry.exerciseId);
       return {
         entry,
@@ -344,23 +363,41 @@ export class LogPage {
     await this.logExercise(loggableFromEntry(entry, cues));
   }
 
-  /** Removes at once (it's one tap from the row), with Undo to put the sets back. */
-  /** Changes the order the workout's exercises are done in. */
+  /** Changes the order the workout's exercises are done in, from a sheet. */
   protected async reorder(): Promise<void> {
     const log = this.log();
     if (!log || !this.mine()) return;
-    // One move at a time, in the order they were made.
-    let saving: Promise<unknown> = Promise.resolve();
     await openExerciseOrder(this.sheet, {
       items: exerciseOrderItems(log),
-      reorder: (ids) => {
-        saving = saving.then(() =>
-          this.state.run((app) => app.loggingService.reorderPlan(log.id, ids)),
-        );
-      },
+      reorder: (ids) => this.saveOrder(log.id, ids),
     });
-    await saving;
+    await this.saving;
   }
+
+  protected drop(event: CdkDragDrop<unknown>): void {
+    this.moveExercise(event.previousIndex, event.currentIndex);
+  }
+
+  /** Moves the exercise at `from` to `to` in the list (from the keyboard, with `event`). */
+  protected moveExercise(from: number, to: number, event?: Event): void {
+    event?.preventDefault();
+    const log = this.log();
+    const ids = this.planned().map((p) => p.entry.exerciseId);
+    if (!log || !this.mine() || from === to || to < 0 || to >= ids.length) return;
+    if (event) keepFocus(this.injector);
+    moveItemInArray(ids, from, to);
+    // Shown in the new order at once; saved behind it.
+    this.order.set(ids);
+    this.saveOrder(log.id, ids);
+  }
+
+  private saveOrder(logId: string, ids: string[]): void {
+    this.saving = this.saving.then(() =>
+      this.state.run((app) => app.loggingService.reorderPlan(logId, ids)),
+    );
+  }
+
+  /** Removes at once (it's one tap from the row), with Undo to put the sets back. */
 
   protected async removeEntry(entry: ExerciseLogEntry): Promise<void> {
     const log = this.log();

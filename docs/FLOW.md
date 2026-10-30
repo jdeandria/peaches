@@ -63,8 +63,8 @@ Start launches the workout: a draft log with the planned exercises as its
 session plan, straight into the runner (`/log?mode=log`). Between sets the
 rest timer pops in between the dials, which already show the next set,
 pushing them out to the sides, greyed and still until it's over; the
-exercises can be put in another order from the runner's top bar (or the
-workout's list). Back to plan in
+exercises can be put in another order from the runner's top bar, or by
+dragging them in the workout's list. Back to plan in
 the runner shows the workout's exercises at `/log`, where one can be added
 or changed for this session. Finish leads to the workout's summary at
 `/log/:id`, and the day shows it done. With nothing launched, `/log` says

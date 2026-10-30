@@ -6,11 +6,14 @@ import {
   DestroyRef,
   ElementRef,
   inject,
+  Injector,
   input,
   output,
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { CdkDrag } from '@angular/cdk/drag-drop';
 import { ReducedMotion } from '../core/motion';
 
 /** Horizontal travel before a press counts as a swipe rather than a tap or a scroll. */
@@ -20,6 +23,28 @@ const COMMIT_SHARE = 0.35;
 /** A flick this fast (px/ms) acts sooner, from this far. */
 const FLICK_SPEED = 0.6;
 const FLICK_PX = 48;
+
+/**
+ * `cdkDragStartDelay` for rows that also drag into another order: on a
+ * touch screen a row is held still first, so a swipe still swipes and a
+ * scroll still scrolls; a mouse drags at once.
+ */
+export const HOLD_TO_DRAG = { touch: 300, mouse: 0 };
+
+/**
+ * Call before moving a row from the keyboard: moving it in the page takes
+ * focus off the button in it, so this puts focus back once it's drawn.
+ */
+export function keepFocus(injector: Injector): void {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) return;
+  afterNextRender(
+    () => {
+      if (active.isConnected && document.activeElement !== active) active.focus();
+    },
+    { injector },
+  );
+}
 
 /**
  * A list row that swipes: right to edit, left to remove (each only when
@@ -32,6 +57,10 @@ const FLICK_PX = 48;
  * button for each action in the row for mice, keyboards and screen readers
  * (rows can hide them on touch screens until focused, with
  * `.pch-swipe-actions`).
+ *
+ * A row can also be `cdkDrag` in a `cdkDropList`, to put the list in
+ * another order (with {@link HOLD_TO_DRAG}): once it's picked up it stops
+ * swiping, and it lifts off the list while it moves.
  */
 @Component({
   selector: 'pch-swipe-row',
@@ -134,6 +163,29 @@ const FLICK_PX = 48;
       transition: none;
       user-select: none;
     }
+    /* Held to drag: no text selection or callout on a long press. */
+    :host(.cdk-drag) .content {
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+    /* Picked up: lifted, and squarer, over the list. */
+    :host(.cdk-drag-preview) {
+      border-radius: var(--pch-radius-medium);
+      box-shadow: var(--pch-shadow-3);
+    }
+    :host(.cdk-drag-preview) .content {
+      background: var(--mat-sys-surface-container-highest);
+    }
+    /* Where it'll land: an empty slot. */
+    :host(.cdk-drag-placeholder) {
+      background: var(--mat-sys-surface-container-high);
+    }
+    :host(.cdk-drag-placeholder) .content {
+      visibility: hidden;
+    }
+    :host(.cdk-drag-animating) {
+      transition: transform var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast);
+    }
   `,
 })
 export class SwipeRow {
@@ -169,6 +221,10 @@ export class SwipeRow {
   constructor() {
     const destroyRef = inject(DestroyRef);
     destroyRef.onDestroy(() => clearTimeout(this.timer));
+    // Picked up to move: it's not a swipe any more.
+    inject(CdkDrag, { optional: true, self: true })
+      ?.started.pipe(takeUntilDestroyed())
+      .subscribe(() => this.reset());
     // Capturing, so the row's own click handlers never see a swipe's release.
     afterNextRender(() => {
       const content = this.content().nativeElement;
