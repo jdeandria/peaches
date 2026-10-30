@@ -313,6 +313,35 @@ describe('SetLoggerSheet', () => {
     expect(entry.sets.map((s) => s.reps)).toEqual([8]);
   });
 
+  it('puts the sets in another order, and the moved one is shown', async () => {
+    const { dialog, result } = await open(pushUp, {
+      previous: last(pushUp, [{ reps: 12 }, { reps: 10 }, { reps: 8 }]),
+    });
+    const chip = (n: number) => dialog.querySelectorAll<HTMLElement>('.chip')[n - 1];
+    const alt = async (target: HTMLElement, key: string) => {
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key, altKey: true, bubbles: true, cancelable: true }),
+      );
+      TestBed.tick();
+      await settle();
+    };
+
+    await alt(chip(1), 'ArrowRight');
+    expect(chips(dialog)).toEqual(['1 10 reps', '2 12 reps', '3 8 reps']);
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 2 of 3');
+    expect(valueOf(dialog, 'Reps')).toBe(12);
+
+    await alt(chip(3), 'ArrowLeft');
+    expect(chips(dialog)).toEqual(['1 10 reps', '2 8 reps', '3 12 reps']);
+    expect(text(dialog.querySelector('.set-label'))).toBe('Set 2 of 3');
+    // Nowhere further to go.
+    await alt(chip(1), 'ArrowLeft');
+    expect(chips(dialog)).toEqual(['1 10 reps', '2 8 reps', '3 12 reps']);
+
+    const entry = await save(dialog, result);
+    expect(entry.sets.map((s) => s.reps)).toEqual([10, 8, 12]);
+  });
+
   it('timed exercises dial minutes and seconds', async () => {
     const { dialog, result } = await open(plank, {
       previous: last(plank, [{ seconds: 45 }, { seconds: 45 }]),

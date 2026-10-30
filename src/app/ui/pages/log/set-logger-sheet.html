@@ -36,19 +36,34 @@
   </p>
 }
 
-<div class="chips" role="group" aria-label="Sets">
-  @for (s of sets(); track $index; let i = $index) {
+<!-- Hold a set and drag it to put it in another order; from a keyboard, Alt and an arrow. -->
+<div
+  class="chips"
+  role="group"
+  aria-label="Sets"
+  cdkDropList
+  cdkDropListOrientation="horizontal"
+  cdkDropListLockAxis="x"
+  (cdkDropListDropped)="drop($event)"
+>
+  @for (c of chips(); track c.key; let i = $index) {
     <button
       type="button"
       class="chip"
+      cdkDrag
+      cdkDragPreviewContainer="parent"
+      [cdkDragStartDelay]="dragDelay"
       [class.selected]="i === selected()"
-      [class.new]="i >= openedWith"
+      [class.new]="c.key >= openedWith"
       [attr.aria-current]="i === selected() ? 'true' : null"
-      [attr.aria-label]="chipLabel(i, s)"
+      [attr.aria-label]="chipLabel(i, c.set)"
+      aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
       (click)="select(i)"
+      (keydown.alt.arrowleft)="moveSet(i, i - 1, $event)"
+      (keydown.alt.arrowright)="moveSet(i, i + 1, $event)"
     >
       <span class="chip-number pch-title-medium">{{ i + 1 }}</span>
-      <span class="chip-summary pch-label-small">{{ format.summary(s) }}</span>
+      <span class="chip-summary pch-label-small">{{ format.summary(c.set) }}</span>
     </button>
   }
 </div>

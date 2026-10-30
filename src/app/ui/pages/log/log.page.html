@@ -98,15 +98,25 @@
           }
         </pch-section>
         <p class="swipe-hint pch-body-small muted">
-          Swipe an exercise right to edit, left to remove.
+          Swipe an exercise right to edit, left to remove; hold it to move it.
         </p>
-        <pch-list-card [pchStagger]="2">
-          @for (p of planned(); track p.entry.exerciseId) {
+        <pch-list-card
+          [pchStagger]="2"
+          cdkDropList
+          cdkDropListLockAxis="y"
+          aria-label="Exercises, in order"
+          (cdkDropListDropped)="drop($event)"
+        >
+          @for (p of planned(); track p.entry.exerciseId; let i = $index) {
             <pch-swipe-row
               editable
               removable
+              cdkDrag
+              [cdkDragStartDelay]="holdToDrag"
               (edit)="editEntry(p.entry)"
               (remove)="removeEntry(p.entry)"
+              (keydown.alt.arrowup)="moveExercise(i, i - 1, $event)"
+              (keydown.alt.arrowdown)="moveExercise(i, i + 1, $event)"
             >
               <!-- The row is a larger mouse target; keyboard and screen readers use its buttons. -->
               <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
@@ -132,6 +142,7 @@
                     type="button"
                     matTooltip="Remove"
                     [attr.aria-label]="'Remove ' + p.entry.exerciseName"
+                    aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
                     (click)="removeEntry(p.entry)"
                   >
                     <span class="material-symbols-rounded" aria-hidden="true">delete</span>
@@ -142,6 +153,7 @@
                     class="action filled"
                     matTooltip="Edit sets"
                     [attr.aria-label]="'Edit sets: ' + p.entry.exerciseName"
+                    aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
                     (click)="editEntry(p.entry)"
                   >
                     <span class="material-symbols-rounded" aria-hidden="true">edit</span>
