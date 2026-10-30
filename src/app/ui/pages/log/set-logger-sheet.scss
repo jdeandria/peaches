@@ -141,6 +141,29 @@ h2:focus {
   &.new {
     animation: pop var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast) both;
   }
+
+  // Picked up: lifted, on the fast spatial spring.
+  &.cdk-drag-preview {
+    box-shadow: var(--pch-shadow-3);
+    background: var(--mat-sys-surface-container-highest);
+    color: var(--mat-sys-on-surface);
+  }
+
+  // Where it'll land.
+  &.cdk-drag-placeholder {
+    outline: 2px dashed var(--mat-sys-outline-variant);
+    outline-offset: -2px;
+    background: transparent;
+
+    > * {
+      visibility: hidden;
+    }
+  }
+}
+
+.chips.cdk-drop-list-dragging .chip:not(.cdk-drag-placeholder),
+.chip.cdk-drag-animating {
+  transition: transform var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast);
 }
 
 .chip-number {

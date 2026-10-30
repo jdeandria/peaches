@@ -214,6 +214,8 @@ describe('LogPage', () => {
     expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
     expect(text(el.querySelector('.target'))).toBe('Target 5 × 100 kg');
     expect(el.querySelector('pch-set-dials')?.classList).toContain('apart');
+    // Greyed out of the way: they can't be turned until the rest is over.
+    expect(el.querySelector('pch-set-dials')?.hasAttribute('inert')).toBe(true);
     expect(el.querySelector('[role=timer]')?.getAttribute('aria-label')).toBe('Rest 1:30');
     button(el, 'Rest 15 seconds more')!.click();
     await stable(f);
@@ -224,6 +226,7 @@ describe('LogPage', () => {
     await stable(f);
     expect(el.querySelector('[role=timer]')).toBeNull();
     expect(el.querySelector('pch-set-dials')?.classList).not.toContain('apart');
+    expect(el.querySelector('pch-set-dials')?.hasAttribute('inert')).toBe(false);
     expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
 
     // Changing the plan is for plan mode: here sets are only done or skipped.

@@ -132,11 +132,12 @@ button .material-symbols-rounded {
 @include set-screen.set-screen;
 
 .stage {
-  // How big the rest timer is. The dials' rims already sit ~64px apart (the
-  // joiner and their insets), so each moves out by what's left of half the
-  // timer, keeping their values on screen.
-  --pch-rest-size: min(168px, 41vw);
-  --pch-dials-apart: calc(var(--pch-rest-size) / 2 - 26px);
+  // How big the rest timer is: it's the thing to watch now. The dials' rims
+  // already sit ~64px apart (the joiner and their insets); each moves out by
+  // most of half the timer, greyed, so it has the middle to itself; their
+  // values stay on screen.
+  --pch-rest-size: min(200px, 50vw);
+  --pch-dials-apart: calc(var(--pch-rest-size) / 2 - 18px);
   position: relative;
   display: flex;
   // The dials slide part-way off the sides while the timer is up.

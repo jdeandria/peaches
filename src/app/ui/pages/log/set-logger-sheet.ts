@@ -9,6 +9,7 @@ import {
   Injector,
   signal,
 } from '@angular/core';
+import { CdkDrag, CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import {
   MAT_BOTTOM_SHEET_DATA,
@@ -67,20 +68,29 @@ const RPE_OPTIONS: ButtonGroupOption<number>[] = [5, 6, 7, 8, 9, 10].map((r) => 
 /** Most sets one entry can hold. */
 const MAX_SETS = 20;
 
+/** A copy of `all` with the item at `from` moved to `to`. */
+function moved<T>(all: readonly T[], from: number, to: number): T[] {
+  const copy = [...all];
+  moveItemInArray(copy, from, to);
+  return copy;
+}
+
 /**
  * Sets out one exercise a set at a time, however it is measured (see
  * {@link SetFormat}): the targets when planning a session, or what was done
  * when correcting a finished one. Each set's numbers are on dials: swipe
  * along one to turn it, fling it to cover ground, tap it to type. It starts
  * from last time's sets (marked on the dials), so repeating a workout is one
- * tap. Sets are picked from a strip, added and removed; when logging, an
+ * tap. Sets are picked from a strip, added, removed and dragged into
+ * another order (held first on a touch screen, so the strip still
+ * scrolls; Alt and an arrow from a keyboard); when logging, an
  * optional RPE rates the whole exercise. It's laid out like the runner's
  * set screen (`_set-screen.scss`), so planning a set looks like doing it.
  */
 @Component({
   selector: 'pch-set-logger-sheet',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButton, MatIconButton, MatTooltip, ButtonGroup, SetDials],
+  imports: [CdkDrag, CdkDropList, MatButton, MatIconButton, MatTooltip, ButtonGroup, SetDials],
   templateUrl: './set-logger-sheet.html',
   styleUrl: './set-logger-sheet.scss',
 })
@@ -101,8 +111,15 @@ export class SetLoggerSheet {
   protected readonly sets = signal<SetDraft[]>(this.initialSets());
   /** Sets there when the sheet opened; later ones pop in. */
   protected readonly openedWith = this.sets().length;
+  /** Each set's key, in order, so its chip moves with it; the first sets are 0, 1, 2… */
+  private keys = this.sets().map((_, i) => i);
   /** Last committed weight per set, to carry edits forward. */
   private committed = this.sets().map((s) => s.load);
+  protected readonly chips = computed(() =>
+    this.sets().map((set, i) => ({ key: this.keys[i], set })),
+  );
+  /** On a touch screen a chip is held before it drags, so a swipe scrolls the strip. */
+  protected readonly dragDelay = { touch: 250, mouse: 0 };
   protected readonly rpe = signal<number | null>(this.data.existing?.rpe ?? null);
 
   /** The set on the card. */
@@ -207,6 +224,7 @@ export class SetLoggerSheet {
   protected addSet(): void {
     if (!this.canAdd()) return;
     const copy = this.sets()[this.selected()];
+    this.keys = [...this.keys, Math.max(...this.keys) + 1];
     this.sets.update((all) => [...all, copy]);
     this.committed = [...this.committed, copy.load];
     this.select(this.sets().length - 1);
@@ -216,11 +234,38 @@ export class SetLoggerSheet {
   protected removeSet(): void {
     if (!this.canRemove()) return;
     const i = this.selected();
+    this.keys = this.keys.filter((_, j) => j !== i);
     this.sets.update((all) => all.filter((_, j) => j !== i));
     this.committed = this.committed.filter((_, j) => j !== i);
     this.direction.set(i === this.sets().length ? -1 : 1);
     this.moved.set(true);
     this.selected.set(Math.min(i, this.sets().length - 1));
+  }
+
+  protected drop(event: CdkDragDrop<unknown>): void {
+    this.moveSet(event.previousIndex, event.currentIndex);
+  }
+
+  /** Moves set `from` to `to`, and puts it on the card at its new number. */
+  protected moveSet(from: number, to: number, event?: Event): void {
+    event?.preventDefault();
+    const count = this.sets().length;
+    if (from === to || to < 0 || to >= count) {
+      this.select(from);
+      return;
+    }
+    this.keys = moved(this.keys, from, to);
+    this.committed = moved(this.committed, from, to);
+    this.sets.update((all) => moved(all, from, to));
+    this.direction.set(to > this.selected() ? 1 : -1);
+    this.moved.set(true);
+    this.selected.set(to);
+    // Moving a chip in the page drops focus from it: keep it there.
+    if (event) {
+      afterNextRender(() => this.host.querySelectorAll<HTMLElement>('.chip')[to]?.focus(), {
+        injector: this.injector,
+      });
+    }
   }
 
   /**

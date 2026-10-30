@@ -9,7 +9,8 @@ import { DialSpec } from './set-format';
  * ("12 reps"). Captions sit over each dial's faded top edge. With `fill`
  * the dials grow to whatever space they're given. With `apart` they slide
  * out to the sides on the spatial spring, `--pch-dials-apart` each, to
- * make room for something between them (the rest timer); they stay live.
+ * make room for something between them (the rest timer), and grey out;
+ * they can't be turned until they close up again.
  */
 @Component({
   selector: 'pch-set-dials',
@@ -19,6 +20,7 @@ import { DialSpec } from './set-format';
     '[class.single]': 'dials().length === 1',
     '[class.fill]': 'fill()',
     '[class.apart]': 'apart()',
+    '[attr.inert]': 'apart() ? "" : null',
   },
   template: `@for (d of dials(); track d.key; let first = $first) {
     @if (!first && joiner()) {
@@ -105,7 +107,8 @@ import { DialSpec } from './set-format';
     .solo {
       transition:
         transform var(--pch-spring-spatial-default-duration) var(--pch-spring-spatial-default),
-        opacity var(--pch-spring-effects-fast-duration) linear;
+        opacity var(--pch-spring-effects-fast-duration) linear,
+        filter var(--pch-spring-effects-fast-duration) linear;
     }
     :host(.apart) .dial-column {
       transform: translateX(calc(-1 * var(--pch-dials-apart, 96px)));
@@ -113,6 +116,12 @@ import { DialSpec } from './set-format';
     :host(.apart) .dial-column.end,
     :host(.apart) .solo {
       transform: translateX(var(--pch-dials-apart, 96px));
+    }
+    /* Greyed, and inert, while apart: not what to look at. */
+    :host(.apart) .dial-column,
+    :host(.apart) .solo {
+      opacity: 0.38;
+      filter: grayscale(1);
     }
     :host(.apart) .joiner {
       opacity: 0;
