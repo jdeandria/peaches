@@ -89,6 +89,33 @@ describe('PlannedWorkoutPage', () => {
     expect(TestBed.inject(Router).url).toBe('/?week=next');
   });
 
+  it('puts the exercises in another order', async () => {
+    const f = await render({ week: nextMonday, workoutId: 'new', day: '2026-10-21' });
+    const el: HTMLElement = f.nativeElement;
+    el.querySelector<HTMLButtonElement>('button.template-use')!.click();
+    await stable(f);
+    const before = names(el).map((n) => n ?? '');
+    expect(before.length).toBeGreaterThan(1);
+    const remove = (name: string) => button(el, `Remove ${name}`)!;
+    const alt = (target: HTMLElement, key: string) =>
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key, altKey: true, bubbles: true, cancelable: true }),
+      );
+
+    const last = before.at(-1)!;
+    remove(last).focus();
+    alt(remove(last), 'ArrowUp');
+    await stable(f);
+    const moved = [...before.slice(0, -2), last, before.at(-2)!];
+    expect(names(el)).toEqual(moved);
+    expect(document.activeElement).toBe(remove(last));
+
+    button(el, 'Add to plan')!.click();
+    await stable(f);
+    const plan = await backend.container.plans.get(DEMO_PEACH_ID, nextMonday);
+    expect(plan!.workouts[0].exercises.map((e) => e.exerciseName)).toEqual(moved);
+  });
+
   it('moves a planned workout to another day, keeping what was done', async () => {
     const plan = (b: TestBackend) => b.container.plans.get(DEMO_PEACH_ID, thisMonday);
     let id = '';

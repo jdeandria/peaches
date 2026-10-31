@@ -4,11 +4,13 @@ import {
   computed,
   effect,
   inject,
+  Injector,
   input,
   signal,
   untracked,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { CdkDrag, CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
@@ -46,7 +48,7 @@ import { ListCard } from '../../layout/list-card';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
-import { SwipeRow } from '../../layout/swipe-row';
+import { HOLD_TO_DRAG, keepFocus, SwipeRow } from '../../layout/swipe-row';
 import { crateExercisesFor, openExercisePicker, recentEntries } from '../log/exercise-picker-sheet';
 import { SaveRoutineData, SaveRoutineDialog, SaveRoutineResult } from '../log/save-routine-dialog';
 import { openSetLogger } from '../log/set-logger-sheet';
@@ -90,7 +92,9 @@ function suggestName(exercises: readonly ExerciseLogEntry[]): string {
  * Plans one workout of a week: its day, where (a location's equipment
  * decides which exercises and templates are offered), and its exercises
  * with target sets, from scratch, a routine or a template. Shows what it's
- * worth in each Crate with a Season on. Nothing is saved until Save.
+ * worth in each Crate with a Season on. The exercises can be dragged into
+ * another order (held first on a touch screen; Alt and an arrow from a
+ * keyboard). Nothing is saved until Save.
  */
 @Component({
   selector: 'pch-planned-workout-page',
@@ -98,6 +102,8 @@ function suggestName(exercises: readonly ExerciseLogEntry[]): string {
   imports: [
     RouterLink,
     ButtonGroup,
+    CdkDrag,
+    CdkDropList,
     EmptyState,
     ListCard,
     LoadingIndicator,
@@ -124,6 +130,8 @@ export class PlannedWorkoutPage {
   private readonly router = inject(Router);
   private readonly sheet = inject(MatBottomSheet);
   private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
+  protected readonly holdToDrag = HOLD_TO_DRAG;
   protected readonly nameMax = PLANNED_NAME_MAX;
   protected readonly busy = signal(false);
 
@@ -413,6 +421,22 @@ export class PlannedWorkoutPage {
   protected async editEntry(entry: ExerciseLogEntry): Promise<void> {
     const cues = this.state.catalog.byId(entry.exerciseId)?.cues ?? null;
     await this.setTargets(loggableFromEntry(entry, cues));
+  }
+
+  protected drop(event: CdkDragDrop<unknown>): void {
+    this.moveExercise(event.previousIndex, event.currentIndex);
+  }
+
+  /** Moves the exercise at `from` to `to` (from the keyboard, with `event`). */
+  protected moveExercise(from: number, to: number, event?: Event): void {
+    event?.preventDefault();
+    if (from === to || to < 0 || to >= this.exercises().length) return;
+    if (event) keepFocus(this.injector);
+    this.exercises.update((list) => {
+      const next = [...list];
+      moveItemInArray(next, from, to);
+      return next;
+    });
   }
 
   /** Takes an exercise out, with Undo to put it back where it was. */

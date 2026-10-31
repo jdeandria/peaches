@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { CdkScrollable } from '@angular/cdk/scrolling';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 
@@ -34,7 +35,7 @@ export function activeDestination(router: Router, url: string): number {
 @Component({
   selector: 'pch-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, RouterLink],
+  imports: [CdkScrollable, RouterOutlet, RouterLink],
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
 })
