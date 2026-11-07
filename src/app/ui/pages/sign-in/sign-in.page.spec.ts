@@ -11,41 +11,36 @@ import { AUTH_SERVICE } from '../../../state/tokens';
 import { seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { SignInPage } from './sign-in.page';
 
-/** An auth service that starts signed out and signs in with email only. */
+/** An auth service that starts signed out and signs in with Google. */
 class FakeAuth implements AuthService {
   private readonly state = new BehaviorSubject<AuthUser | null>(null);
   readonly authState = this.state.asObservable();
-  emailAttempts = 0;
-  registered: string[] = [];
+  attempts = 0;
+  /** Rejects the next sign-in with this message. */
+  failNext: string | null = null;
   /** When set, sign-in waits for this before finishing. */
   gate: Promise<void> | null = null;
 
-  constructor(readonly availableProviders: ReadonlySet<AuthProvider> = new Set(['email'])) {}
+  constructor(readonly availableProviders: ReadonlySet<AuthProvider> = new Set(['google'])) {}
 
   get currentUser(): AuthUser | null {
     return this.state.value;
   }
 
-  signInWithGoogle(): Promise<AuthUser> {
-    throw new Error('unimplemented');
-  }
-
-  signInWithApple(): Promise<AuthUser> {
-    throw new Error('unimplemented');
-  }
-
-  async signInWithEmail(email: string, password: string): Promise<AuthUser> {
-    this.emailAttempts++;
+  async signInWithGoogle(): Promise<AuthUser> {
+    this.attempts++;
     if (this.gate) await this.gate;
-    if (password !== 'secret') throw new DomainError('Email or password is incorrect.');
-    const user: AuthUser = { id: 'u1', email, displayName: 'Uma', photoUrl: null };
+    const failure = this.failNext;
+    this.failNext = null;
+    if (failure) throw new DomainError(failure);
+    const user: AuthUser = {
+      id: 'u1',
+      email: 'uma@example.com',
+      displayName: 'Uma',
+      photoUrl: null,
+    };
     this.state.next(user);
     return user;
-  }
-
-  async registerWithEmail(email: string, password: string, displayName: string) {
-    this.registered.push(displayName);
-    return this.signInWithEmail(email, password);
   }
 
   async signOut(): Promise<void> {
@@ -77,75 +72,43 @@ describe('SignInPage', () => {
     Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(
       (b) => text(b.querySelector('.mdc-button__label')) === name,
     );
-  const fields = (root: ParentNode) => Array.from(root.querySelectorAll<HTMLInputElement>('input'));
-  const labels = (root: ParentNode) => Array.from(root.querySelectorAll('mat-label')).map(text);
-  function type(input: HTMLInputElement, value: string): void {
-    input.value = value;
-    input.dispatchEvent(new Event('input'));
-  }
+  const buttons = (root: ParentNode) =>
+    Array.from(root.querySelectorAll('button .mdc-button__label')).map(text);
 
-  it('shows the brand and only the providers on offer', async () => {
+  it('shows the brand and only Google sign-in', async () => {
     await setUp();
     const f = TestBed.createComponent(SignInPage);
     await stable(f);
     const el: HTMLElement = f.nativeElement;
     expect(text(el.querySelector('h1'))).toBe('Peaches');
     expect(text(el)).toContain('Log workouts. Compete with your Crate.');
-    expect(button(el, 'Continue with Google')).toBeUndefined();
-    expect(button(el, 'Continue with Apple')).toBeUndefined();
-    expect(labels(el)).toEqual(['Email', 'Password']);
-    expect(button(el, 'Sign in')).toBeDefined();
+    expect(buttons(el)).toEqual(['Continue with Google']);
+    expect(el.querySelectorAll('input')).toHaveLength(0);
   });
 
-  it('offers Google and Apple when available', async () => {
-    await setUp(new FakeAuth(new Set<AuthProvider>(['google', 'apple'])));
+  it('offers nothing when no provider is available', async () => {
+    await setUp(new FakeAuth(new Set()));
     const f = TestBed.createComponent(SignInPage);
     await stable(f);
-    const el: HTMLElement = f.nativeElement;
-    expect(button(el, 'Continue with Google')).toBeDefined();
-    expect(button(el, 'Continue with Apple')).toBeDefined();
-    expect(fields(el)).toHaveLength(0);
+    expect(buttons(f.nativeElement)).toEqual([]);
   });
 
-  it('shows sign-in errors and disables buttons while busy', async () => {
+  it('shows sign-in errors and disables the button while busy', async () => {
     await setUp();
     let open!: () => void;
     auth.gate = new Promise((resolve) => (open = resolve));
+    auth.failNext = 'Sign in cancelled.';
     const f = TestBed.createComponent(SignInPage);
     await stable(f);
     const el: HTMLElement = f.nativeElement;
-    const [email, password] = fields(el);
-    type(email, 'uma@example.com');
-    type(password, 'wrong');
-    button(el, 'Sign in')!.click();
+    button(el, 'Continue with Google')!.click();
     await stable(f);
-    expect(button(el, 'Sign in')!.disabled).toBe(true);
-    expect(button(el, 'New here? Create an account')!.disabled).toBe(true);
+    expect(button(el, 'Continue with Google')!.disabled).toBe(true);
     open();
     await stable(f);
-    expect(document.body.textContent).toContain('Email or password is incorrect.');
-    expect(auth.emailAttempts).toBe(1);
-    expect(button(el, 'Sign in')!.disabled).toBe(false);
-  });
-
-  it('creates an account with a display name', async () => {
-    await setUp();
-    const f = TestBed.createComponent(SignInPage);
-    await stable(f);
-    const el: HTMLElement = f.nativeElement;
-    button(el, 'New here? Create an account')!.click();
-    await stable(f);
-    expect(labels(el)).toEqual(['Display name', 'Email', 'Password']);
-    expect(button(el, 'Have an account? Sign in')).toBeDefined();
-    const [name, email, password] = fields(el);
-    type(name, 'Uma');
-    type(email, 'uma@example.com');
-    type(password, 'secret');
-    // Enter in a field submits the form.
-    el.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
-    await stable(f);
-    expect(auth.registered).toEqual(['Uma']);
-    expect(auth.currentUser?.email).toBe('uma@example.com');
+    expect(document.body.textContent).toContain('Sign in cancelled.');
+    expect(auth.attempts).toBe(1);
+    expect(button(el, 'Continue with Google')!.disabled).toBe(false);
   });
 
   it('toasts a failed redirect sign-in', async () => {
@@ -187,25 +150,20 @@ describe('Sign-in journey', () => {
     expect(router.url).toBe('/sign-in');
     const signIn = () =>
       Array.from(el.querySelectorAll<HTMLButtonElement>('button')).find(
-        (b) => b.textContent?.trim() === 'Sign in',
+        (b) => b.textContent?.trim() === 'Continue with Google',
       )!;
     expect(signIn()).toBeDefined();
     expect(el.querySelector('h1')?.textContent).toBe('Peaches');
 
-    const [email, password] = Array.from(el.querySelectorAll<HTMLInputElement>('input'));
-    email.value = 'uma@example.com';
-    email.dispatchEvent(new Event('input'));
-    password.value = 'wrong';
-    password.dispatchEvent(new Event('input'));
+    auth.failNext = 'Sign in cancelled.';
     signIn().click();
     await stable();
-    expect(document.body.textContent).toContain('Email or password is incorrect.');
-    expect(auth.emailAttempts).toBe(1);
+    expect(document.body.textContent).toContain('Sign in cancelled.');
+    expect(router.url).toBe('/sign-in');
 
-    password.value = 'secret';
-    password.dispatchEvent(new Event('input'));
     signIn().click();
     await stable();
+    expect(auth.attempts).toBe(2);
     expect(router.url).toBe('/');
     expect(el.querySelector('h1')?.textContent).toBe('Plan');
     const peach = await backend.container.peaches.getById('u1');

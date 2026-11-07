@@ -111,20 +111,23 @@ copies of the PWA download the new version in the background and show
 
 One-time setup, in order:
 
-1. Create the Firebase project and enable **Authentication** providers:
-   Google, Apple, Email/Password. Enable **Firestore**.
+1. Create the Firebase project and enable the **Google** sign-in provider
+   under Authentication. Enable **Firestore**.
 2. Register a **Web app** (Project settings → Your apps). CI injects its
    config from the `FIREBASE_WEB_CONFIG` secret; for local Firebase builds,
    copy it into `src/app/data/firebase/firebase-config.ts` (the API key is
    not a secret; it ships to browsers). The placeholder values there make
    the app refuse to start the Firebase backend until replaced.
 3. Add your Hosting domains (and `localhost` for development) under
-   Authentication → Settings → Authorized domains.
+   Authentication → Settings → Authorized domains. `<project>.web.app` and
+   `<project>.firebaseapp.com` are there already, but a **custom domain**
+   (such as `peaches.fit`, and `www.peaches.fit` if it serves the app) is
+   not added when you connect it to Hosting: until it is, sign-in there
+   fails with "Sign in is not set up for peaches.fit yet"
+   (`auth/unauthorized-domain`).
 4. Deploy rules and indexes: `npx firebase deploy --only firestore`.
    `deploy.yml` also does this on every push to `main`.
-5. Apple sign-in: configure the Services ID, key and return URL in the
-   Apple developer portal and in the Firebase console's Apple provider.
-6. Set up continuous deployment (above). Locally, `npm run build:firebase`
+5. Set up continuous deployment (above). Locally, `npm run build:firebase`
    builds against Firebase and `npm run deploy` builds and deploys
    (set your project id in `.firebaserc` first).
 
