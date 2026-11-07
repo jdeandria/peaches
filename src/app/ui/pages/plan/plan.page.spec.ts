@@ -165,16 +165,17 @@ describe('PlanPage', () => {
     expect(saturday.querySelector('.toggle')?.getAttribute('aria-expanded')).toBe('true');
     expect(exercises(saturday)).toEqual(['Goblet Squat', 'Dumbbell Bench Press', 'Forearm Plank']);
 
-    // Start at the second: it goes first, then the rest in order.
+    // Start at the second: the runner does it now; the plan keeps its order.
     button(saturday, 'Start Dumbbell Bench Press')!.click();
     await stable(f);
-    expect(TestBed.inject(Router).url).toBe('/log?mode=log');
     const plan = await backend.container.plans.get(DEMO_PEACH_ID, thisMonday);
     const launched = plan!.workouts.find((w) => w.day === localDate(2026, 10, 17))!;
+    const bench = launched.exercises[1].exerciseId;
+    expect(TestBed.inject(Router).url).toBe(`/log?mode=log&exercise=${bench}`);
     const log = await backend.container.logs.getById(launched.logId!);
     expect(log?.plan.map((e) => e.exerciseName)).toEqual([
-      'Dumbbell Bench Press',
       'Goblet Squat',
+      'Dumbbell Bench Press',
       'Forearm Plank',
     ]);
 
@@ -229,6 +230,55 @@ describe('PlanPage', () => {
     await settle(400);
     await stable(f);
     expect(exercises(card(el, 'Swing day'))).toEqual(['Kettlebell Swing', 'Push Up']);
+  });
+
+  it('sets an exercise’s sets, reps and weight with − and +, saved after the last tap', async () => {
+    const f = await render();
+    const el: HTMLElement = f.nativeElement;
+    const saturday = card(el, 'Goblet Squat & more');
+    saturday.querySelector<HTMLButtonElement>('.toggle')!.click();
+    await stable(f);
+    const squat = async () =>
+      (await backend.container.plans.get(DEMO_PEACH_ID, thisMonday))!.workouts.find(
+        (w) => w.day === localDate(2026, 10, 17),
+      )!.exercises[0];
+    const before = await squat();
+    const load = before.sets[0].loadKg!;
+
+    // Tapping an exercise opens its numbers: steppers, not dials.
+    const edit = saturday.querySelector<HTMLButtonElement>('button.edit')!;
+    edit.click();
+    await stable(f);
+    expect(edit.getAttribute('aria-expanded')).toBe('true');
+    expect(saturday.querySelectorAll('pch-stepper')).toHaveLength(3);
+    expect(saturday.querySelector('[role=slider]')).toBeNull();
+    const steppers = Array.from(saturday.querySelectorAll('pch-stepper')).map((x) =>
+      text(x.querySelector('.label')),
+    );
+    expect(steppers).toEqual(['Sets', 'Reps', 'Weight']);
+
+    for (const label of ['More sets', 'More weight', 'More weight']) {
+      button(saturday, label)!.click();
+      TestBed.tick();
+    }
+    await stable(f);
+    // Shown at once, saved a moment after the last tap (once, not per tap).
+    expect(text(saturday.querySelector('.exercise .text .muted'))).toContain('4 sets');
+    expect((await squat()).sets).toHaveLength(before.sets.length);
+    await settle(700);
+    await stable(f);
+    const after = await squat();
+    expect(after.sets).toHaveLength(before.sets.length + 1);
+    expect(after.sets.map((s) => s.loadKg)).toEqual(after.sets.map(() => load + 5));
+    expect(after.sets.map((s) => s.reps)).toEqual([
+      ...before.sets.map((s) => s.reps),
+      before.sets.at(-1)!.reps,
+    ]);
+
+    // Tapping it again closes it.
+    saturday.querySelector<HTMLButtonElement>('button.edit')!.click();
+    await stable(f);
+    expect(saturday.querySelectorAll('pch-stepper')).toHaveLength(0);
   });
 
   it('adds, removes (with Undo) and reorders a workout’s exercises, saved as they go', async () => {

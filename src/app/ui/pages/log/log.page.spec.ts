@@ -227,6 +227,62 @@ describe('LogPage', () => {
     expect(text(el)).toContain('2 sets in');
   });
 
+  it('skips around: a chip per exercise does it now, and holding one moves it', async () => {
+    const exercise = (id: string) => loggableFromCatalog(backend.container.catalog.require(id));
+    const squat = exercise('bb-back-squat');
+    const plank = exercise('bw-forearm-plank');
+    const { f, el } = await render({
+      plan: [
+        entryOf(squat, { sets: [1, 2].map(() => setLog({ reps: 5, loadKg: 100 })) }),
+        entryOf(plank, { sets: [setLog({ seconds: 60 })] }),
+      ],
+    });
+    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    const chips = () => Array.from(el.querySelectorAll<HTMLButtonElement>('.chips .chip'));
+    expect(chips().map((c) => c.getAttribute('aria-label'))).toEqual([
+      `${squat.name}, 0 of 2 sets`,
+      'Forearm Plank, 0 of 1 sets',
+    ]);
+    expect(chips()[0].getAttribute('aria-current')).toBe('step');
+
+    // Tap the plank: it's next, and the plan keeps its order.
+    chips()[1].click();
+    await stable(f);
+    expect(text(el.querySelector('h1'))).toBe('Forearm Plank');
+    expect(text(el.querySelector('.title p'))).toBe('Exercise 2 of 2 · Set 1 of 1');
+    expect((await backend.container.logs.getById(draft.id))!.plan[0].exerciseId).toBe(squat.id);
+    // Once it's done, the plan's order takes over again.
+    doneButton(el)!.click();
+    await stable(f);
+    button(el, 'Skip rest')?.click();
+    await stable(f);
+    expect(text(el.querySelector('h1'))).toBe(squat.name);
+    expect(chips()[1].getAttribute('aria-label')).toBe('Forearm Plank, done');
+
+    // Alt and an arrow (or holding and dragging) moves one.
+    chips()[0].dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true }),
+    );
+    await stable(f);
+    expect((await backend.container.logs.getById(draft.id))!.plan.map((e) => e.exerciseId)).toEqual(
+      [plank.id, squat.id],
+    );
+  });
+
+  it('starts at the exercise picked on the Plan', async () => {
+    const exercise = (id: string) => loggableFromCatalog(backend.container.catalog.require(id));
+    const squat = exercise('bb-back-squat');
+    const plank = exercise('bw-forearm-plank');
+    await backend.container.loggingService.newDraft(DEMO_PEACH_ID, TestBed.inject(AppState).now(), [
+      entryOf(squat, { sets: [setLog({ reps: 5, loadKg: 100 })] }),
+      entryOf(plank, { sets: [setLog({ seconds: 60 })] }),
+    ]);
+    const f = TestBed.createComponent(LogPage);
+    f.componentRef.setInput('exercise', plank.id);
+    await stable(f);
+    expect(text(f.nativeElement.querySelector('h1'))).toBe('Forearm Plank');
+  });
+
   it('finishing early from log mode asks first, and logs what was done', async () => {
     const { f, el } = await render();
     const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);

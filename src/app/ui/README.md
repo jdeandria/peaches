@@ -226,13 +226,25 @@ note under a section. Use it rather than an outlined card.
 <p class="pch-note">Nothing logged yet. Your workouts show up here.</p>
 ```
 
+### `pch-stepper` — `Stepper`
+
+A number set with − and + (an outlined minus, a tonal plus), for planning:
+dials are for doing a set. Inputs `label` (required), `value` (required),
+`step` (1), `min` (0), `max` (9999), `format` (`(v) => string`); output
+`valueChange`. `SetFormat.steppers(set)` gives a set's specs.
+
+```html
+<pch-stepper label="Reps" [value]="10" [min]="1" (valueChange)="reps.set($event)" />
+```
+
 ### `pch-workout-card` — `WorkoutCard` (`pages/plan/workout-card.ts`)
 
 A planned workout on the Plan: a row led by a play button this week (else
 its state), then name and what it's worth, that opens to its exercises,
 each with a play button too; Add exercise, swipe to
-remove, drag to reorder and a ⋮ menu. Inputs `view: WorkoutView`,
-`monday: LocalDate`, `open: boolean`; output `openChange`. Its actions go
+remove, drag to reorder and a ⋮ menu. Tapping an exercise opens
+its `pch-stepper`s. Inputs `view: WorkoutView`, `monday: LocalDate`,
+`open: boolean`; output `openChange`. Its actions go
 through `PlanActions`, which the Plan page provides.
 
 ### `pch-empty-state` — `EmptyState`

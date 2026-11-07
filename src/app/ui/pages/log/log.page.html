@@ -17,6 +17,7 @@
 } @else if (running()) {
   <pch-session-runner
     [log]="log()!"
+    [startAt]="exercise() ?? null"
     [clock]="clock()"
     (backToPlan)="closeRunner()"
     (finish)="finish()"

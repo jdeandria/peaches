@@ -199,6 +199,22 @@ export class PlanActions {
     await this.save(monday, w, { exercises: [...w.exercises, entry] });
   }
 
+  /** Changes an exercise's planned sets: on the plan, or the session's if it's under way. */
+  async updateExercise(
+    monday: LocalDate,
+    w: PlannedWorkout,
+    log: WorkoutLog | null,
+    entry: ExerciseLogEntry,
+  ): Promise<void> {
+    if (log) {
+      await this.state.run((app) => app.loggingService.planExercise(log.id, entry));
+      return;
+    }
+    await this.save(monday, w, {
+      exercises: w.exercises.map((e) => (e.exerciseId === entry.exerciseId ? entry : e)),
+    });
+  }
+
   /** Takes an exercise out, with Undo; the last one takes the workout off the plan. */
   async removeExercise(
     monday: LocalDate,
@@ -255,8 +271,8 @@ export class PlanActions {
 
   /**
    * Starts the workout (or carries on with it), at one exercise if given:
-   * it goes first, so the runner takes it next, then the rest in order.
-   * Without one, the runner takes the first with sets left.
+   * the runner does that one now, then follows the plan's order. Without
+   * one, it takes the first with sets left.
    */
   async play(
     monday: LocalDate,
@@ -269,12 +285,9 @@ export class PlanActions {
       app.planService.launch(me, monday, w.id, this.state.now()),
     );
     if (!log) return;
-    const ids = log.plan.map((e) => e.exerciseId);
-    if (exerciseId !== null && ids[0] !== exerciseId && ids.includes(exerciseId)) {
-      const order = [exerciseId, ...ids.filter((id) => id !== exerciseId)];
-      await this.state.run((app) => app.loggingService.reorderPlan(log.id, order));
-    }
-    await this.router.navigate(['/log'], { queryParams: { mode: 'log' } });
+    await this.router.navigate(['/log'], {
+      queryParams: exerciseId ? { mode: 'log', exercise: exerciseId } : { mode: 'log' },
+    });
   }
 
   /** Takes a workout off the plan at once, with Undo. */

@@ -7,6 +7,7 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   input,
   linkedSignal,
   output,
@@ -17,10 +18,12 @@ import {
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatTooltip } from '@angular/material/tooltip';
 import { NgTemplateOutlet } from '@angular/common';
+import { CdkDrag, CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
 import {
   doneCount,
   ExerciseLogEntry,
+  NextSet,
   nextPlannedSet,
   plannedFor,
   planProgress,
@@ -29,6 +32,7 @@ import {
 import { AppState } from '../../../state/app-state';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { WavyProgress } from '../../expressive/wavy-progress';
+import { HOLD_TO_DRAG, keepFocus } from '../../layout/swipe-row';
 import { SetDials } from './set-dials';
 import { SetDraft, SetFormat } from './set-format';
 
@@ -89,9 +93,10 @@ interface Rest {
  * a pause on the same screen (`_set-screen.scss`): the next set comes up
  * on the dials as the timer pops in between them, pushing them out to the
  * sides, and they close up again when it's over. Finishing an exercise
- * asks how hard it was. Sets can be skipped and taken back, and the
- * exercises done in another order; what the plan holds is changed back in
- * plan mode.
+ * asks how hard it was. Sets can be skipped and taken back. A strip of
+ * chips, one per exercise with its sets done, skips around: tap one to do
+ * it now (the plan keeps its order, and comes back once it's done), hold
+ * and drag one to reorder. What the plan holds is changed on the Plan.
  * Keeps the screen awake while open.
  */
 @Component({
@@ -99,6 +104,8 @@ interface Rest {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ButtonGroup,
+    CdkDrag,
+    CdkDropList,
     MatButton,
     MatIconButton,
     MatTooltip,
@@ -111,6 +118,8 @@ interface Rest {
 })
 export class SessionRunner {
   readonly log = input.required<WorkoutLog>();
+  /** The exercise to do first (picked on the Plan), else the first with sets left. */
+  readonly startAt = input<string | null>(null);
   /** The session clock, as shown. */
   readonly clock = input.required<string>();
   /** Back to planning. */
@@ -120,6 +129,7 @@ export class SessionRunner {
 
   private readonly state = inject(AppState);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
   protected readonly rpeOptions = RPE_OPTIONS;
@@ -130,7 +140,40 @@ export class SessionRunner {
   private readonly lastLogged = signal<string | null>(null);
   protected readonly canUndo = computed(() => this.lastLogged() !== null);
 
-  protected readonly next = computed(() => nextPlannedSet(this.log()));
+  /**
+   * The exercise picked to do now (from the Plan, or a chip here), until
+   * its sets are done; then the plan's order takes over again. Picking
+   * doesn't reorder the plan: dragging a chip does.
+   */
+  private readonly focus = linkedSignal(() => this.startAt());
+  protected readonly next = computed<NextSet | null>(() => {
+    const log = this.log();
+    const focus = this.focus();
+    const picked = focus ? log.plan.find((e) => e.exerciseId === focus) : undefined;
+    if (picked) {
+      const index = doneCount(log, picked.exerciseId);
+      if (index < picked.sets.length) return { exercise: picked, index };
+    }
+    return nextPlannedSet(log);
+  });
+
+  /** One chip per exercise: tap to do it now, hold and drag to reorder. */
+  protected readonly chips = computed(() => {
+    const log = this.log();
+    const current = this.next()?.exercise.exerciseId;
+    return log.plan.map((e) => {
+      const done = Math.min(e.sets.length, doneCount(log, e.exerciseId));
+      return {
+        id: e.exerciseId,
+        name: e.exerciseName,
+        done,
+        total: e.sets.length,
+        complete: done >= e.sets.length,
+        current: e.exerciseId === current,
+      };
+    });
+  });
+  protected readonly hold = HOLD_TO_DRAG;
   protected readonly progress = computed(() => planProgress(this.log()));
   protected readonly fraction = computed(() => {
     const { done, total } = this.progress();
@@ -200,10 +243,12 @@ export class SessionRunner {
       const format = this.format()!;
       return `Set ${next.index + 2} · ${format.describe(format.draft(next.exercise.sets[next.index + 1]))}`;
     }
-    const i = plan.findIndex((e) => e.exerciseId === next.exercise.exerciseId);
-    const following = plan
-      .slice(i + 1)
-      .find((e) => doneCount(this.log(), e.exerciseId) < e.sets.length);
+    // What the plan's order comes back to: the first other exercise with sets left.
+    const following = plan.find(
+      (e) =>
+        e.exerciseId !== next.exercise.exerciseId &&
+        doneCount(this.log(), e.exerciseId) < e.sets.length,
+    );
     return following ? following.exerciseName : 'you’re done';
   });
 
@@ -318,6 +363,30 @@ export class SessionRunner {
     if (!log) return;
     this.lastLogged.set(null);
     this.rest.set(null);
+    // Back to the set taken back.
+    this.focus.set(id);
+  }
+
+  /** Does this exercise now (its next set comes up), without reordering the plan. */
+  protected jump(id: string): void {
+    const chip = this.chips().find((c) => c.id === id);
+    if (!chip || chip.complete || chip.current) return;
+    this.focus.set(id);
+    afterNextRender(() => this.heading()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  protected dropChip(event: CdkDragDrop<unknown>): void {
+    void this.moveChip(event.previousIndex, event.currentIndex);
+  }
+
+  /** Puts an exercise somewhere else in the plan (from the keyboard, with `event`). */
+  protected async moveChip(from: number, to: number, event?: Event): Promise<void> {
+    event?.preventDefault();
+    const ids = this.log().plan.map((e) => e.exerciseId);
+    if (from === to || to < 0 || to >= ids.length) return;
+    if (event) keepFocus(this.injector);
+    ids.splice(to, 0, ...ids.splice(from, 1));
+    await this.state.run((app) => app.loggingService.reorderPlan(this.log().id, ids));
   }
 
   protected async skip(): Promise<void> {

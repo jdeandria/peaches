@@ -67,16 +67,20 @@ planner.
 - **+** on a day opens the exercise picker. An empty day lists whole
   workouts first (**Your routines**, crate-mates' latest workouts tagged
   with who did them, and **Templates**), then exercises. Picking one plans
-  a workout on that day at once and opens it. No numbers are asked for:
-  an exercise goes on with last time's sets, or a sensible start (three
-  sets of ten, three 30-second holds, one solid session's distance), and
-  they're dialled in set by set when it's done.
+  a workout on that day at once and opens it. An exercise goes on with
+  last time's sets, or a sensible start (three sets of ten, three
+  30-second holds, one solid session's distance).
 - **A workout** is one row (planned, in progress with sets done, or done
   with what it earned). This week, until it's done, the row leads with a
   play button that starts it, or carries on where it left off, open or
   closed; otherwise it leads with its state (a tick when done). Tapping
   the rest of the row opens it to its exercises. Those under way, and
   today's still to do, start open.
+- **Tap an exercise** to set its numbers with − and + (no dials: those
+  are for doing the set): **Sets**, then **Reps** and **Weight**, a hold's
+  **Time**, or **Distance** and **Time**. A number applies to every set
+  (sets that differ keep their other numbers); more sets copy the last.
+  It saves a moment after the last tap. Tap it again to close it.
 - **Each exercise** has a play button too, this week, that starts the
   workout there: it goes first and the rest follow in order. In a workout under
   way it carries on, showing sets done ("1/3") and a tick for each one
@@ -87,7 +91,11 @@ planner.
   (once you have equipment locations; it filters the picker), while it's
   not started; **Save as routine**; **Take off the plan** (with Undo).
 
-Play opens the runner (`/log?mode=log`), on that exercise if it was an exercise's. Between sets the
+Play opens the runner (`/log?mode=log`, with `&exercise=` from an
+exercise's play), on that exercise if it was an exercise's. Under the
+progress bar, a strip of chips, one per exercise with its sets done,
+skips around: tap one to do it now (the plan keeps its order and comes
+back to it once that exercise is done), hold and drag one to reorder. Between sets the
 rest timer pops in between the dials, which already show the next set,
 pushing them out to the sides, greyed and still until it's over. **Back to
 plan** returns to the Plan, where the workout shows how far along it is;

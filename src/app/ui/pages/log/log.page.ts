@@ -92,6 +92,8 @@ export class LogPage {
   readonly logId = input<string>();
   /** Query param: `log` while doing the sets (which starts the clock), else planning. */
   readonly mode = input<string>();
+  /** Query param: the exercise to do first, picked on the Plan. */
+  readonly exercise = input<string>();
 
   private readonly state = inject(AppState);
   private readonly sheet = inject(MatBottomSheet);
