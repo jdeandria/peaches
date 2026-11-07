@@ -20,27 +20,164 @@
     <link rel="apple-touch-icon" href="icons/Icon-192.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <style>
-      /* Shown until Angular renders; kept tiny and inline so it paints at once. */
+      /*
+       * Shown until Angular renders; kept inline so it paints at once. Mirrors
+       * pch-splash (src/app/ui/layout/splash.ts) — keep the two, and the
+       * floating peaches, in step. --clock puts both on the page clock so the
+       * hand-off carries on mid-pulse.
+       */
       #splash {
+        --bg: #f9f9f9;
+        --card: #ffdbd0;
+        --on-card: #7c2d13;
+        --clock: 0ms;
         position: fixed;
         inset: 0;
+        isolation: isolate;
         display: grid;
         place-content: center;
         justify-items: center;
         gap: 16px;
+        padding: 24px;
+        overflow: hidden;
+        text-align: center;
         font:
-          16px/1.5 system-ui,
+          16px/1.5 'Roboto Flex Variable',
+          system-ui,
           sans-serif;
-        color: #5c5c5c;
-        background: #fff;
-      }
-      #splash span {
-        font-size: 64px;
+        color: #474747;
+        background: var(--bg);
       }
       @media (prefers-color-scheme: dark) {
         #splash {
-          background: #131313;
+          --bg: #131313;
+          --card: #7c2d13;
+          --on-card: #ffdbd0;
           color: #c6c6c6;
+        }
+      }
+      #splash .field {
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+      }
+      #splash .field span {
+        position: absolute;
+        line-height: 1;
+        translate: -50% -50%;
+        filter: grayscale(1) blur(var(--blur));
+        animation: splash-drift var(--duration) ease-in-out calc(var(--delay) + var(--clock))
+          infinite alternate;
+      }
+      @keyframes splash-drift {
+        from {
+          transform: translate(0, 0) rotate(0deg);
+        }
+        to {
+          transform: translate(var(--dx), var(--dy)) rotate(var(--turn));
+        }
+      }
+      #splash .hero {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 176px;
+        height: 176px;
+        margin-bottom: 8px;
+      }
+      #splash .glow {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgb(255 138 101 / 0.55) 0%,
+          rgb(255 181 158 / 0.3) 40%,
+          transparent 70%
+        );
+        animation: splash-glow 3.2s ease-in-out var(--clock) infinite;
+      }
+      #splash .peach {
+        position: relative;
+        font-size: 112px;
+        line-height: 1;
+        transform-origin: 50% 70%;
+        animation: splash-pulse 3.2s ease-in-out var(--clock) infinite;
+      }
+      @keyframes splash-pulse {
+        0%,
+        100% {
+          transform: scale(1) rotate(-4deg);
+          filter: drop-shadow(0 4px 8px rgb(155 68 39 / 0.25));
+        }
+        30% {
+          transform: scale(1.14, 1.1) rotate(2deg);
+          filter: drop-shadow(0 6px 18px rgb(255 120 90 / 0.55));
+        }
+        45% {
+          transform: scale(1.07, 1.05) rotate(4deg);
+        }
+        62% {
+          transform: scale(1.18, 1.13) rotate(1deg);
+          filter: drop-shadow(0 8px 26px rgb(255 110 80 / 0.7));
+        }
+      }
+      @keyframes splash-glow {
+        0%,
+        100% {
+          transform: scale(0.7);
+          opacity: 0.5;
+        }
+        30% {
+          transform: scale(1);
+          opacity: 0.85;
+        }
+        45% {
+          transform: scale(0.88);
+          opacity: 0.7;
+        }
+        62% {
+          transform: scale(1.12);
+          opacity: 1;
+        }
+      }
+      #splash .note {
+        box-sizing: border-box;
+        max-width: 260px;
+        margin: 0;
+        padding: 12px 20px;
+        border-radius: 16px;
+        background: var(--card);
+        color: var(--on-card);
+        box-shadow:
+          0 1px 2px rgb(0 0 0 / 0.18),
+          0 1px 3px 1px rgb(0 0 0 / 0.1);
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 20px;
+        letter-spacing: 0.1px;
+        text-wrap: balance;
+        animation: splash-note-in 700ms cubic-bezier(0.05, 0.7, 0.1, 1) calc(300ms + var(--clock))
+          both;
+      }
+      @keyframes splash-note-in {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+      }
+      /* Visually hidden until main.ts writes a start-up error into it. */
+      #splash-message:not(.error) {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash * {
+          animation: none !important;
         }
       }
       app-root:not(:empty) + #splash {
@@ -51,9 +188,230 @@
   <body>
     <app-root></app-root>
     <div id="splash" role="status">
-      <span aria-hidden="true">🍑</span>
+      <div class="field" aria-hidden="true">
+        <span
+          style="
+            left: 8%;
+            top: 12%;
+            font-size: 44px;
+            opacity: 0.28;
+            --blur: 0px;
+            --dx: 18px;
+            --dy: -26px;
+            --turn: 14deg;
+            --duration: 9s;
+            --delay: -1s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 78%;
+            top: 8%;
+            font-size: 56px;
+            opacity: 0.22;
+            --blur: 1px;
+            --dx: -22px;
+            --dy: -30px;
+            --turn: -12deg;
+            --duration: 11s;
+            --delay: -4s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 24%;
+            top: 30%;
+            font-size: 32px;
+            opacity: 0.3;
+            --blur: 0px;
+            --dx: 14px;
+            --dy: -20px;
+            --turn: 20deg;
+            --duration: 8s;
+            --delay: -2s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 88%;
+            top: 34%;
+            font-size: 38px;
+            opacity: 0.26;
+            --blur: 0px;
+            --dx: -16px;
+            --dy: -24px;
+            --turn: 16deg;
+            --duration: 10s;
+            --delay: -6s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 6%;
+            top: 52%;
+            font-size: 60px;
+            opacity: 0.18;
+            --blur: 2px;
+            --dx: 20px;
+            --dy: -34px;
+            --turn: -10deg;
+            --duration: 12s;
+            --delay: -3s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 66%;
+            top: 22%;
+            font-size: 28px;
+            opacity: 0.3;
+            --blur: 0px;
+            --dx: 12px;
+            --dy: -18px;
+            --turn: -22deg;
+            --duration: 7s;
+            --delay: -5s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 30%;
+            top: 74%;
+            font-size: 50px;
+            opacity: 0.22;
+            --blur: 1px;
+            --dx: -20px;
+            --dy: -28px;
+            --turn: 12deg;
+            --duration: 10s;
+            --delay: -7s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 84%;
+            top: 66%;
+            font-size: 64px;
+            opacity: 0.18;
+            --blur: 2px;
+            --dx: -24px;
+            --dy: -36px;
+            --turn: 8deg;
+            --duration: 13s;
+            --delay: -2s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 12%;
+            top: 88%;
+            font-size: 36px;
+            opacity: 0.28;
+            --blur: 0px;
+            --dx: 16px;
+            --dy: -22px;
+            --turn: -18deg;
+            --duration: 9s;
+            --delay: -8s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 60%;
+            top: 86%;
+            font-size: 42px;
+            opacity: 0.24;
+            --blur: 0px;
+            --dx: -14px;
+            --dy: -26px;
+            --turn: 14deg;
+            --duration: 11s;
+            --delay: -1s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 46%;
+            top: 6%;
+            font-size: 26px;
+            opacity: 0.26;
+            --blur: 1px;
+            --dx: 10px;
+            --dy: -16px;
+            --turn: -16deg;
+            --duration: 8s;
+            --delay: -3s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 94%;
+            top: 90%;
+            font-size: 30px;
+            opacity: 0.28;
+            --blur: 0px;
+            --dx: -12px;
+            --dy: -20px;
+            --turn: 20deg;
+            --duration: 9s;
+            --delay: -6s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 18%;
+            top: 62%;
+            font-size: 24px;
+            opacity: 0.3;
+            --blur: 0px;
+            --dx: 10px;
+            --dy: -14px;
+            --turn: 24deg;
+            --duration: 7s;
+            --delay: -4s;
+          "
+          >🍑</span
+        >
+        <span
+          style="
+            left: 74%;
+            top: 46%;
+            font-size: 22px;
+            opacity: 0.3;
+            --blur: 0px;
+            --dx: -10px;
+            --dy: -16px;
+            --turn: -20deg;
+            --duration: 8s;
+            --delay: -2s;
+          "
+          >🍑</span
+        >
+      </div>
+      <div class="hero" aria-hidden="true">
+        <span class="glow"></span>
+        <span class="peach">🍑</span>
+      </div>
+      <p class="note">For the gayest &amp; strongest boy Stevie</p>
       <p id="splash-message">Loading Peaches…</p>
     </div>
+    <script>
+      document
+        .getElementById('splash')
+        .style.setProperty('--clock', -Math.round(performance.now()) + 'ms');
+    </script>
     <noscript>Peaches needs JavaScript to run.</noscript>
   </body>
 </html>

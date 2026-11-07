@@ -3,6 +3,7 @@ import { Router, RouterOutlet } from '@angular/router';
 
 import { AppState } from './state/app-state';
 import { Pwa } from './state/pwa';
+import { Splash } from './ui/layout/splash';
 
 /**
  * The root: a splash while the session settles, then the router. Follows
@@ -10,51 +11,23 @@ import { Pwa } from './state/pwa';
  */
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, Splash],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @switch (state.status()) {
       @case ('loading') {
-        <div class="splash" role="status" aria-live="polite">
-          <span class="peach" aria-hidden="true">🍑</span>
-          <span class="visually-hidden">Loading Peaches</span>
-        </div>
+        <pch-splash role="status" aria-live="polite">
+          <span class="pch-visually-hidden">Loading Peaches</span>
+        </pch-splash>
       }
       @case ('error') {
-        <div class="splash" role="alert">
-          <span class="peach" aria-hidden="true">🍑</span>
+        <pch-splash role="alert">
           <p>Peaches could not load your profile. Check your connection and try again.</p>
           <button type="button" (click)="reload()">Try again</button>
-        </div>
+        </pch-splash>
       }
       @default {
         <router-outlet />
-      }
-    }
-  `,
-  styles: `
-    .splash {
-      min-height: 100dvh;
-      display: grid;
-      place-content: center;
-      justify-items: center;
-      gap: 16px;
-      padding: 24px;
-      text-align: center;
-      color: var(--mat-sys-on-surface-variant);
-    }
-    .peach {
-      font-size: 64px;
-      animation: breathe 1.6s ease-in-out infinite;
-    }
-    @keyframes breathe {
-      50% {
-        transform: scale(0.92);
-      }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .peach {
-        animation: none;
       }
     }
   `,
