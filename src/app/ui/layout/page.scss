@@ -43,6 +43,13 @@
 // headline has scrolled away.
 .toolbar.flush:not(.collapsed) {
   background: transparent;
+  // The headline sits under this row: let taps through to it (a headline
+  // can be a control, like a Crate's name), but not past the actions.
+  pointer-events: none;
+
+  .actions {
+    pointer-events: auto;
+  }
 }
 .header.flush {
   margin-top: -64px;

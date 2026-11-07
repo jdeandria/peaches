@@ -4,30 +4,24 @@
   padding: 48px 0;
 }
 
-.empty-action {
-  display: flex;
-  justify-content: center;
-}
-
 .muted {
   color: var(--mat-sys-on-surface-variant);
 }
 
 .clock {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: center;
   column-gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   padding: 16px 20px;
   border-radius: var(--pch-radius-extra-large);
-  background: var(--mat-sys-surface-container-high);
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
 
-  // The clock's own icon, not the one in its Edit details button.
   > .material-symbols-rounded {
     grid-row: span 2;
     font-size: 32px;
-    color: var(--mat-sys-on-surface-variant);
   }
 
   .time {
@@ -36,33 +30,7 @@
 
   .hint {
     grid-column: 2;
-    color: var(--mat-sys-on-surface-variant);
   }
-
-  .edit-details {
-    grid-column: 3;
-    grid-row: 1 / span 2;
-
-    .material-symbols-rounded {
-      margin-inline-end: 8px;
-      font-size: 20px;
-    }
-  }
-
-  &.running {
-    background: var(--mat-sys-primary-container);
-    color: var(--mat-sys-on-primary-container);
-
-    > .material-symbols-rounded,
-    .hint {
-      color: inherit;
-    }
-  }
-}
-
-.caption {
-  margin: 0 0 8px;
-  color: var(--mat-sys-on-surface-variant);
 }
 
 .disputes {
@@ -72,40 +40,8 @@
   margin-bottom: 24px;
 }
 
-.totals {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.total {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
-  column-gap: 10px;
-  align-items: center;
-  padding: 12px 14px;
-  border-radius: var(--pch-radius-large);
-  background: var(--mat-sys-primary-container);
-  color: var(--mat-sys-on-primary-container);
-
-  .material-symbols-rounded {
-    grid-row: span 2;
-    font-size: 22px;
-  }
-
-  .muted {
-    color: inherit;
-    opacity: 0.8;
-  }
-}
-
 .points {
-  margin: 12px 0 0;
-  color: var(--mat-sys-on-surface-variant);
+  padding-top: 8px;
 
   strong {
     color: var(--mat-sys-primary);
@@ -211,15 +147,5 @@
 
   .material-symbols-rounded {
     font-size: 18px;
-  }
-}
-
-// Only where swiping is how you'd do it.
-.swipe-hint {
-  display: none;
-  margin: -4px 4px 8px;
-
-  @media (pointer: coarse) {
-    display: block;
   }
 }

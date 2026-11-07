@@ -1,121 +1,42 @@
-<pch-page
-  title="Plan"
-  [subtitle]="subtitle()"
-  [maxWidth]="1080"
-  refreshable
-  [refreshing]="refreshing()"
-  (refresh)="refresh()"
->
+<pch-page title="Plan" [subtitle]="subtitle()" [maxWidth]="1080">
   <pch-button-group
     class="weeks"
     label="Week"
     [options]="weeks"
     [selected]="shown()"
-    [height]="40"
     (selectionChange)="showWeek($event)"
   />
 
   <pch-two-pane [stackedGap]="8">
     <div primaryPane>
       @if (going(); as progress) {
-        <pch-card class="going" variant="filled" [pchStagger]="0">
+        <a class="going" routerLink="/log" [queryParams]="{ mode: 'log' }" [pchStagger]="0">
           <span class="material-symbols-rounded" aria-hidden="true">directions_run</span>
-          <div class="text">
-            <h2 class="pch-title-medium">Workout in progress</h2>
-            <p class="pch-body-medium muted">{{ progress }}</p>
-          </div>
-          <a matButton="filled" routerLink="/log" [queryParams]="{ mode: 'log' }">Continue</a>
-        </pch-card>
+          <span class="text">
+            <span class="pch-title-medium">Workout in progress</span>
+            <span class="pch-body-small">{{ progress }}</span>
+          </span>
+          <span class="pch-label-large">Continue</span>
+        </a>
       }
 
-      @if (summary(); as s) {
-        <pch-card class="summary" variant="outlined" [pchStagger]="0">
-          <div class="summary-text">
-            <h2 class="pch-title-large">{{ s.title }}</h2>
-            <p class="pch-body-medium muted">{{ s.text }}</p>
-          </div>
-          @if (s.progress !== null) {
-            <pch-wavy-progress class="progress" [value]="s.progress" label="Workouts done" />
-          }
-        </pch-card>
-      }
-
-      @let list = strips();
+      @let list = boards();
       @if (list && list.length > 0) {
-        <pch-section [title]="shown() === 'this' ? 'Your matchups' : 'Next week’s matchups'" />
-        <div class="strips" [pchStagger]="1">
-          @for (m of list; track m.key) {
-            <a class="strip" [class.behind]="m.behind" [routerLink]="m.link">
-              <span class="strip-head">
-                <span class="pch-title-small">{{ m.crate }}</span>
-                <span class="pch-label-medium muted">{{
-                  m.them ? 'vs ' + m.them.name : 'Bye'
-                }}</span>
-                <span class="material-symbols-rounded chevron" aria-hidden="true"
-                  >chevron_right</span
-                >
-              </span>
-              <span class="bars">
-                <span class="bar-row">
-                  <span class="who pch-label-large">You</span>
-                  <pch-wavy-progress
-                    class="bar"
-                    [value]="m.me.fill"
-                    color="primary"
-                    [label]="'Your ' + (m.locked ? 'points against your plan' : 'plan')"
-                  />
-                  <span class="nums pch-title-small">
-                    @if (m.locked) {
-                      {{ fmt.points(m.me.earned)
-                      }}<span class="muted"> / {{ fmt.points(m.me.committed) }}</span>
-                    } @else {
-                      {{ fmt.points(m.me.committed) }}
-                    }
-                  </span>
-                </span>
-                @if (m.them; as them) {
-                  <span class="bar-row">
-                    <span class="who pch-label-large one-line">{{ them.name }}</span>
-                    <pch-wavy-progress
-                      class="bar"
-                      [value]="them.fill"
-                      color="tertiary"
-                      [label]="them.name + (m.locked ? '’s points against their plan' : '’s plan')"
-                    />
-                    <span class="nums pch-title-small">
-                      @if (m.locked) {
-                        {{ fmt.points(them.earned)
-                        }}<span class="muted"> / {{ fmt.points(them.committed) }}</span>
-                      } @else {
-                        {{ fmt.points(them.committed) }}
-                      }
-                    </span>
-                  </span>
-                }
-              </span>
-              <span class="strip-foot">
-                <span class="pch-title-small headline">{{ m.headline }}</span>
-                <span class="pch-body-small muted">{{ m.detail }}</span>
-              </span>
-            </a>
+        <pch-section title="Matchups" [top]="8" />
+        <div class="matchups" [pchStagger]="1">
+          @for (b of list; track b.board.matchup.id) {
+            <pch-matchup-card [board]="b.board" [planned]="b.planned" showCrate link />
           }
         </div>
-        @if (!list[0].locked) {
-          <p class="pch-body-small muted note">
-            Points are what each plan is worth. Your opponents see yours change as you plan.
-          </p>
-        }
       }
       @if (list !== undefined && inCrates()) {
         @for (c of idleCrates(); track c.id) {
-          <p class="idle pch-body-medium muted">
-            <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
+          <p class="pch-note">
             {{ c.name }}: no matchup {{ shown() === 'this' ? 'this' : 'next' }} week.
           </p>
         }
       } @else if (state.myCrates.value()?.length === 0) {
-        <p class="idle pch-body-medium muted">
-          <span class="material-symbols-rounded" aria-hidden="true">person</span>
+        <p class="pch-note">
           Just for you. Join a Crate on the Crates tab to plan against other Peaches.
         </p>
       }
@@ -141,9 +62,6 @@
       @if (dayList === undefined) {
         <div class="loading"><pch-loading-indicator [size]="36" /></div>
       } @else {
-        <p class="swipe-hint pch-body-small">
-          Swipe a workout right to edit it, left to take it off the plan.
-        </p>
         <ol class="days" [pchStagger]="2">
           @for (d of dayList; track d.date) {
             <li class="day" [class.today]="d.today" [class.past]="d.past && shown() === 'this'">
@@ -166,14 +84,7 @@
               @if (d.workouts.length > 0) {
                 <pch-list-card>
                   @for (r of d.workouts; track r.workout.id) {
-                    <pch-swipe-row
-                      editable
-                      removable
-                      [editLabel]="'Edit'"
-                      [removeLabel]="'Unplan'"
-                      (edit)="edit(r.workout)"
-                      (remove)="remove(r.workout)"
-                    >
+                    <pch-swipe-row removable [removeLabel]="'Unplan'" (remove)="remove(r.workout)">
                       <div class="workout" [attr.data-state]="r.state">
                         <pch-shaped-avatar
                           [shape]="r.state === 'done' ? 'softBurst' : 'circle'"
@@ -196,7 +107,7 @@
                             r.icon
                           }}</span>
                         </pch-shaped-avatar>
-                        <a class="text stretched" [routerLink]="editLink(r.workout)">
+                        <a class="text stretched" [routerLink]="r.link">
                           <span class="pch-title-medium one-line">{{ r.workout.name }}</span>
                           <span class="pch-body-small muted one-line">{{ r.subtitle }}</span>
                         </a>
@@ -211,9 +122,7 @@
                             [attr.aria-label]="'Take ' + r.workout.name + ' off the plan'"
                             (click)="remove(r.workout)"
                           >
-                            <span class="material-symbols-rounded" aria-hidden="true"
-                              >event_busy</span
-                            >
+                            <span class="material-symbols-rounded" aria-hidden="true">delete</span>
                           </button>
                         </span>
                         @if (r.canLaunch) {

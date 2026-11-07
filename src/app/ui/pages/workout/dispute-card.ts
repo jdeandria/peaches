@@ -57,11 +57,13 @@ import { DisputeVote } from '../../../domain/models/dispute';
       gap: 12px;
       padding: 12px 16px;
       border-radius: var(--pch-radius-large);
-      background: var(--mat-sys-surface-container);
+      background: var(--pch-card-elevated);
+      box-shadow: var(--pch-shadow-1);
     }
     .dispute[data-state='struck'] {
       background: var(--mat-sys-error-container);
       color: var(--mat-sys-on-error-container);
+      box-shadow: none;
     }
     .icon {
       color: var(--mat-sys-tertiary);

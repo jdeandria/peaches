@@ -8,9 +8,8 @@ import {
   signal,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { MatButton, MatFabButton, MatIconButton } from '@angular/material/button';
+import { MatButton, MatFabButton } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
-import { MatTooltip } from '@angular/material/tooltip';
 
 import { addDays, LocalDate, localDateOfLocal, startOfWeek } from '../../../domain/core/local-date';
 import { canManage, Crate } from '../../../domain/models/crate';
@@ -30,7 +29,6 @@ import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { ShapedAvatar } from '../../expressive/shaped-avatar';
 import { Fmt } from '../../format';
-import { Card } from '../../layout/card';
 import { EmptyState } from '../../layout/empty-state';
 import { ListCard } from '../../layout/list-card';
 import { ListRow } from '../../layout/list-row';
@@ -40,9 +38,9 @@ import { Stagger } from '../../layout/stagger';
 import { StandingsRow, StandingsTable } from '../../layout/standings-table';
 import { StatusLabel } from '../../layout/status-label';
 import { TwoPane } from '../../layout/two-pane';
-import { CrateSwitcher, rememberCrate } from '../crates/crate-switcher';
+import { CrateTitle, rememberCrate } from '../crates/crate-switcher';
 import { DisputeCard } from '../workout/dispute-card';
-import { MatchupHeroCard, MatchupListRow } from './matchup-card';
+import { MatchupCard } from '../matchup/matchup-card';
 import { NewSeasonDialog } from './new-season-dialog';
 
 /** A Season's week as shown in the Weeks list. */
@@ -50,12 +48,26 @@ export interface RoundView {
   readonly round: Round;
   /** "Week 2 · Oct 12 – 18" */
   readonly title: string;
-  /** "Bye" / "You have a matchup", or null when the current Peach is not in it. */
+  /** "vs Ada · Won 207.2–79.3", "vs Dev", "Bye", or null when the current Peach is not in it. */
   readonly subtitle: string | null;
   /** The current Peach's matchup this week once it has started, if any. */
   readonly matchupLink: readonly string[] | null;
   /** The manager's action for the week, if any. */
   readonly action: 'open' | 'close' | null;
+}
+
+/** "vs Ada · Won 207.2–79.3", "vs Dev" or "Bye": my matchup in a week, from my side. */
+function matchupLine(m: Matchup, me: string, names: ReadonlyMap<string, string>): string {
+  if (isBye(m)) return 'Bye';
+  const them = m.homePeachId === me ? m.awayPeachId : m.homePeachId;
+  const vs = `vs ${(them && names.get(them)) ?? 'your opponent'}`;
+  if (m.result === null) return vs;
+  const home = m.homePeachId === me;
+  const mine = home ? m.result.homePoints : m.result.awayPoints;
+  const theirs = home ? m.result.awayPoints : m.result.homePoints;
+  const winner = winnerId(m);
+  const outcome = winner === null ? 'Tie' : winner === me ? 'Won' : 'Lost';
+  return `${vs} · ${outcome} ${Fmt.points(mine)}–${Fmt.points(theirs)}`;
 }
 
 /** Builds the Weeks list. */
@@ -65,8 +77,11 @@ export function roundViews(args: {
   me: string | null;
   canManage: boolean;
   today: LocalDate;
+  /** Display names by Peach id, for "vs Ada". */
+  names?: ReadonlyMap<string, string>;
 }): RoundView[] {
   const { rounds, matchups, me, canManage, today } = args;
+  const names = args.names ?? new Map<string, string>();
   return rounds.map((round) => {
     const mine = me
       ? (matchups.find((m) => m.roundId === round.id && involves(m, me)) ?? null)
@@ -77,7 +92,7 @@ export function roundViews(args: {
     return {
       round,
       title: `Week ${round.index + 1} · ${Fmt.week(round.weekStart)}`,
-      subtitle: mine ? (isBye(mine) ? 'Bye' : 'You have a matchup') : null,
+      subtitle: mine && me ? matchupLine(mine, me, names) : null,
       matchupLink: mine && round.status !== 'scheduled' ? ['/matchups', mine.id] : null,
       action,
     };
@@ -88,7 +103,7 @@ export function roundViews(args: {
 export type ThisWeek =
   | { readonly kind: 'loading' }
   | { readonly kind: 'matchup'; readonly matchup: Matchup }
-  | { readonly kind: 'note'; readonly text: string; readonly plan: boolean };
+  | { readonly kind: 'note'; readonly text: string };
 
 /** Works out the "This week" section from the Season and my matchups in it. */
 export function thisWeek(args: {
@@ -103,8 +118,7 @@ export function thisWeek(args: {
   if (season === null) {
     return {
       kind: 'note',
-      text: `No Season yet, so no matchup this week. ${canManage ? 'Start one below.' : 'The owner can start one.'}`,
-      plan: false,
+      text: `No Season yet, so no matchup this week. ${canManage ? 'Start one with the Season button.' : 'The owner can start one.'}`,
     };
   }
   const playing = me !== null && season.participantIds.includes(me);
@@ -114,35 +128,27 @@ export function thisWeek(args: {
     return {
       kind: 'note',
       text: `${season.name} starts ${Fmt.day(season.startWeek)}.${
-        playing && soon ? ' Plan your first week: your opponent sees what you commit to.' : ''
+        playing && soon ? ' Plan your first week on the Plan tab: your opponent sees it.' : ''
       }`,
-      plan: playing && soon,
     };
   }
   if (season.status !== 'active') {
     return {
       kind: 'note',
-      text: `${season.name} is over. ${canManage ? 'Start the next one below.' : 'The next one starts when the owner starts it.'}`,
-      plan: false,
+      text: `${season.name} is over. ${canManage ? 'Start the next one with the Season button.' : 'The next one starts when the owner starts it.'}`,
     };
   }
   if (!playing) {
     return {
       kind: 'note',
       text: 'You joined after this Season started, so you play from the next one.',
-      plan: false,
     };
   }
   if (matchups === undefined) return { kind: 'loading' };
   const live = matchups.find((m) => m.status === 'inProgress' && involves(m, me!));
   if (live) return { kind: 'matchup', matchup: live };
-  return { kind: 'note', text: 'No matchup is open right now.', plan: false };
+  return { kind: 'note', text: 'No matchup is open right now.' };
 }
-
-/** Results shown in the Season view. */
-const RESULTS_SHOWN = 5;
-/** Coming-up matchups shown in the Season view. */
-const UPCOMING_SHOWN = 3;
 
 /** Exercises listed before "Show all": the most recently logged first. */
 const EXERCISES_SHOWN = 6;
@@ -156,13 +162,14 @@ const VIEWS: readonly ButtonGroupOption<CrateView>[] = [
 ];
 
 /**
- * A Crate's stats, the Crates tab: a switcher between my Crates, this
- * week's matchup (or why there isn't one), what needs you (the rules vote,
- * the invite code, disputes waiting for your vote), then one of three
- * views: the Season (standings, my record and results, what's coming and
- * the weeks), Activity (what members have been logging, and every exercise
- * they've logged, tagged with who) or the Peaches in it. Manager actions
- * sit where they apply.
+ * A Crate's stats, the Crates tab. The headline is the Crate's name and
+ * opens the Crates sheet (switch, create, join); the Season and week sit
+ * under it. Then one of three views: the Season (disputes waiting for your
+ * vote, this week's matchup or why there isn't one, standings, the weeks
+ * with my result in each, and the rules), Activity (what members have been
+ * logging, and every exercise they've logged, tagged with who) or the
+ * Peaches (the invite code and members). Manager actions sit where they
+ * apply.
  */
 
 @Component({
@@ -170,19 +177,15 @@ const VIEWS: readonly ButtonGroupOption<CrateView>[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ButtonGroup,
-    Card,
     DisputeCard,
     EmptyState,
     ListCard,
     ListRow,
     LoadingIndicator,
-    CrateSwitcher,
-    MatchupHeroCard,
-    MatchupListRow,
+    CrateTitle,
+    MatchupCard,
     MatButton,
     MatFabButton,
-    MatIconButton,
-    MatTooltip,
     Page,
     RouterLink,
     Section,
@@ -399,43 +402,23 @@ export class CrateDetailPage {
     }),
   );
 
-  /** My matchups this Season, in week order. */
-  private readonly myMatchups = computed(() => {
-    const data = this.data();
-    const me = this.me();
-    if (!data || me === null) return [];
-    const index = new Map(data.rounds.map((r) => [r.id, r.index]));
-    return data.matchups
-      .filter((m) => involves(m, me))
-      .sort((a, b) => (index.get(a.roundId) ?? 0) - (index.get(b.roundId) ?? 0));
-  });
+  /** This week's matchup, with everything the card scores it from. */
+  protected readonly weekBoard = this.state.query(
+    () => {
+      const week = this.thisWeek();
+      return week.kind === 'matchup' ? week.matchup.id : undefined;
+    },
+    (id, app) => app.seasonService.board(id),
+  ).value;
 
-  /** Finished weeks, the latest first. */
-  protected readonly results = computed(() =>
-    this.myMatchups()
-      .filter((m) => m.status === 'complete')
-      .reverse()
-      .slice(0, RESULTS_SHOWN),
-  );
-
-  protected readonly comingUp = computed(() =>
-    this.myMatchups()
-      .filter((m) => m.status === 'scheduled')
-      .slice(0, UPCOMING_SHOWN),
-  );
-
-  /** "3-1", or "3-1-1" with ties; byes don't count. */
-  protected readonly record = computed(() => {
-    const me = this.me();
-    let [w, l, t] = [0, 0, 0];
-    for (const m of this.myMatchups()) {
-      if (m.status !== 'complete' || m.result === null || isBye(m)) continue;
-      const winner = winnerId(m);
-      if (winner === null) t++;
-      else if (winner === me) w++;
-      else l++;
-    }
-    return `${w}-${l}${t > 0 ? `-${t}` : ''}`;
+  /** "Autumn Kick-off · Week 3 of 6": the Season and where it's got to. */
+  protected readonly subtitle = computed(() => {
+    const season = this.season();
+    if (!season) return undefined;
+    const rounds = this.data()?.rounds ?? [];
+    const open = rounds.find((r) => r.status === 'open');
+    if (season.status !== 'active' || !open) return season.name;
+    return `${season.name} · Week ${open.index + 1} of ${rounds.length}`;
   });
 
   protected readonly rounds = computed(() => {
@@ -447,6 +430,7 @@ export class CrateDetailPage {
       me: this.me(),
       canManage: this.canManage(),
       today: this.state.today(),
+      names: this.names(),
     });
   });
 

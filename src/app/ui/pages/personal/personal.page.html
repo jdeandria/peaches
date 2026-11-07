@@ -1,77 +1,34 @@
 @let p = peach();
 @if (p) {
-  <pch-page title="You" [maxWidth]="720">
-    <pch-card class="identity" [pchStagger]="0">
-      <pch-shaped-avatar
-        [shapeId]="p.id"
-        [name]="p.displayName"
-        [size]="68"
-        color="primary-container"
-        foreground="on-primary-container"
-      />
-      <div class="identity-text">
-        <h2 class="pch-title-large">{{ p.displayName }}</h2>
-        <p class="pch-body-medium muted">{{ identityLine() }}</p>
-      </div>
-    </pch-card>
-
+  <pch-page [title]="p.displayName" [subtitle]="identityLine()" [maxWidth]="720">
     <pch-button-group
       class="views"
       label="Show"
       [options]="views"
       [selected]="shown()"
-      [height]="40"
       (selectionChange)="showView($event)"
     />
 
     @switch (shown()) {
       @case ('stats') {
         <pch-section title="This week" [top]="8" />
-        <ul class="stats" [pchStagger]="1" aria-label="This week">
-          @for (s of stats(); track s.label) {
-            <li>
-              <pch-card variant="elevated" class="stat">
-                <span class="value pch-headline-small">{{ s.value }}</span>
-                <span class="label pch-label-medium">{{ s.label }}</span>
-              </pch-card>
-            </li>
-          }
-        </ul>
-        @if (weekTotals().length > 0) {
-          <ul class="totals" [pchStagger]="1" aria-label="This week adds up to">
-            @for (t of weekTotals(); track t.category) {
-              <li class="total">
-                <span class="material-symbols-rounded" aria-hidden="true">{{ t.icon }}</span>
-                <span class="pch-title-small">{{ t.amount }}</span>
-                <span class="pch-label-small muted">{{ t.label }}</span>
-              </li>
-            }
-          </ul>
-        }
+        <pch-stat-tiles [pchStagger]="1" [tiles]="weekTiles()" aria-label="This week" />
 
         <pch-section title="Plan kept" />
         @let k = kept();
         @if (k.planned === 0) {
-          <pch-card variant="outlined" [pchStagger]="2">
+          <p class="pch-note">
             Plan your weeks on the Plan tab and you’ll see how many planned workouts you get done.
-          </pch-card>
+          </p>
         } @else {
           <pch-card variant="elevated" class="kept" [pchStagger]="2">
             <p class="pch-title-medium kept-summary">{{ k.summary }}</p>
-            <pch-wavy-progress
-              [value]="k.fraction"
-              [color]="k.kept >= k.planned ? 'tertiary' : 'primary'"
-              label="Plan kept"
-            />
+            <pch-wavy-progress [value]="k.fraction" label="Plan kept" />
             <ul class="bars" aria-label="Plan kept by week">
               @for (b of k.bars; track b.key) {
                 <li class="bar" [attr.aria-label]="b.label + ': ' + b.text">
                   <span class="bar-track" aria-hidden="true">
-                    <span
-                      class="bar-fill"
-                      [class.all]="b.all"
-                      [style.height.%]="b.fraction * 100"
-                    ></span>
+                    <span class="bar-fill" [style.height.%]="b.fraction * 100"></span>
                   </span>
                   <span class="pch-label-small muted" aria-hidden="true">{{ b.short }}</span>
                   <span class="pch-label-medium" aria-hidden="true">{{ b.text }}</span>
@@ -96,68 +53,56 @@
           }
         </pch-list-card>
 
-        <pch-section title="Records" />
         @let r = records();
+        <pch-section title="Heaviest lifts" />
         @if (r.lifts.length === 0 && r.singles.length === 0) {
-          <pch-card variant="outlined" [pchStagger]="4">
+          <p class="pch-note">
             Your personal bests show up here once you’ve logged a few workouts.
-          </pch-card>
-        } @else {
-          @if (r.lifts.length > 0) {
-            <h3 id="lifts-caption" class="caption pch-label-large">Heaviest lifts</h3>
-            <pch-list-card [pchStagger]="4" class="records" aria-labelledby="lifts-caption">
-              @for (l of r.lifts; track l.key) {
-                <pch-list-row>
-                  <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
-                    >fitness_center</span
-                  >
-                  {{ l.name }}
-                  <span rowSubtitle>{{ l.when }}</span>
-                  <span rowTrailing class="pch-label-large record">{{ l.value }}</span>
-                </pch-list-row>
-              }
-            </pch-list-card>
-          }
-          @if (r.singles.length > 0) {
-            <h3 id="bests-caption" class="caption pch-label-large">In one go</h3>
-            <pch-list-card [pchStagger]="5" class="records" aria-labelledby="bests-caption">
-              @for (s of r.singles; track s.key) {
-                <pch-list-row>
-                  <span rowLeading class="material-symbols-rounded icon" aria-hidden="true">{{
-                    s.icon
-                  }}</span>
-                  {{ s.label }}
-                  <span rowSubtitle>{{ s.when }}</span>
-                  <span rowTrailing class="pch-label-large record">{{ s.value }}</span>
-                </pch-list-row>
-              }
-            </pch-list-card>
-          }
+          </p>
+        }
+        @if (r.lifts.length > 0) {
+          <pch-list-card [pchStagger]="4" class="records">
+            @for (l of r.lifts; track l.key) {
+              <pch-list-row>
+                <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
+                  >fitness_center</span
+                >
+                {{ l.name }}
+                <span rowSubtitle>{{ l.when }}</span>
+                <span rowTrailing class="pch-label-large record">{{ l.value }}</span>
+              </pch-list-row>
+            }
+          </pch-list-card>
+        }
+        @if (r.singles.length > 0) {
+          <pch-section title="Bests in one go" />
+          <pch-list-card [pchStagger]="5" class="records">
+            @for (s of r.singles; track s.key) {
+              <pch-list-row>
+                <span rowLeading class="material-symbols-rounded icon" aria-hidden="true">{{
+                  s.icon
+                }}</span>
+                {{ s.label }}
+                <span rowSubtitle>{{ s.when }}</span>
+                <span rowTrailing class="pch-label-large record">{{ s.value }}</span>
+              </pch-list-row>
+            }
+          </pch-list-card>
         }
       }
 
       @case ('history') {
-        <pch-section title="History" [top]="8" />
         <div [pchStagger]="1">
           @if (logs() === undefined) {
             <div class="loading"><pch-loading-indicator [size]="36" /></div>
           } @else if (history().length === 0) {
-            <pch-card variant="outlined">Nothing logged yet. Your workouts show up here.</pch-card>
+            <p class="pch-note">Nothing logged yet. Your workouts show up here.</p>
           } @else {
-            <p class="swipe-hint pch-body-small">
-              Swipe a workout right to edit it, left to delete it.
-            </p>
-            @for (week of history(); track week.label) {
-              <h3 class="caption week pch-label-large">{{ week.label }}</h3>
+            @for (week of history(); track week.label; let first = $first) {
+              <pch-section [title]="week.label" [top]="first ? 8 : 24" />
               <pch-list-card>
                 @for (row of week.rows; track row.log.id) {
-                  <pch-swipe-row
-                    editable
-                    removable
-                    removeLabel="Delete"
-                    (edit)="openLog(row)"
-                    (remove)="deleteLog(row)"
-                  >
+                  <pch-swipe-row removable removeLabel="Delete" (remove)="deleteLog(row)">
                     <a pch-list-row [routerLink]="row.submitted ? ['/log', row.log.id] : ['/log']">
                       <ng-container
                         ngProjectAs="[rowLeading]"
@@ -200,33 +145,27 @@
             </button>
           }
         </pch-section>
-        <p class="pch-body-medium muted intro">
-          When you plan a workout at a location, exercises and templates fit the kit there.
-        </p>
         @if (locations().length === 0) {
-          <pch-card variant="outlined" class="no-locations" [pchStagger]="1">
-            <span>No locations yet. Add Home, Gym or Travel to get started.</span>
-            <button matButton="filled" type="button" (click)="editLocation(p, null)">
-              Add a location
-            </button>
-          </pch-card>
+          <p class="pch-note">
+            Add Home, Gym or Travel: a workout planned there offers what fits the kit.
+          </p>
         } @else {
           <pch-list-card [pchStagger]="1" class="locations">
             @for (l of locations(); track l.location.id) {
               <pch-swipe-row
-                editable
                 removable
                 removeLabel="Delete"
-                (edit)="editLocation(p, l.location)"
                 (remove)="deleteLocation(p, l.location)"
               >
-                <pch-list-row>
-                  <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
-                    >location_on</span
-                  >
-                  {{ l.location.name }}
-                  <span rowSubtitle class="one-line">{{ l.summary }}</span>
-                  <span rowTrailing class="pch-swipe-actions">
+                <div class="location">
+                  <button pch-list-row type="button" (click)="editLocation(p, l.location)">
+                    <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
+                      >location_on</span
+                    >
+                    {{ l.location.name }}
+                    <span rowSubtitle class="one-line">{{ l.summary }}</span>
+                  </button>
+                  <span class="pch-swipe-actions delete-location">
                     <button
                       matIconButton
                       type="button"
@@ -236,17 +175,8 @@
                     >
                       <span class="material-symbols-rounded" aria-hidden="true">delete</span>
                     </button>
-                    <button
-                      matIconButton
-                      type="button"
-                      matTooltip="Edit"
-                      [attr.aria-label]="'Edit ' + l.location.name"
-                      (click)="editLocation(p, l.location)"
-                    >
-                      <span class="material-symbols-rounded" aria-hidden="true">edit</span>
-                    </button>
                   </span>
-                </pch-list-row>
+                </div>
               </pch-swipe-row>
             }
           </pch-list-card>

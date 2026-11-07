@@ -3,12 +3,9 @@ import { Router, RouterLink } from '@angular/router';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatTooltip } from '@angular/material/tooltip';
 
-import { MatchupBoard, MatchupSide } from '../../../application/season-service';
+import { MatchupBoard } from '../../../application/season-service';
 import { addDays, LocalDate, startOfWeek } from '../../../domain/core/local-date';
-import { round2 } from '../../../domain/core/math';
-import { isLocked } from '../../../domain/models/commitment';
 import { CategoryWeights, DEFAULT_WEIGHTS, weightsToJson } from '../../../domain/models/scoring';
-import { isBye, opponentOf } from '../../../domain/models/season';
 import {
   daysOf,
   PlannedWorkout,
@@ -25,15 +22,14 @@ import { AppState } from '../../../state/app-state';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
 import { ShapedAvatar } from '../../expressive/shaped-avatar';
-import { WavyProgress } from '../../expressive/wavy-progress';
 import { Fmt } from '../../format';
-import { Card } from '../../layout/card';
 import { ListCard } from '../../layout/list-card';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
 import { SwipeRow } from '../../layout/swipe-row';
 import { TwoPane } from '../../layout/two-pane';
+import { MatchupCard } from '../matchup/matchup-card';
 
 export type PlanWeek = 'this' | 'next';
 
@@ -44,32 +40,6 @@ const WEEKS: readonly ButtonGroupOption<PlanWeek>[] = [
 
 const STATE_ICONS = { planned: 'fitness_center', going: 'directions_run', done: 'check' } as const;
 
-/** One side of a matchup, as the plan shows it. */
-interface SideView {
-  readonly name: string;
-  /** Committed, or (my side, before the lock) what the plan is worth right now. */
-  readonly committed: number;
-  readonly earned: number;
-  /** How full their bar is: earned of committed once the week is on, else against the bigger plan. */
-  readonly fill: number;
-}
-
-/** A Crate's matchup for the week shown, from where the plan stands. */
-export interface StripView {
-  readonly key: string;
-  readonly crate: string;
-  readonly link: readonly string[];
-  /** Before the week: plans still moving. During it: the plans are locked in. */
-  readonly locked: boolean;
-  readonly me: SideView;
-  /** Null for a bye. */
-  readonly them: SideView | null;
-  /** The one line that matters most right now. */
-  readonly headline: string;
-  readonly detail: string;
-  readonly behind: boolean;
-}
-
 interface WorkoutRow {
   readonly workout: PlannedWorkout;
   readonly state: 'planned' | 'going' | 'done';
@@ -77,6 +47,8 @@ interface WorkoutRow {
   readonly subtitle: string;
   readonly points: string | null;
   readonly canLaunch: boolean;
+  /** Where tapping it goes: a done workout's summary, else the planner. */
+  readonly link: readonly unknown[];
 }
 
 interface DayView {
@@ -85,101 +57,6 @@ interface DayView {
   readonly today: boolean;
   readonly past: boolean;
   readonly workouts: readonly WorkoutRow[];
-}
-
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-/**
- * Builds a Crate's strip: before the week, both plans as they stand and how
- * far apart they are (planning more is the point); during it, each side's
- * points against what they committed to, and what hitting or missing it
- * is worth.
- */
-export function stripView(args: {
-  board: MatchupBoard;
-  me: string;
-  opponent: string | null;
-  /** What my plan for the week is worth now, under this Season's weights. */
-  planned: number;
-  now: Date;
-}): StripView {
-  const { board, me, opponent, planned, now } = args;
-  const mine = board.home.peachId === me ? board.home : board.away!;
-  const theirs: MatchupSide | null = board.home.peachId === me ? board.away : board.home;
-  const locked = isLocked({ locksAt: board.window.opensAt }, now);
-  const { bonus, penalty } = board.season.rules.plan;
-  const name = opponent ?? 'Your opponent';
-  const myCommitted = locked ? mine.committed : planned;
-  const top = Math.max(myCommitted, theirs?.committed ?? 0, 1);
-  const side = (label: string, s: MatchupSide, committed: number): SideView => ({
-    name: label,
-    committed,
-    earned: s.score.workouts.total,
-    fill: locked
-      ? committed > 0
-        ? Math.min(1, s.score.workouts.total / committed)
-        : 0
-      : committed / top,
-  });
-  const meView = side('You', mine, myCommitted);
-  const themView = theirs ? side(name, theirs, theirs.committed) : null;
-  const base = {
-    key: board.matchup.id,
-    crate: board.crate.name,
-    link: ['/matchups', board.matchup.id],
-    locked,
-    me: meView,
-    them: themView,
-  };
-
-  if (!locked) {
-    const locks = Fmt.closesIn(board.window.opensAt.getTime() - now.getTime()).replace(
-      'closes',
-      'locks',
-    );
-    const stakes =
-      myCommitted > 0
-        ? `Hit it for +${Fmt.points(round2((myCommitted * bonus) / 100))}; miss and lose ${penalty}% of the gap. ${capitalize(locks)}.`
-        : `${capitalize(locks)}.`;
-    if (!themView) {
-      return {
-        ...base,
-        headline: 'Bye week: your plan still earns its bonus',
-        detail: stakes,
-        behind: false,
-      };
-    }
-    const gap = round2(themView.committed - myCommitted);
-    return {
-      ...base,
-      headline:
-        gap > 0
-          ? `Plan ${Fmt.points(gap)} more to match ${name}`
-          : gap < 0
-            ? `${Fmt.points(-gap)} ahead of ${name}’s plan`
-            : themView.committed === 0
-              ? `Neither of you has planned yet`
-              : `Level with ${name}’s plan`,
-      detail: stakes,
-      behind: gap > 0,
-    };
-  }
-
-  const score = mine.score;
-  const headline =
-    score.committed === 0
-      ? 'No plan this week: no bonus, no penalty'
-      : score.hit
-        ? `Plan hit: +${Fmt.points(score.plan)} bonus`
-        : `${Fmt.points(round2(score.committed - score.workouts.total))} to go to hit your plan`;
-  const detail =
-    score.committed > 0 && !score.hit
-      ? `Stop here and it costs ${Fmt.points(-score.plan)}. Live: you ${Fmt.points(score.total)}${theirs ? `, ${name} ${Fmt.points(theirs.score.total)}` : ''}.`
-      : `Live: you ${Fmt.points(score.total)}${theirs ? `, ${name} ${Fmt.points(theirs.score.total)}` : ''}.`;
-  const behind = theirs !== null && score.total < theirs.score.total;
-  return { ...base, headline, detail, behind };
 }
 
 /**
@@ -198,7 +75,6 @@ export function stripView(args: {
     MatIconButton,
     MatTooltip,
     ButtonGroup,
-    Card,
     ListCard,
     LoadingIndicator,
     Page,
@@ -207,7 +83,7 @@ export function stripView(args: {
     Stagger,
     SwipeRow,
     TwoPane,
-    WavyProgress,
+    MatchupCard,
   ],
   templateUrl: './plan.page.html',
   styleUrl: './plan.page.scss',
@@ -220,7 +96,6 @@ export class PlanPage {
   private readonly router = inject(Router);
   protected readonly fmt = Fmt;
   protected readonly weeks = WEEKS;
-  protected readonly refreshing = signal(false);
   protected readonly busy = signal(false);
 
   protected readonly shown = computed<PlanWeek>(() => (this.week() === 'next' ? 'next' : 'this'));
@@ -228,7 +103,12 @@ export class PlanPage {
   protected readonly monday = computed(() =>
     this.shown() === 'next' ? addDays(this.thisMonday(), 7) : this.thisMonday(),
   );
-  protected readonly subtitle = computed(() => Fmt.week(this.monday()));
+  /** The week, and how it's going: "Oct 12 – 18 · 1 of 4 done". */
+  protected readonly subtitle = computed(() => {
+    const week = Fmt.week(this.monday());
+    const summary = this.summary();
+    return summary ? `${week} · ${summary}` : week;
+  });
 
   private readonly me = this.state.peachId;
 
@@ -268,52 +148,36 @@ export class PlanPage {
     () => new Map((this.logs() ?? []).map((l) => [l.id, l] as const)),
   );
 
-  /** My matchups in the week shown, with everything to score them, and who they're against. */
-  private readonly boards = this.state.query(
+  /** My matchups in the week shown, with everything to score them. */
+  private readonly boardsQuery = this.state.query(
     () => {
-      const me = this.me();
       const matchups = this.state.myMatchups.value();
-      if (!me || !matchups) return undefined;
+      if (!matchups) return undefined;
       const live = matchups.filter((m) => m.status !== 'complete');
-      return { me, monday: this.monday(), ids: live.map((m) => m.id) };
+      return { monday: this.monday(), ids: live.map((m) => m.id) };
     },
-    async ({ me, monday, ids }, app) => {
+    async ({ monday, ids }, app) => {
       const boards = (await Promise.all(ids.map((id) => app.seasonService.board(id)))).filter(
         (b): b is MatchupBoard => b !== null && b.round.weekStart === monday,
       );
-      const opponents = boards.flatMap((b) => {
-        const id = opponentOf(b.matchup, me);
-        return id ? [id] : [];
-      });
-      const names = new Map(
-        (await app.peaches.getByIds(opponents)).map((p) => [p.id, p.displayName]),
-      );
-      return { monday, boards, names };
+      return { monday, boards };
     },
   );
 
-  /** One strip per matchup this week, then a note for Crates without one. */
-  protected readonly strips = computed<StripView[] | undefined>(() => {
-    const data = this.boards.value();
-    const me = this.me();
+  /** One card per matchup this week, with what my plan is worth under its Season's weights. */
+  protected readonly boards = computed(() => {
+    const data = this.boardsQuery.value();
     const plan = this.plan();
-    if (!data || !me || data.monday !== this.monday()) return undefined;
-    const now = this.state.nowTick();
-    return data.boards.map((board) => {
-      const opponentId = isBye(board.matchup) ? null : opponentOf(board.matchup, me);
-      return stripView({
-        board,
-        me,
-        opponent: opponentId ? (data.names.get(opponentId) ?? 'Your opponent') : null,
-        planned: this.state.app.planService.plannedPoints(plan ?? null, board.season.rules.weights),
-        now,
-      });
-    });
+    if (!data || data.monday !== this.monday()) return undefined;
+    return data.boards.map((board) => ({
+      board,
+      planned: this.state.app.planService.plannedPoints(plan ?? null, board.season.rules.weights),
+    }));
   });
 
   /** My Crates with no matchup in the week shown. */
   protected readonly idleCrates = computed(() => {
-    const boards = this.boards.value()?.boards ?? [];
+    const boards = this.boardsQuery.value()?.boards ?? [];
     const playing = new Set(boards.map((b) => b.crate.id));
     return (this.state.myCrates.value() ?? []).filter((c) => !playing.has(c.id));
   });
@@ -326,7 +190,7 @@ export class PlanPage {
    * disagree (their strips show the totals instead).
    */
   private readonly rowWeights = computed<CategoryWeights | null>(() => {
-    const boards = this.boards.value()?.boards ?? [];
+    const boards = this.boardsQuery.value()?.boards ?? [];
     if (boards.length === 0) return this.inCrates() ? null : DEFAULT_WEIGHTS;
     const first = boards[0].season.rules.weights;
     const same = boards.every(
@@ -379,34 +243,19 @@ export class PlanPage {
             subtitle,
             points: points === null ? null : `${state === 'done' ? '' : '~'}${Fmt.points(points)}`,
             canLaunch: thisWeek && state !== 'done',
+            link: state === 'done' ? ['/log', log!.id] : ['/plan', plan.weekStart, workout.id],
           };
         }),
     }));
   });
 
   /** How the week is going: workouts done of planned, or what's planned. Nothing for an empty week. */
-  protected readonly summary = computed(() => {
-    const days = this.days();
-    if (!days) return null;
-    const rows = days.flatMap((d) => d.workouts);
-    const done = rows.filter((r) => r.state === 'done').length;
-    const sets = rows.reduce((n, r) => n + plannedSetCount(r.workout), 0);
+  private readonly summary = computed(() => {
+    const rows = (this.days() ?? []).flatMap((d) => d.workouts);
     if (rows.length === 0) return null;
-    if (this.shown() === 'next') {
-      return {
-        title: `${Fmt.count(rows.length, 'workout')} planned`,
-        text: `${Fmt.count(sets, 'set')} across ${Fmt.count(new Set(rows.map((r) => r.workout.day)).size, 'day')}.`,
-        progress: null,
-      };
-    }
-    return {
-      title: `${done} of ${Fmt.count(rows.length, 'workout')} done`,
-      text:
-        done === rows.length
-          ? 'Every planned workout done. Doing more? Plan it on today.'
-          : 'Start the next one when it’s time.',
-      progress: done / rows.length,
-    };
+    if (this.shown() === 'next') return `${Fmt.count(rows.length, 'workout')} planned`;
+    const done = rows.filter((r) => r.state === 'done').length;
+    return `${done} of ${rows.length} done`;
   });
 
   /** A workout under way that isn't one of this week's planned ones. */
@@ -431,10 +280,6 @@ export class PlanPage {
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
-  }
-
-  protected editLink(w: PlannedWorkout): unknown[] {
-    return ['/plan', this.monday(), w.id];
   }
 
   /** Starts a planned workout (or carries on with it) in the log, set by set. */
@@ -465,10 +310,6 @@ export class PlanPage {
     });
   }
 
-  protected edit(w: PlannedWorkout): void {
-    void this.router.navigate(this.editLink(w));
-  }
-
   /** Plans last week's workouts again, on the same days. */
   protected async repeat(): Promise<void> {
     const me = this.me();
@@ -480,14 +321,5 @@ export class PlanPage {
     );
     this.busy.set(false);
     if (copied) this.state.toast(`Planned ${Fmt.count(copied, 'workout')} from the week before.`);
-  }
-
-  protected async refresh(): Promise<void> {
-    this.refreshing.set(true);
-    try {
-      await this.state.syncSeasons();
-    } finally {
-      this.refreshing.set(false);
-    }
   }
 }

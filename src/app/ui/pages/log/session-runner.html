@@ -9,17 +9,6 @@
     >
       <span class="material-symbols-rounded" aria-hidden="true">close</span>
     </button>
-    @if (next() && log().plan.length > 1) {
-      <button
-        matIconButton
-        type="button"
-        matTooltip="Exercise order"
-        aria-label="Exercise order"
-        (click)="reorder()"
-      >
-        <span class="material-symbols-rounded" aria-hidden="true">swap_vert</span>
-      </button>
-    }
   </div>
   <div class="clock pch-title-medium" [attr.aria-label]="'Session time ' + clock()">
     <span class="material-symbols-rounded" aria-hidden="true">timer</span>{{ clock() }}

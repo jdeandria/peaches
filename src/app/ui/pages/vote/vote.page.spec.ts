@@ -106,7 +106,9 @@ describe('VotePage', () => {
     const { f, el } = await render(warriors.id);
     const headings = Array.from(el.querySelectorAll('h2')).map(text);
     expect(headings).toContain('Plans');
-    expect(text(el)).toContain('commit to what your plan is worth');
+    expect(text(el)).toContain('For each rule, the middle vote wins.');
+    // Voting is the screen's one action, pinned at the bottom like every editing screen's.
+    expect(el.querySelector('.bottom-bar button.save')).not.toBeNull();
     // The middle votes: 25% bonus (25, 25, 50) and 50% penalty (50, 50, 75).
     const rules = () =>
       Array.from(el.querySelectorAll('.category .what'))

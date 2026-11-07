@@ -45,6 +45,20 @@ export interface CrateExercise {
   readonly from: string;
 }
 
+/** A whole workout to start from: a saved routine, a crate-mate's workout or a template. */
+export interface WorkoutStarter {
+  readonly key: string;
+  /** The group it's listed under: "Your routines", "From your Crates", "Templates". */
+  readonly group: string;
+  readonly name: string;
+  /** Who did it, or the kit it needs. */
+  readonly tag: string | null;
+  readonly summary: string;
+  readonly exercises: readonly ExerciseLogEntry[];
+  /** A routine of mine: it can be deleted from here. */
+  readonly removable?: boolean;
+}
+
 export interface ExercisePickerData {
   readonly catalog: ExerciseCatalog;
   /** The last entry for each exercise the Peach has logged, newest first. */
@@ -58,6 +72,11 @@ export interface ExercisePickerData {
   readonly newId: () => string;
   /** Where the workout is planned: the catalog lists what its equipment allows. */
   readonly kit?: { readonly name: string; readonly equipment: ReadonlySet<Equipment> } | null;
+  /** Whole workouts to start from, listed first; picking one calls `useStarter`. */
+  readonly starters?: readonly WorkoutStarter[];
+  readonly useStarter?: (starter: WorkoutStarter) => void;
+  /** Deletes a removable starter (a routine). */
+  readonly removeStarter?: (starter: WorkoutStarter) => void;
 }
 
 /**
@@ -169,9 +188,11 @@ export function openExercisePicker(
 }
 
 /**
- * Search everything a Peach can log: what they logged before (with last
- * time's numbers), what crate-mates logged (tagged with who), then the
- * whole catalog. Anything else they can make up on the spot.
+ * Search everything a Peach can log: whole workouts to start from when the
+ * caller offers them (routines, crate-mates' workouts, templates), what
+ * they logged before (with last time's numbers), what crate-mates logged
+ * (tagged with who), then the whole catalog. Anything else they can make
+ * up on the spot.
  *
  * The title and search stay at the top while the results scroll. Enter
  * picks the top match (or makes up the exercise if nothing matches),
@@ -245,6 +266,42 @@ export function openExercisePicker(
         }
       </header>
       <div #results class="results">
+        @for (group of starterGroups(); track group.title) {
+          <h3 class="pch-title-small group">{{ group.title }}</h3>
+          <ul class="rows">
+            @for (w of group.rows; track w.key) {
+              <li class="starter">
+                <button
+                  type="button"
+                  class="row"
+                  (mousedown)="$event.preventDefault()"
+                  (keydown)="onResultsKey($event)"
+                  (click)="useStarter(w)"
+                >
+                  <span class="text">
+                    <span class="pch-body-large"
+                      >{{ w.name }}
+                      @if (w.tag) {
+                        <span class="tag pch-label-medium">{{ w.tag }}</span>
+                      }
+                    </span>
+                    <span class="pch-body-small muted one-line">{{ w.summary }}</span>
+                  </span>
+                </button>
+                @if (w.removable && data.removeStarter) {
+                  <button
+                    type="button"
+                    class="remove"
+                    [attr.aria-label]="'Delete routine ' + w.name"
+                    (click)="removeStarter(w)"
+                  >
+                    <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                  </button>
+                }
+              </li>
+            }
+          </ul>
+        }
         @for (group of groups(); track group.title) {
           <h3 class="pch-title-small group">{{ group.title }}</h3>
           <ul class="rows">
@@ -434,6 +491,36 @@ export function openExercisePicker(
     .logged {
       color: var(--mat-sys-primary);
     }
+    .starter {
+      display: flex;
+      align-items: center;
+    }
+    .tag {
+      margin-inline-start: 6px;
+      padding: 2px 8px;
+      border-radius: 8px;
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+      white-space: nowrap;
+    }
+    .remove {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border: 0;
+      border-radius: 50%;
+      background: none;
+      color: var(--mat-sys-on-surface-variant);
+      cursor: pointer;
+    }
+    .remove:hover {
+      background: var(--mat-sys-surface-container-high);
+    }
+    .remove:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+    }
     .empty {
       padding: 16px 8px;
     }
@@ -505,6 +592,21 @@ export class ExercisePickerSheet {
       false,
     );
     return { mine: q ? mine : mine.slice(0, RECENT_LIMIT), crate, all };
+  });
+
+  /** Deleted from here this time, so they go at once. */
+  private readonly removed = signal<ReadonlySet<string>>(new Set());
+
+  /** Whole workouts, before anything is typed; a search is for exercises. */
+  protected readonly starterGroups = computed(() => {
+    if (this.query().trim()) return [];
+    const removed = this.removed();
+    const groups = new Map<string, WorkoutStarter[]>();
+    for (const w of this.data.starters ?? []) {
+      if (removed.has(w.key)) continue;
+      groups.set(w.group, [...(groups.get(w.group) ?? []), w]);
+    }
+    return [...groups].map(([title, rows]) => ({ title, rows }));
   });
 
   protected readonly groups = computed(() => {
@@ -582,6 +684,16 @@ export class ExercisePickerSheet {
   private rows(): HTMLButtonElement[] {
     const results = this.resultsRef()?.nativeElement;
     return results ? Array.from(results.querySelectorAll<HTMLButtonElement>('button.row')) : [];
+  }
+
+  protected useStarter(starter: WorkoutStarter): void {
+    this.data.useStarter?.(starter);
+    this.ref.dismiss();
+  }
+
+  protected removeStarter(starter: WorkoutStarter): void {
+    this.removed.update((s) => new Set([...s, starter.key]));
+    this.data.removeStarter?.(starter);
   }
 
   protected pick(exercise: LoggableExercise): void {

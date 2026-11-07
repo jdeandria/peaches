@@ -47,16 +47,22 @@ describe('MatchupPage', () => {
     Array.from(el.querySelectorAll('.category:not(.heading)'))
       .slice(0, 2)
       .map((row) => Array.from(row.children).map(text).join(' '));
-  const points = (el: HTMLElement) =>
-    Array.from(el.querySelectorAll('.scoreboard pch-animated-number .pch-visually-hidden')).map(
-      text,
-    );
-
-  /** Each side's plan card: whose, committed, and how it's going. */
-  const plans = (el: HTMLElement) =>
-    Array.from(el.querySelectorAll('.plan')).map((card) =>
-      [card.children[0], card.children[1], card.querySelector('.status')].map(text).join(' · '),
-    );
+  /** The matchup card: each side's number and plan, and the line that matters. */
+  const card = (el: HTMLElement) => {
+    const c = el.querySelector('pch-matchup-card')!;
+    return {
+      when: text(c.querySelector('.pill')),
+      sides: Array.from(c.querySelectorAll('.side')).map((s) =>
+        [
+          text(s.querySelector('.name')),
+          text(s.querySelector('.value .pch-visually-hidden')),
+          text(s.querySelector('.caption')),
+        ].join(' | '),
+      ),
+      headline: text(c.querySelector('.headline')),
+      detail: text(c.querySelector('.foot .pch-body-small')),
+    };
+  };
 
   it('shows this week’s live score, the breakdown, both plans and both sides’ workouts', async () => {
     const matchups = await setUp();
@@ -68,26 +74,25 @@ describe('MatchupPage', () => {
     expect(text(el.querySelector('.subtitle'))).toBe('Weekend Warriors · Week 3 · Oct 12 – 18');
     // Monday morning: I've done my first workout, Cho nothing yet. Each
     // score counts the penalty for what's still to do, as if the week ended now.
-    expect(points(el)).toEqual(['19.5', '-39.5']);
-    expect(text(el.querySelector('.verdict'))).toBe('Live · You lead');
-    expect(text(el.querySelector('.banner'))).toContain('Everything you both log this week counts');
-    const train = el.querySelector('a.log')!;
-    expect(train.getAttribute('href')).toBe('/');
-    expect(text(train)).toContain('Go to your plan');
+    // The same card as on the Plan and the Crate, not a link here.
+    expect(card(el)).toEqual({
+      when: 'Ends in 6 d',
+      sides: ['You | 19.5 | 47.8 of 104.5 planned', 'Cho | −39.5 | 0 of 79.0 planned'],
+      headline: '56.7 to go to hit your plan',
+      detail: 'Stop here and it costs 28.3.',
+    });
+    expect(el.querySelector('pch-matchup-card a')).toBeNull();
+    // The tab bar goes to the plan; nothing here duplicates it.
+    expect(el.querySelector('a[href="/"]')).toBeNull();
 
     const headings = Array.from(el.querySelectorAll('h2')).map(text);
     expect(headings).toEqual([
       'How the score adds up',
-      'Plans',
       'Workout points by category',
       'Your workouts',
       'Cho’s workouts',
     ]);
     expect(breakdown(el)).toEqual(['Workouts 47.8 0', 'Plan penalty −28.3 −39.5']);
-    expect(plans(el)).toEqual([
-      'Your plan · 104.5 pts committed · 56.7 pts to go · −28.3 if it stays',
-      'Cho’s plan · 79.0 pts committed · 79.0 pts to go · −39.5 if it stays',
-    ]);
     // Every category the Crate gave points to, with its weight per par.
     const categories = Array.from(el.querySelectorAll('.category .what .pch-title-small')).map(
       text,
@@ -121,9 +126,8 @@ describe('MatchupPage', () => {
     // 10 km = 2 pars at 23; 50 min = 1.11 pars at 25: 73.8 more, past my
     // 104.5, which earns 25% of it.
     expect(breakdown(el)).toEqual(['Workouts 121.6 0', 'Plan bonus or penalty +26.1 −39.5']);
-    expect(plans(el)[0]).toBe('Your plan · 104.5 pts committed · Plan hit: +26.1 bonus');
-    expect(points(el)[0]).toBe('147.7');
-    expect(text(el.querySelector('.verdict'))).toBe('Live · You lead');
+    expect(card(el).sides[0]).toBe('You | 147.7 | 121.6 of 104.5 planned');
+    expect(card(el).headline).toBe('Plan hit: +26.1 bonus');
     const mine = el.querySelectorAll('.logs > div')[0];
     const links = Array.from(mine.querySelectorAll('a[pch-list-row]')).map((a) =>
       a.getAttribute('href'),
@@ -137,33 +141,32 @@ describe('MatchupPage', () => {
     const f = await render(done.id);
     const el: HTMLElement = f.nativeElement;
     expect(text(el.querySelector('h1'))).toBe('You vs Ada');
-    expect(points(el)).toEqual(['207.2', '79.3']);
+    expect(card(el)).toEqual({
+      when: 'Final',
+      sides: ['You | 207.2 | 181.1 of 104.5 planned', 'Ada | 79.3 | 108.8 of 168.0 planned'],
+      headline: 'You won',
+      detail: undefined,
+    });
     // Workouts, then the plans: I hit mine (25% of 104.5); Ada fell 59.1
     // short of 168 (50% of it off).
     expect(breakdown(el)).toEqual(['Workouts 181.1 108.8', 'Plan bonus or penalty +26.1 −29.6']);
-    expect(plans(el)).toEqual([
-      'Your plan · 104.5 pts committed · Hit: +26.1 bonus',
-      'Ada’s plan · 168.0 pts committed · Short by 59.1: −29.6',
-    ]);
-    expect(text(el.querySelector('.verdict'))).toBe('Final · You won');
-    expect(el.querySelector('.banner')).toBeNull();
-    expect(el.querySelector('a.log')).toBeNull();
     // Crate-mates' workouts open as shared with the Crate, to view and dispute.
     const theirs = el.querySelectorAll('.logs > div')[1];
     expect(theirs.querySelector('a')?.getAttribute('href')).toMatch(/^\/crates\/.+\/logs\//);
   });
 
-  it('before the week starts, shows commitments so far and asks for a plan', async () => {
+  it('before the week starts, shows commitments so far', async () => {
     const matchups = await setUp();
     const bye = matchups.find((m) => m.status === 'scheduled' && m.awayPeachId === null)!;
     const f = await render(bye.id);
     const el: HTMLElement = f.nativeElement;
     expect(text(el.querySelector('h1'))).toBe('Your bye week');
-    expect(text(el.querySelector('.banner .pch-body-medium'))).toBe('Starts Mon, Oct 19');
-    expect(plans(el)).toEqual(['Your plan · No plan · Nothing planned yet · locks in 6 d']);
-    const plan = el.querySelector('a.plan-week')!;
-    expect(plan.getAttribute('href')).toBe('/?week=next');
-    expect(text(plan)).toContain('Plan your week');
+    expect(card(el)).toEqual({
+      when: 'Locks in 6 d',
+      sides: ['You | 0 | Nothing planned yet'],
+      headline: 'Bye week: your plan still earns its bonus',
+      detail: undefined,
+    });
     expect(el.querySelectorAll('.logs > div')).toHaveLength(1);
 
     // What I plan shows up as my commitment.
@@ -187,9 +190,8 @@ describe('MatchupPage', () => {
     });
     TestBed.inject(AppState).bump();
     await stable(f);
-    expect(plans(el)[0]).toMatch(
-      /^Your plan · [\d.]+ pts committed · [\d.]+ committed so far · locks in 6 d$/,
-    );
+    expect(card(el).sides[0]).toMatch(/^You \| [\d.]+ \| Planned so far$/);
+    expect(card(el).detail).toMatch(/^Hit it for \+[\d.]+; miss and lose 50% of the gap\.$/);
   });
 
   it('says when a matchup does not exist', async () => {

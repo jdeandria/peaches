@@ -72,9 +72,6 @@ button. Used as the parent route component in `app.routes.ts`.
 | `maxWidth`       | `number`  | `720`   | Content column cap (px); gutter 16px compact / 24px.          |
 | `showBack`       | `boolean` | `false` | Back button: `Location.back()` if there is in-app history…    |
 | `backLink`       | `string`  | `'/'`   | …else navigates here.                                         |
-| `refreshable`    | `boolean` | `false` | Adds a Refresh icon button to the toolbar.                    |
-| `refreshing`     | `boolean` | `false` | Disables the refresh button.                                  |
-| Output `refresh` | `void`    |         | Refresh button clicked.                                       |
 
 Slots: default (page content), `[pageActions]` (toolbar, use `mat-icon-button`s
 with `aria-label`), `[pageFab]` (fixed bottom-end; use `mat-fab extended`),
@@ -92,8 +89,6 @@ and actions get their own row above the headline.
   [subtitle]="crate.name"
   showBack
   backLink="/crates"
-  refreshable
-  (refresh)="reload()"
 >
   <button pageActions mat-icon-button aria-label="Share">
     <span class="material-symbols-rounded" aria-hidden="true">share</span>
@@ -210,6 +205,25 @@ lifts off the list. For keyboards, move rows on Alt and an arrow and call
 <pch-swipe-row editable removable (edit)="edit(e)" (remove)="remove(e)">
   <div class="item">… <span class="pch-swipe-actions"><button …>…</button></span></div>
 </pch-swipe-row>
+```
+
+### `pch-stat-tiles` — `StatTiles`
+
+Input `tiles: readonly { value: string; label: string }[]` (required). One
+tile per number ("870 kg / Weight moved"), three to a row on a phone. The
+same tiles wherever a week or a workout is summed up.
+
+```html
+<pch-stat-tiles [tiles]="[{ value: '9', label: 'Sets' }]" aria-label="This week" />
+```
+
+### `.pch-note` (global class)
+
+A line of quiet text in place of a card: what an empty list says, or a
+note under a section. Use it rather than an outlined card.
+
+```html
+<p class="pch-note">Nothing logged yet. Your workouts show up here.</p>
 ```
 
 ### `pch-empty-state` — `EmptyState`
@@ -339,7 +353,8 @@ Morphs and rotates; still under reduced motion.
 Connected single-select group (radiogroup with arrow/Home/End keys).
 Inputs: `options: readonly { value: T; label: string }[]` (required),
 `selected: T | null` (model — use `[(selected)]`), `allowDeselect: boolean`,
-`label?: string` (aria-label), `height: number` (default 48). Output
+`label?: string` (aria-label), `height: number` (default 40: keep it, so
+switchers look alike from screen to screen). Output
 `selectionChange: T | null` (user changes only).
 
 ```html

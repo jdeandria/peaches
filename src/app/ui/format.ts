@@ -79,7 +79,9 @@ export const Fmt = {
 
   /** Whole points without decimals, otherwise one decimal. */
   points(value: number): string {
-    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+    const shown = Number.isInteger(value) ? String(Math.abs(value)) : Math.abs(value).toFixed(1);
+    // A real minus sign, so "−39.5" never reads as a dash; no "−0".
+    return value < 0 && shown !== '0' && shown !== '0.0' ? `−${shown}` : shown;
   },
 
   /** Total volume load (sets × reps × weight), e.g. "2,450 kg". */

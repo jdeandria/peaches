@@ -17,57 +17,8 @@
       backLink="/crates"
       [maxWidth]="880"
     >
-      @if (score(); as s) {
-        <div class="scoreboard" [pchStagger]="0" role="status" aria-live="polite">
-          <div class="side">
-            <span class="pch-label-large">{{ myName() }}</span>
-            <pch-animated-number
-              class="pch-display-medium points"
-              [value]="s.mine"
-              [format]="formatPoints"
-            />
-          </div>
-          @if (hasOpponent()) {
-            <span class="vs pch-title-medium" aria-hidden="true">vs</span>
-            <div class="side">
-              <span class="pch-label-large">{{ theirName() }}</span>
-              <pch-animated-number
-                class="pch-display-medium points"
-                [value]="s.theirs"
-                [format]="formatPoints"
-              />
-            </div>
-          }
-          <div class="verdict pch-title-medium">
-            {{ s.final ? 'Final' : 'Live' }} · {{ verdict() }}
-          </div>
-        </div>
-      }
-
-      @if (banner(); as text) {
-        <pch-card variant="filled" class="banner" [pchStagger]="1">
-          <span class="material-symbols-rounded" aria-hidden="true">schedule</span>
-          <span class="pch-body-medium">{{ text }}</span>
-        </pch-card>
-      }
-
-      @if (canTrain()) {
-        <a matButton="filled" class="log" routerLink="/" [pchStagger]="1">
-          <span class="material-symbols-rounded" aria-hidden="true">event_note</span>
-          Go to your plan
-        </a>
-      }
-      @if (canPlan()) {
-        <a
-          matButton="filled"
-          class="log plan-week"
-          routerLink="/"
-          [queryParams]="{ week: 'next' }"
-          [pchStagger]="1"
-        >
-          <span class="material-symbols-rounded" aria-hidden="true">event_note</span>
-          Plan your week
-        </a>
+      @if (board(); as b) {
+        <pch-matchup-card [board]="b" [pchStagger]="0" />
       }
 
       <pch-section title="How the score adds up" />
@@ -90,33 +41,8 @@
         }
       </pch-list-card>
       @if (editedSince()) {
-        <p class="pch-body-small muted note">
-          Workouts were edited after the week closed; the final score stands.
-        </p>
+        <p class="pch-note">Workouts were edited after the week closed; the final score stands.</p>
       }
-
-      <pch-section title="Plans" />
-      <p class="pch-body-small muted plans-intro">
-        {{
-          started()
-            ? 'Hit what you committed to for a bonus; fall short and every point you miss costs you.'
-            : 'Commitments follow each plan until the week starts, then lock.'
-        }}
-      </p>
-      <div class="plans">
-        @for (p of plans(); track p.peachId; let i = $index) {
-          <pch-card variant="elevated" class="plan" [attr.data-tone]="p.tone" [pchStagger]="3 + i">
-            <span class="pch-label-large muted">{{ p.whose }}</span>
-            <span class="pch-title-large committed">{{ p.committed }}</span>
-            <pch-wavy-progress
-              [value]="p.fraction"
-              [color]="p.tone === 'hit' ? 'tertiary' : 'primary'"
-              [label]="p.whose + ': earned of committed'"
-            />
-            <span class="pch-body-medium status">{{ p.status }}</span>
-          </pch-card>
-        }
-      </div>
 
       <pch-section title="Workout points by category" />
       <pch-list-card [pchStagger]="2">
@@ -184,7 +110,7 @@
 
 <ng-template #logList let-rows let-index="index">
   @if (rows.length === 0) {
-    <pch-card variant="outlined" [pchStagger]="index">Nothing logged this week yet.</pch-card>
+    <p class="pch-note" [pchStagger]="index">Nothing logged this week yet.</p>
   } @else {
     <pch-list-card [pchStagger]="index">
       @for (r of rows; track r.id) {

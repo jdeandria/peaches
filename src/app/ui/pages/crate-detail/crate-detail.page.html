@@ -6,74 +6,14 @@
     <pch-empty-state icon="search_off" title="Crate not found" />
   </pch-page>
 } @else {
-  <pch-page [title]="c.name" [subtitle]="c.description || undefined" [maxWidth]="1080">
-    <!-- Without a native share sheet the code chip below already copies the code. -->
-    @if (canShare) {
-      <button
-        pageActions
-        matIconButton
-        type="button"
-        aria-label="Share invite code"
-        matTooltip="Share invite code"
-        (click)="share(c)"
-      >
-        <span class="material-symbols-rounded" aria-hidden="true">share</span>
-      </button>
-    }
-
-    <pch-crate-switcher class="switcher" [current]="c.id" />
-
-    <pch-section title="This week" [top]="8" />
-    @let week = thisWeek();
-    @if (week.kind === 'matchup') {
-      <pch-matchup-hero-card class="hero" [pchStagger]="0" [matchup]="week.matchup" />
-    } @else if (week.kind === 'note') {
-      <pch-card variant="outlined" class="week-note" [pchStagger]="0">
-        <p class="pch-body-medium">{{ week.text }}</p>
-        @if (week.plan) {
-          <a matButton="tonal" routerLink="/" [queryParams]="{ week: 'next' }">
-            <span class="material-symbols-rounded" aria-hidden="true">event_note</span>
-            Plan your week
-          </a>
-        }
-      </pch-card>
-    } @else {
-      <pch-loading-indicator class="loading" [size]="40" />
-    }
-
-    <div class="chips">
-      <a class="chip action" [routerLink]="['/crates', c.id, 'vote']">
-        <span class="material-symbols-rounded" aria-hidden="true">how_to_vote</span>
-        <span>{{ voteLine() }}</span>
-      </a>
-      <button
-        class="chip action"
-        type="button"
-        aria-description="Copies the invite code"
-        (click)="copyCode(c)"
-      >
-        <span class="material-symbols-rounded" aria-hidden="true">key</span>
-        <span>Code {{ c.inviteCode }}</span>
-      </button>
-    </div>
-
-    @if (disputes().length > 0) {
-      <pch-section title="Your vote needed" />
-      <div class="disputes" [pchStagger]="0">
-        @for (d of disputes(); track d.view.dispute.id) {
-          <a class="dispute-link" [routerLink]="d.link">
-            <pch-dispute-card [view]="d.view" [owner]="d.owner" [openedBy]="d.openedBy" />
-          </a>
-        }
-      </div>
-    }
+  <pch-page [title]="c.name" [subtitle]="subtitle()" [maxWidth]="1080">
+    <pch-crate-title pageTitle [current]="c.id" [name]="c.name" />
 
     <pch-button-group
       class="views"
       label="Show"
       [options]="views"
       [selected]="shown()"
-      [height]="40"
       (selectionChange)="showView($event)"
     />
 
@@ -81,53 +21,44 @@
       @case ('season') {
         <pch-two-pane>
           <div primaryPane>
-            @let s = season();
-            @if (s === undefined) {
-              <pch-loading-indicator class="loading" [size]="40" />
-            } @else if (s === null) {
-              <pch-card variant="outlined" class="no-season">
-                No Season yet. {{ canManage() ? 'Start one' : 'The owner can start one' }}: every
-                week you’re paired up, and whoever logs more points wins.
-              </pch-card>
+            @if (disputes().length > 0) {
+              <pch-section title="Your vote needed" [top]="8" />
+              <div class="disputes" [pchStagger]="0">
+                @for (d of disputes(); track d.view.dispute.id) {
+                  <a class="dispute-link" [routerLink]="d.link">
+                    <pch-dispute-card [view]="d.view" [owner]="d.owner" [openedBy]="d.openedBy" />
+                  </a>
+                }
+              </div>
+            }
+
+            <pch-section title="This week" [top]="disputes().length > 0 ? 24 : 8" />
+            @let week = thisWeek();
+            @if (week.kind === 'matchup') {
+              @if (weekBoard(); as b) {
+                <pch-matchup-card [pchStagger]="0" [board]="b" link />
+              } @else {
+                <pch-loading-indicator class="loading" [size]="40" />
+              }
+            } @else if (week.kind === 'note') {
+              <p class="pch-note">{{ week.text }}</p>
             } @else {
-              <pch-section [title]="s.name">
-                <pch-status-label
-                  sectionTrailing
-                  [color]="s.status === 'active' ? 'primary' : undefined"
-                  >{{ fmt.seasonStatus(s.status) }}</pch-status-label
-                >
-              </pch-section>
+              <pch-loading-indicator class="loading" [size]="40" />
+            }
+
+            @if (season()) {
+              <pch-section title="Standings" />
               @let rows = standingRows();
               @if (rows) {
                 <pch-standings-table [pchStagger]="1" [rows]="rows" [highlightPeachId]="me()" />
               } @else {
                 <pch-loading-indicator class="loading" [size]="40" />
               }
-              @if (results().length > 0) {
-                <pch-section title="Your results">
-                  <span sectionTrailing class="record pch-label-large" aria-label="Season record">{{
-                    record()
-                  }}</span>
-                </pch-section>
-                <pch-list-card [pchStagger]="2" class="results">
-                  @for (m of results(); track m.id) {
-                    <pch-matchup-row [matchup]="m" [link]="true" />
-                  }
-                </pch-list-card>
-              }
             }
           </div>
           <div secondaryPane>
-            @if (comingUp().length > 0) {
-              <pch-section title="Coming up" [top]="8" />
-              <pch-list-card [pchStagger]="2" class="coming-up">
-                @for (m of comingUp(); track m.id) {
-                  <pch-matchup-row [matchup]="m" [link]="true" />
-                }
-              </pch-list-card>
-            }
             @if (season()) {
-              <pch-section title="Weeks" [top]="comingUp().length > 0 ? 24 : 8" />
+              <pch-section title="Weeks" [top]="8" />
               @let roundList = rounds();
               @if (roundList) {
                 <pch-list-card [pchStagger]="2" class="weeks">
@@ -175,6 +106,20 @@
                 <pch-loading-indicator class="loading" [size]="40" />
               }
             }
+
+            <pch-section title="Rules" [top]="season() ? 24 : 8" />
+            <pch-list-card [pchStagger]="3">
+              <a pch-list-row class="rules" [routerLink]="['/crates', c.id, 'vote']">
+                <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
+                  >how_to_vote</span
+                >
+                What each workout is worth
+                <span rowSubtitle>{{ voteLine() }}</span>
+                <span rowTrailing class="material-symbols-rounded muted" aria-hidden="true"
+                  >chevron_right</span
+                >
+              </a>
+            </pch-list-card>
           </div>
         </pch-two-pane>
       }
@@ -184,9 +129,7 @@
             <pch-section title="Recent workouts" [top]="8" />
             @let feed = activity();
             @if (feed.length === 0) {
-              <pch-card variant="outlined" [pchStagger]="1"
-                >Nothing logged yet. Workouts members log show up here.</pch-card
-              >
+              <p class="pch-note">Nothing logged yet. Workouts members log show up here.</p>
             } @else {
               <pch-list-card [pchStagger]="1" class="activity">
                 @for (a of feed; track a.id) {
@@ -203,9 +146,9 @@
             <pch-section title="Exercises" [top]="8" />
             @let list = exercises();
             @if (list.length === 0) {
-              <pch-card variant="outlined" [pchStagger]="2"
-                >Every exercise members log shows up here, so you can log it too.</pch-card
-              >
+              <p class="pch-note">
+                Every exercise members log shows up here, so you can log it too.
+              </p>
             } @else {
               <pch-list-card [pchStagger]="2" class="exercises">
                 @for (e of showAllExercises() ? list : list.slice(0, exercisesShown); track e.id) {
@@ -232,10 +175,30 @@
       }
       @case ('peaches') {
         <div class="single">
-          <pch-section title="Peaches" [top]="8" />
+          @if (c.description) {
+            <p class="pch-note description">{{ c.description }}</p>
+          }
+          <pch-section title="Invite" [top]="8" />
+          <pch-list-card [pchStagger]="1">
+            <button
+              pch-list-row
+              type="button"
+              class="invite"
+              [attr.aria-label]="
+                'Invite code ' + c.inviteCode + (canShare ? ', share it' : ', copy it')
+              "
+              (click)="canShare ? share(c) : copyCode(c)"
+            >
+              <span rowLeading class="material-symbols-rounded icon" aria-hidden="true">key</span>
+              Code {{ c.inviteCode }}
+              <span rowSubtitle>{{ canShare ? 'Tap to share' : 'Tap to copy' }}</span>
+            </button>
+          </pch-list-card>
+
+          <pch-section title="Peaches" />
           @let people = members.value();
           @if (people) {
-            <pch-list-card [pchStagger]="1" class="members">
+            <pch-list-card [pchStagger]="2" class="members">
               @for (m of people; track m.peach.id) {
                 @let owner = m.membership.role === 'owner';
                 <pch-list-row>

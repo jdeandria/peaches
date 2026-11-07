@@ -8,16 +8,11 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-.intro {
-  margin: 0 0 16px;
-  color: var(--mat-sys-on-surface-variant);
-}
-
 .budget {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 16px;
+  margin: 8px 0 16px;
 }
 
 .category {
@@ -76,15 +71,14 @@
 .actions {
   display: flex;
   gap: 12px;
-  margin-top: 16px;
 
   .save {
     flex: 1;
   }
 }
 
-.note {
-  margin: 12px 0 0;
+.season-note {
+  padding-top: 16px;
 }
 
 .grace {
@@ -99,10 +93,6 @@
 .even {
   display: block;
   margin: 12px 0 0 auto;
-}
-
-.plan-intro {
-  margin: 0 0 12px;
 }
 
 .value {
