@@ -245,13 +245,16 @@ describe('PersonalPage', () => {
     expect((await saved()).map((l) => l.name)).toEqual(['Garage']);
   });
 
-  it('shows settings: units, version, and no sign out in the demo', async () => {
+  it('shows settings: units, sign out and version', async () => {
     const f = await render({ view: 'settings' });
     const el: HTMLElement = f.nativeElement;
+    expect(sections(el)).toEqual(['Units', 'Account', 'App']);
     expect(text(el)).toContain(`Version ${APP_VERSION}`);
-    // The demo cannot sign out, and the browser offered no install prompt.
-    expect(text(el)).not.toContain('Sign out');
+    // The browser offered no install prompt.
     expect(text(el)).not.toContain('Install app');
+    // Signing out is always there, the demo included.
+    expect(text(el.querySelector('button.sign-out'))).toContain('Sign out');
+    expect(text(el.querySelector('button.sign-out'))).toContain('Signed in as You');
     // Exercises are added by logging them (decision #21); nothing links to a library.
     expect(el.querySelector('a[href="/exercises"]')).toBeNull();
 
@@ -262,6 +265,15 @@ describe('PersonalPage', () => {
     await stable(f);
     expect(imperial.getAttribute('aria-checked')).toBe('true');
     expect((await backend.container.peaches.getById(DEMO_PEACH_ID))?.units).toBe('imperial');
+  });
+
+  it('signs out', async () => {
+    const f = await render({ view: 'settings' });
+    const auth = TestBed.inject(AppState).auth;
+    expect(auth.currentUser).not.toBeNull();
+    button(f.nativeElement, 'Sign out').click();
+    await stable(f);
+    expect(auth.currentUser).toBeNull();
   });
 
   it('offers to install the app when the browser allows it', async () => {

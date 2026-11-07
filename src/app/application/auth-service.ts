@@ -25,7 +25,7 @@ export interface AuthService {
 
   readonly currentUser: AuthUser | null;
 
-  /** Providers to offer on the sign-in screen; empty when sign-out is impossible. */
+  /** Providers to offer on the sign-in screen. */
   readonly availableProviders: ReadonlySet<AuthProvider>;
 
   signInWithGoogle(): Promise<AuthUser>;
@@ -35,9 +35,9 @@ export interface AuthService {
 /**
  * Signs in as one fixed user; used by demo mode and tests.
  *
- * With `signedIn` false the demo starts on the sign-in screen and the
- * Google button signs in as `user`, which lets the sign-in flow be
- * exercised without a backend.
+ * With `signedIn` false the demo starts on the sign-in screen. Either way
+ * Sign out goes there, and the Google button signs (back) in as `user`,
+ * which lets the sign-in flow be exercised without a backend.
  */
 export class DemoAuthService implements AuthService {
   private readonly state: BehaviorSubject<AuthUser | null>;
@@ -57,9 +57,7 @@ export class DemoAuthService implements AuthService {
     return this.state.value;
   }
 
-  get availableProviders(): ReadonlySet<AuthProvider> {
-    return this.state.value === null ? new Set<AuthProvider>(['google']) : new Set<AuthProvider>();
-  }
+  readonly availableProviders: ReadonlySet<AuthProvider> = new Set<AuthProvider>(['google']);
 
   async signInWithGoogle(): Promise<AuthUser> {
     this.state.next(this.user);

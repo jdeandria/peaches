@@ -26,12 +26,6 @@ export const routes: Routes = [
         loadComponent: () => import('./ui/pages/plan/plan.page').then((m) => m.PlanPage),
       },
       {
-        path: 'plan/:week/:workoutId',
-        title: 'Plan a workout',
-        loadComponent: () =>
-          import('./ui/pages/plan/planned-workout.page').then((m) => m.PlannedWorkoutPage),
-      },
-      {
         path: 'crates',
         title: 'Crates',
         loadComponent: () => import('./ui/pages/crates/crates.page').then((m) => m.CratesPage),
@@ -77,6 +71,8 @@ export const routes: Routes = [
       { path: 'compete', redirectTo: 'crates' },
       { path: 'profile', redirectTo: 'you' },
       { path: 'matchups/:matchupId/lineup', redirectTo: 'matchups/:matchupId' },
+      // Workouts are planned on the Plan itself now.
+      { path: 'plan/:week/:workoutId', redirectTo: '' },
     ],
   },
   { path: '**', redirectTo: '' },

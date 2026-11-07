@@ -40,6 +40,48 @@
     <span class="pch-label-medium">{{ progress().done }} of {{ progress().total }} sets</span>
   </div>
 
+  <!-- Skip around: tap an exercise to do it now; hold and drag to reorder (Alt and an arrow). -->
+  @if (chips().length > 1) {
+    <div
+      class="chips"
+      role="group"
+      aria-label="Exercises"
+      cdkDropList
+      cdkDropListOrientation="horizontal"
+      cdkDropListLockAxis="x"
+      (cdkDropListDropped)="dropChip($event)"
+    >
+      @for (c of chips(); track c.id; let i = $index) {
+        <button
+          type="button"
+          class="chip"
+          cdkDrag
+          cdkDragPreviewContainer="parent"
+          [cdkDragStartDelay]="hold"
+          [class.selected]="c.current"
+          [class.complete]="c.complete"
+          [attr.aria-current]="c.current ? 'step' : null"
+          [attr.aria-label]="
+            c.name + (c.complete ? ', done' : ', ' + c.done + ' of ' + c.total + ' sets')
+          "
+          aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+          (click)="jump(c.id)"
+          (keydown.alt.arrowleft)="moveChip(i, i - 1, $event)"
+          (keydown.alt.arrowright)="moveChip(i, i + 1, $event)"
+        >
+          <span class="chip-name pch-label-large">{{ c.name }}</span>
+          <span class="chip-summary pch-label-small">
+            @if (c.complete) {
+              <span class="material-symbols-rounded" aria-hidden="true">check</span>
+            } @else {
+              {{ c.done }}/{{ c.total }}
+            }
+          </span>
+        </button>
+      }
+    </div>
+  }
+
   @if (!next()) {
     <section class="finished" aria-labelledby="pch-runner-heading">
       @if (progress().total === 0 && setsDone() === 0) {

@@ -59,38 +59,51 @@ switch sits under it (kept in `?week=`).
 3. **Days**, Monday to Sunday, today marked. If the week is empty and the
    week before had workouts, the heading offers **Repeat last week** (or
    **Repeat this week**), which plans the same workouts on the same
-   weekdays. Each day has **+** (plan a workout on it) and its workouts:
-   - planned, with what it's worth and **Start** (this week only);
-   - in progress, with sets done and **Continue**;
-   - done, with what it earned.
-   Tap a workout to open it (the planner, or a done one's summary); swipe
-   left to take it off the plan (with Undo).
+   weekdays. Each day has **+** and its workouts.
 
-Start launches the workout: a draft log with the planned exercises as its
-session plan, straight into the runner (`/log?mode=log`). Between sets the
+The Plan is the one screen for planning and doing: there is no separate
+planner.
+
+- **+** on a day opens the exercise picker. An empty day lists whole
+  workouts first (**Your routines**, crate-mates' latest workouts tagged
+  with who did them, and **Templates**), then exercises. Picking one plans
+  a workout on that day at once and opens it. An exercise goes on with
+  last time's sets, or a sensible start (three sets of ten, three
+  30-second holds, one solid session's distance).
+- **A workout** is one row (planned, in progress with sets done, or done
+  with what it earned). This week, until it's done, the row leads with a
+  play button that starts it, or carries on where it left off, open or
+  closed; otherwise it leads with its state (a tick when done). Tapping
+  the rest of the row opens it to its exercises. Those under way, and
+  today's still to do, start open.
+- **Tap an exercise** to set its numbers with − and + (no dials: those
+  are for doing the set): **Sets**, then **Reps** and **Weight**, a hold's
+  **Time**, or **Distance** and **Time**. A number applies to every set
+  (sets that differ keep their other numbers); more sets copy the last.
+  It saves a moment after the last tap. Tap it again to close it.
+- **Each exercise** has a play button too, this week, that starts the
+  workout there: it goes first and the rest follow in order. In a workout under
+  way it carries on, showing sets done ("1/3") and a tick for each one
+  finished. Swipe an exercise left to remove it (with Undo; the last one
+  takes the workout off the plan), hold and drag it to reorder, or add one
+  with **Add exercise**. Changes save as they're made.
+- **The menu** (⋮) has the rest: **Move to** another day and **Where**
+  (once you have equipment locations; it filters the picker), while it's
+  not started; **Save as routine**; **Take off the plan** (with Undo).
+
+Play opens the runner (`/log?mode=log`, with `&exercise=` from an
+exercise's play), on that exercise if it was an exercise's. Under the
+progress bar, a strip of chips, one per exercise with its sets done,
+skips around: tap one to do it now (the plan keeps its order and comes
+back to it once that exercise is done), hold and drag one to reorder. Between sets the
 rest timer pops in between the dials, which already show the next set,
-pushing them out to the sides, greyed and still until it's over. Back to
-plan in the runner shows the workout's exercises at `/log`, where one can
-be added or changed for this session, or dragged into another order.
-Finish leads to the workout's summary at `/log/:id` (stat tiles, then the
-exercises; Edit details and Delete in the top bar), and the day shows it
-done. With nothing launched, `/log` says so.
-
-### Planning a workout `/plan/:week/:id` (`new`, with `?day=`)
-
-The name is the headline, typed over in place (suggested from the
-exercises). A new workout goes on the day its **+** was on (the subtitle
-says which); one already planned can move with **Day** (Mon to Sun).
-**Where** (Anywhere, or one of your equipment locations, shown once you
-have one; it filters the exercise picker and fits templates to the kit),
-then **Exercises**: Add exercise. While the workout is empty, the picker
-lists whole workouts to start from first: **Your routines**, crate-mates'
-latest workouts (tagged with who did them) and **Templates**. Each exercise's target
-sets are set on the dials, as before. Once there are exercises it shows
-what the workout is worth in each Crate with a Season on. Save as routine
-and Take off the plan sit in the top bar; **Add to plan** (or Save) in the
-bottom bar, and for a workout on today, **Add and start** beside it, which
-saves it and goes straight into the runner. Nothing is saved until then.
+pushing them out to the sides, greyed and still until it's over. **Back to
+plan** returns to the Plan, where the workout shows how far along it is;
+**Finish** shares it with your Crates and returns there too, the day
+showing it done. A finished workout's summary (`/log/:id`, from You →
+History) has stat tiles and its exercises, with Edit details and Delete in
+the top bar. With nothing launched, `/log` says so. Old planner links
+(`/plan/:week/:id`) land on the Plan.
 
 ### Crates `/crates` → a Crate `/crates/:id`
 
@@ -127,20 +140,23 @@ History | Gear | Settings** (kept in `?view=`; Gear is `equipment`).
   swipe left to delete with Undo.
 - **Gear**: where you train and what's there (Home, Gym, Travel presets),
   up to eight places. **Add** to add one, tap one to edit it.
-- **Settings**: units, install, sign out, version.
+- **Settings**: units; **Account**, with **Sign out** (back to the sign-in
+  screen; in the demo, Continue with Google signs back in); **App**:
+  install, version.
 
 ## Paths
 
-- **Plan next week**: Plan → Next week → + on a day → Add exercise (an
-  exercise, or a routine or template) → Add to plan. Watch the matchup
-  card: plan more to match your opponent.
-- **Do today's workout**: Plan → Start on today's workout → runner → Finish.
-- **Pick a workout back up**: Plan → Continue on it.
-- **Do something you didn't plan**: Plan → + on today → add exercises →
-  Add and start.
+- **Plan next week**: Plan → Next week → + on a day → pick an exercise, a
+  routine or a template. Watch the matchup card: plan more to match your
+  opponent.
+- **Do today's workout**: Plan → play on its row → runner → Finish.
+- **Pick a workout back up**: Plan → play on its row (or on the exercise
+  to carry on with).
+- **Do something you didn't plan**: Plan → + on today → pick → play.
 - **Fix an old workout**: You → History → tap it → edit.
 - **Check the score**: Crates → This week → tap the matchup card.
 - **Vote on the rules**: Crates → Season → Rules.
 - **Switch Crates**: Crates → tap the Crate's name.
 - **Invite someone**: Crates → Peaches → Code.
 - **Set up your equipment**: You → Gear → Add.
+- **Sign out**: You → Settings → Sign out.

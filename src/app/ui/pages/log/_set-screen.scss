@@ -105,3 +105,108 @@
     }
   }
 }
+
+// A strip of chips that scrolls sideways: tap one to pick it, hold and drag
+// it into another order. The sets in the set sheet; the exercises in the runner.
+@mixin chip-strip {
+  .chips {
+    display: flex;
+    gap: 6px;
+    margin: 12px -8px;
+    padding: 2px 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  .chip {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 64px;
+    height: 48px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--pch-radius-medium);
+    background: var(--mat-sys-surface-container-high);
+    color: var(--mat-sys-on-surface-variant);
+    cursor: pointer;
+    transition:
+      border-radius var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast),
+      background-color var(--pch-spring-effects-fast-duration) linear,
+      color var(--pch-spring-effects-fast-duration) linear,
+      transform var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast);
+
+    &:hover {
+      background: color-mix(
+        in srgb,
+        var(--mat-sys-on-surface) 8%,
+        var(--mat-sys-surface-container-high)
+      );
+    }
+
+    &:active {
+      transform: scale(0.94);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: 2px;
+    }
+
+    &.selected {
+      border-radius: 24px;
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+    }
+
+    &.new {
+      animation: pop var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast) both;
+    }
+
+    // Picked up: lifted, on the fast spatial spring.
+    &.cdk-drag-preview {
+      box-shadow: var(--pch-shadow-3);
+      background: var(--mat-sys-surface-container-highest);
+      color: var(--mat-sys-on-surface);
+    }
+
+    // Where it'll land.
+    &.cdk-drag-placeholder {
+      outline: 2px dashed var(--mat-sys-outline-variant);
+      outline-offset: -2px;
+      background: transparent;
+
+      > * {
+        visibility: hidden;
+      }
+    }
+  }
+
+  .chips.cdk-drop-list-dragging .chip:not(.cdk-drag-placeholder),
+  .chip.cdk-drag-animating {
+    transition: transform var(--pch-spring-spatial-fast-duration) var(--pch-spring-spatial-fast);
+  }
+
+  .chip-number {
+    line-height: 20px;
+  }
+
+  .chip-summary {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    opacity: 0.8;
+  }
+
+  @keyframes pop {
+    from {
+      transform: scale(0.5);
+      opacity: 0;
+    }
+  }
+}

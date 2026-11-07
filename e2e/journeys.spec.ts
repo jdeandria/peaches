@@ -29,43 +29,27 @@ test('core journey: plan against your opponent, launch a workout, see it score',
   await page.getByRole('radio', { name: 'Next week' }).click();
   await expect(page.getByText(/^Plan [\d.]+ more to match Cho$/)).toBeVisible();
 
-  // Plan a 5 km run on Tuesday: no clock, just targets.
-  await page.getByRole('link', { name: 'Plan a workout on Tue, Oct 20' }).click();
-  // On the day it was added to, named in place.
-  await expect(page.getByText('Tuesday, October 20')).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Workout name' })).toBeVisible();
-  await page.getByRole('button', { name: 'Add exercise' }).click();
+  // Plan a run on Tuesday, right on the Plan: pick it, no numbers asked.
+  await page.getByRole('button', { name: 'Plan a workout on Tue, Oct 20' }).click();
   const picker = page.getByRole('dialog');
   await picker.getByRole('searchbox').fill('run');
   await picker
     .getByRole('button', { name: /^Run\b/ })
     .first()
     .click();
-  // Sets are set out one at a time on dials: swipe one, or tap it to type.
-  const sheet = page.getByRole('dialog');
-  await sheet.getByRole('slider', { name: 'Distance in km' }).click();
-  await sheet.getByRole('textbox', { name: 'Distance in km' }).fill('5');
-  await page.keyboard.press('Enter');
-  await sheet.getByRole('slider', { name: 'Time in minutes' }).click();
-  await sheet.getByRole('textbox', { name: 'Time in minutes' }).fill('25');
-  await page.keyboard.press('Enter');
-  await sheet.getByRole('button', { name: 'Save' }).click();
-  await expect(sheet).toBeHidden();
-  await expect(page.getByText('1 set · 5 km · 25:00')).toBeVisible();
-  await expect(page.getByText(/pts in Lunch Break Lifters/)).toBeVisible();
-  await page.getByRole('button', { name: 'Add to plan' }).click();
+  await expect(picker).toBeHidden();
   await expect(page.getByText('Oct 19 – 25 · 1 workout planned')).toBeVisible();
+  await expect(page.getByRole('slider')).toHaveCount(0);
 
-  // This week: launch Wednesday's run straight into the sets.
+  // This week: start Wednesday's run from its row, straight into the sets.
   await page.getByRole('radio', { name: 'This week' }).click();
-  await page.getByRole('button', { name: 'Start Run' }).click();
+  await page.getByRole('button', { name: 'Start workout: Run' }).click();
   await expect(page.getByRole('heading', { name: 'Run' })).toBeVisible();
   await page.getByRole('button', { name: 'Done: set 1 of Run' }).click();
   await expect(page.getByRole('heading', { name: 'Workout complete' })).toBeVisible();
   await page.getByRole('button', { name: /^Finish/ }).click();
   await expect(page.getByText('Workout logged. Nice work.')).toBeVisible();
-  await expect(page.getByText(/pts in Weekend Warriors/)).toBeVisible();
-  await nav(page, 'Plan').click();
+  // Back on the Plan, the day shows it done.
   await expect(page.getByText('Oct 12 – 18 · 2 of 4 done')).toBeVisible();
 
   // It counts in this week's matchup, line by line, plans included.
@@ -92,16 +76,13 @@ test('make up an exercise, add it for today and start it; crate-mates see it cam
   page,
 }) => {
   await openApp(page);
-  await page.getByRole('link', { name: 'Plan a workout on Mon, Oct 12' }).click();
-  await page.getByRole('button', { name: 'Add exercise' }).click();
+  await page.getByRole('button', { name: 'Plan a workout on Mon, Oct 12' }).click();
   const picker = page.getByRole('dialog');
   await picker.getByRole('searchbox').fill('Rucking');
   await picker.getByRole('button', { name: /Create “Rucking”/ }).click();
   await picker.getByRole('button', { name: /Reps with weight/ }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByText('Rucking')).toBeVisible();
-  // Today's workout can start straight from the planner.
-  await page.getByRole('button', { name: 'Add and start' }).click();
+  // On today's plan, open, with a play button to start it.
+  await page.getByRole('button', { name: 'Start Rucking' }).click();
   for (let set = 1; set <= 3; set++) {
     await page.getByRole('button', { name: `Done: set ${set} of Rucking` }).click();
     if (set < 3) await page.getByRole('button', { name: 'Skip rest' }).click();
@@ -110,7 +91,6 @@ test('make up an exercise, add it for today and start it; crate-mates see it cam
   await expect(page.getByText('Workout logged. Nice work.')).toBeVisible();
 
   // It's on today's plan, done.
-  await nav(page, 'Plan').click();
   await expect(page.getByText('Oct 12 – 18 · 2 of 5 done')).toBeVisible();
 
   await nav(page, 'Crates').click();
@@ -129,27 +109,24 @@ test('every workout starts from the plan', async ({ page }) => {
 
 test('plan a routine, launch it and tick it off, resting between sets', async ({ page }) => {
   await openApp(page);
-  await page.getByRole('link', { name: 'Plan a workout on Tue, Oct 13' }).click();
-  // Routines are in the exercise picker: one tap fills the workout from one.
-  await page.getByRole('button', { name: 'Add exercise' }).click();
+  await page.getByRole('button', { name: 'Plan a workout on Tue, Oct 13' }).click();
+  // One tap fills the day's workout from the routine.
   await page
     .getByRole('dialog')
     .getByRole('button', { name: /^Swing day/ })
     .click();
-  await expect(page.getByText('6 sets')).toBeVisible();
-  await page.getByRole('button', { name: 'Add to plan' }).click();
-  await page.getByRole('button', { name: 'Start Swing day' }).click();
+  await expect(page.getByText('2 exercises · 6 sets')).toBeVisible();
+  await page.getByRole('button', { name: 'Start Kettlebell Swing' }).click();
   await expect(page.getByText('Exercise 1 of 2 · Set 1 of 3')).toBeVisible();
   await page.getByRole('button', { name: /^Done: set 1/ }).click();
   await expect(page.getByRole('timer')).toBeVisible();
   await page.getByRole('button', { name: 'Skip rest' }).click();
   await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
-  // The plan shows how far along it is; Continue goes straight back into the sets.
+  // The Plan shows how far along it is; the row's play carries on where it left off.
   await page.getByRole('button', { name: 'Back to plan' }).click();
-  await expect(page.getByText('1 of 6 sets done')).toBeVisible();
-  await nav(page, 'Plan').click();
   await expect(page.getByText('In progress · 1 of 6 sets')).toBeVisible();
-  await page.getByRole('button', { name: 'Continue Swing day' }).click();
+  await expect(page.getByText('1/3')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue workout: Swing day' }).click();
   await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
 });
 
@@ -158,12 +135,13 @@ test('repeat this week as next week’s plan, and take a workout off it', async 
   await page.getByRole('button', { name: 'Repeat this week' }).click();
   await expect(page.getByText('Planned 4 workouts from the week before.')).toBeVisible();
   await expect(page.getByText('Oct 19 – 25 · 4 workouts planned')).toBeVisible();
-  // On touch screens swiping does this; the button is there for keyboards.
+  // A workout's menu takes it off the plan.
+  await page.locator('pch-workout-card .toggle').first().click();
   await page
-    .getByRole('button', { name: /off the plan$/ })
+    .getByRole('button', { name: /^More for/ })
     .first()
-    .focus();
-  await page.keyboard.press('Enter');
+    .click();
+  await page.getByRole('menuitem', { name: 'Take off the plan' }).click();
   await expect(page.getByText('Oct 19 – 25 · 3 workouts planned')).toBeVisible();
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect(page.getByText('Oct 19 – 25 · 4 workouts planned')).toBeVisible();
@@ -254,6 +232,14 @@ test('joining with a bad invite code shows an error', async ({ page }) => {
   await expect(page.getByText('No Crate matches that invite code.')).toBeVisible();
 });
 
+test('signs out from You → Settings, and back in', async ({ page }) => {
+  await openApp(page, '/you?view=settings');
+  await page.getByRole('button', { name: /Sign out/ }).click();
+  await expect(page).toHaveURL(/\/sign-in/);
+  await page.getByRole('button', { name: 'Continue with Google' }).click();
+  await expect(page.getByRole('heading', { name: 'Plan', level: 1 })).toBeVisible();
+});
+
 test('signed-out demo signs in from the sign-in page', async ({ page }) => {
   await openApp(page, '/?demo=signed-out');
   await expect(page).toHaveURL(/\/sign-in/);
@@ -306,7 +292,6 @@ test('every icon renders as a glyph from the subset font', async ({ page }) => {
   const pages = [
     '/',
     '/?week=next',
-    '/plan/2026-10-12/new',
     '/log',
     '/you',
     '/you?view=history',
@@ -318,6 +303,15 @@ test('every icon renders as a glyph from the subset font', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'How the score adds up' })).toBeVisible();
   const check = async (where: string) => {
     await page.evaluate(() => document.fonts.ready);
+    // A chevron turning mid-transition measures wider than it is.
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity)
+          .map((a) => a.finished.catch(() => undefined)),
+      ),
+    );
     const wide = await page.evaluate(() =>
       [...document.querySelectorAll('.material-symbols-rounded')]
         .filter((el) => (el as HTMLElement).offsetParent !== null)
@@ -346,4 +340,9 @@ test('every icon renders as a glyph from the subset font', async ({ page }) => {
     await expect(page.locator('h1').first()).toBeVisible();
     await check(path);
   }
+  // An open workout: play buttons and its menu.
+  await page.goto('/');
+  await page.locator('pch-workout-card .toggle').last().click();
+  await expect(page.getByRole('button', { name: /^Start / }).first()).toBeVisible();
+  await check('an open workout');
 });

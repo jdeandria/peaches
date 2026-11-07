@@ -1,5 +1,7 @@
 @use 'set-screen';
 
+@include set-screen.chip-strip;
+
 // Full screen, over the navigation: the workout is the only thing on.
 :host {
   position: fixed;
@@ -273,4 +275,26 @@ button .material-symbols-rounded {
     transform: scale(0.3) rotate(-20deg);
     opacity: 0;
   }
+}
+
+// The exercise strip: names can be long, so a chip stops at a sensible width.
+.chips {
+  margin: -4px -8px 12px;
+}
+.chip {
+  max-width: 152px;
+
+  &.complete {
+    opacity: 0.6;
+  }
+}
+.chip-name {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chip-summary .material-symbols-rounded {
+  font-size: 16px;
+  vertical-align: -3px;
 }

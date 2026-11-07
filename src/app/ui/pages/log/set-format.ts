@@ -48,6 +48,17 @@ const parseMinutes = (text: string) => {
   return m ? round2(Number(m[1]) + Number(m[2]) / 60) : parseNumber(text);
 };
 
+/** One number of a planned set, set with − and + (see `Stepper`). */
+export interface StepperSpec {
+  readonly key: keyof SetDraft;
+  readonly label: string;
+  readonly value: number;
+  readonly step: number;
+  readonly min: number;
+  readonly max: number;
+  readonly format: (v: number) => string;
+}
+
 /**
  * How one exercise's sets are shown, dialled and stored: reps (with a
  * weight for exercises that take a load, in the Peach's units, stored as
@@ -140,6 +151,73 @@ export class SetFormat {
   describe(s: SetDraft): string {
     const unit = this.weighted && s.load > 0 ? ` ${this.weightUnit}` : '';
     return `${this.summary(s)}${unit}`;
+  }
+
+  /**
+   * A planned set's numbers as steppers, for planning: reps and weight,
+   * a hold's time, or distance and time. Coarser steps than the dials:
+   * planning is ballpark, the dials get it exact when it's done.
+   */
+  steppers(s: SetDraft): StepperSpec[] {
+    switch (this.track) {
+      case 'distance':
+        return [
+          {
+            key: 'distance',
+            label: 'Distance',
+            value: s.distance,
+            step: this.inMetres ? 100 : 0.5,
+            min: 0,
+            max: this.inMetres ? 99999 : 999,
+            format: (v) => (v > 0 ? `${this.formatDistance(v)} ${this.distanceUnit}` : '–'),
+          },
+          {
+            key: 'minutes',
+            label: 'Time',
+            value: s.minutes,
+            step: 1,
+            min: 0,
+            max: 9999,
+            format: (v) => (v > 0 ? `${clockMinutes(v)} min` : '–'),
+          },
+        ];
+      case 'time':
+        return [
+          {
+            key: 'value',
+            label: 'Time',
+            value: s.value,
+            step: 5,
+            min: 5,
+            max: 10_000,
+            format: (v) => `${Math.floor(v / 60)}:${twoDigits(v % 60)}`,
+          },
+        ];
+      default: {
+        const reps: StepperSpec = {
+          key: 'value',
+          label: 'Reps',
+          value: s.value,
+          step: 1,
+          min: 1,
+          max: 999,
+          format: String,
+        };
+        if (!this.weighted) return [reps];
+        return [
+          reps,
+          {
+            key: 'load',
+            label: 'Weight',
+            value: s.load,
+            step: WeightUnits.step(this.units),
+            min: 0,
+            max: 9999,
+            format: (v) => (v > 0 ? `${this.formatWeight(v)} ${this.weightUnit}` : '–'),
+          },
+        ];
+      }
+    }
   }
 
   /** The dials for a set; `change` gets what a turn changed. */
