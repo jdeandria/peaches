@@ -149,7 +149,8 @@ Inputs: `variant: 'elevated' | 'filled' | 'outlined'` (default `elevated`),
 
 The full-screen loading/error splash used by the app root: a peach pulsing
 slowly in a warm glow, greyed-out peaches (`SPLASH_FLOATERS`) drifting behind
-it, and a small peach-tinted elevated card with the dedication. Projected
+it, and a small M3 elevated name card (tonal heart icon, supporting line,
+the name as headline) with the dedication. Projected
 content (status text, an error and its retry) goes under the card. The static
 `#splash` in `src/index.html` mirrors it so the hand-off is seamless; both run
 on the page clock so the pulse carries on rather than restarting. Animations

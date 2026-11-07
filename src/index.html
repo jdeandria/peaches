@@ -28,8 +28,11 @@
        */
       #splash {
         --bg: #f9f9f9;
-        --card: #ffdbd0;
-        --on-card: #7c2d13;
+        --card: #ffffff;
+        --on-card: #1b1b1b;
+        --on-card-variant: #474747;
+        --icon-bg: #ffdbd0;
+        --icon-fg: #7c2d13;
         --clock: 0ms;
         position: fixed;
         inset: 0;
@@ -51,8 +54,11 @@
       @media (prefers-color-scheme: dark) {
         #splash {
           --bg: #131313;
-          --card: #7c2d13;
-          --on-card: #ffdbd0;
+          --card: #2a2a2a;
+          --on-card: #e2e2e2;
+          --on-card-variant: #c6c6c6;
+          --icon-bg: #7c2d13;
+          --icon-fg: #ffdbd0;
           color: #c6c6c6;
         }
       }
@@ -143,22 +149,53 @@
       }
       #splash .note {
         box-sizing: border-box;
-        max-width: 260px;
+        display: grid;
+        grid-template-columns: 40px 1fr;
+        align-items: center;
+        gap: 16px;
+        inline-size: min(320px, 100%);
         margin: 0;
-        padding: 12px 20px;
+        padding: 16px 24px 16px 16px;
         border-radius: 16px;
+        text-align: start;
         background: var(--card);
-        color: var(--on-card);
         box-shadow:
           0 1px 2px rgb(0 0 0 / 0.18),
           0 1px 3px 1px rgb(0 0 0 / 0.1);
-        font-size: 14px;
-        font-weight: 500;
-        line-height: 20px;
-        letter-spacing: 0.1px;
-        text-wrap: balance;
         animation: splash-note-in 700ms cubic-bezier(0.05, 0.7, 0.1, 1) calc(300ms + var(--clock))
           both;
+      }
+      #splash .note-icon {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: var(--icon-bg);
+        color: var(--icon-fg);
+      }
+      #splash .note-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: currentColor;
+      }
+      #splash .note-text {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+      #splash .note-for {
+        font-size: 14px;
+        line-height: 20px;
+        letter-spacing: 0.25px;
+        color: var(--on-card-variant);
+        text-wrap: balance;
+      }
+      #splash .note-name {
+        font-size: 22px;
+        font-weight: 600;
+        line-height: 28px;
+        color: var(--on-card);
       }
       @keyframes splash-note-in {
         from {
@@ -386,8 +423,8 @@
         >
         <span
           style="
-            left: 74%;
-            top: 46%;
+            left: 80%;
+            top: 80%;
             font-size: 22px;
             opacity: 0.3;
             --blur: 0px;
@@ -404,7 +441,19 @@
         <span class="glow"></span>
         <span class="peach">🍑</span>
       </div>
-      <p class="note">For the gayest &amp; strongest boy Stevie</p>
+      <div class="note">
+        <span class="note-icon" aria-hidden="true">
+          <svg viewBox="0 -960 960 960">
+            <path
+              d="m480-120-58-52q-101-91-167-157T150-447.5Q111-500 95.5-544T80-634q0-94 63-157t157-63q52 0 99 22t81 62q34-40 81-62t99-22q94 0 157 63t63 157q0 46-15.5 90T810-447.5Q771-395 705-329T538-172l-58 52Z"
+            />
+          </svg>
+        </span>
+        <span class="note-text">
+          <span class="note-for">For the gayest &amp; strongest boy</span>
+          <span class="note-name">Stevie</span>
+        </span>
+      </div>
       <p id="splash-message">Loading Peaches…</p>
     </div>
     <script>

@@ -133,9 +133,8 @@ describe('Splash', () => {
     const f = TestBed.createComponent(Host);
     await f.whenStable();
     const el: HTMLElement = f.nativeElement;
-    expect(el.querySelector('pch-card')?.textContent?.trim()).toBe(
-      'For the gayest & strongest boy Stevie',
-    );
+    expect(el.querySelector('.note-for')?.textContent).toBe('For the gayest & strongest boy');
+    expect(el.querySelector('.note-name')?.textContent).toBe('Stevie');
     expect(el.querySelectorAll('.floater').length).toBe(SPLASH_FLOATERS.length);
     expect(el.querySelector('.field')?.getAttribute('aria-hidden')).toBe('true');
     expect(el.querySelector('.hero')?.getAttribute('aria-hidden')).toBe('true');

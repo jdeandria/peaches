@@ -222,7 +222,19 @@ export const SPLASH_FLOATERS: readonly SplashFloater[] = [
       <span class="glow"></span>
       <span class="peach">🍑</span>
     </div>
-    <pch-card class="note">For the gayest &amp; strongest boy Stevie</pch-card>
+    <pch-card class="note">
+      <span class="note-icon" aria-hidden="true">
+        <svg viewBox="0 -960 960 960">
+          <path
+            d="m480-120-58-52q-101-91-167-157T150-447.5Q111-500 95.5-544T80-634q0-94 63-157t157-63q52 0 99 22t81 62q34-40 81-62t99-22q94 0 157 63t63 157q0 46-15.5 90T810-447.5Q771-395 705-329T538-172l-58 52Z"
+          />
+        </svg>
+      </span>
+      <span class="note-text">
+        <span class="note-for">For the gayest &amp; strongest boy</span>
+        <span class="note-name">Stevie</span>
+      </span>
+    </pch-card>
     <ng-content />
   `,
   styles: `
@@ -329,17 +341,56 @@ export const SPLASH_FLOATERS: readonly SplashFloater[] = [
         opacity: 1;
       }
     }
+    /*
+     * The name card: an M3 elevated card laid out like a list item — a tonal
+     * icon container, a supporting line, and the name as the headline.
+     */
     .note {
-      --pch-card-padding: 12px 20px;
-      max-width: 260px;
-      font: var(--mat-sys-title-small);
-      letter-spacing: var(--mat-sys-title-small-tracking);
-      text-wrap: balance;
-      /* Tonal: the elevated card, tinted peach. */
-      background: var(--mat-sys-primary-container);
-      color: var(--mat-sys-on-primary-container);
+      --pch-card-padding: 16px 24px 16px 16px;
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      align-items: center;
+      gap: 16px;
+      inline-size: min(320px, 100%);
+      text-align: start;
       animation: note-in 700ms var(--pch-ease-emphasized-decelerate)
         calc(300ms + var(--pch-splash-clock)) both;
+    }
+    @media (prefers-color-scheme: dark) {
+      .note {
+        background: var(--mat-sys-surface-container-high);
+      }
+    }
+    .note-icon {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: var(--pch-radius-medium);
+      background: var(--mat-sys-primary-container);
+      color: var(--mat-sys-on-primary-container);
+    }
+    .note-icon svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+    .note-text {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+    .note-for {
+      font: var(--mat-sys-body-medium);
+      letter-spacing: var(--mat-sys-body-medium-tracking);
+      color: var(--mat-sys-on-surface-variant);
+      text-wrap: balance;
+    }
+    .note-name {
+      font: var(--mat-sys-title-large);
+      font-weight: 600;
+      letter-spacing: var(--mat-sys-title-large-tracking);
+      color: var(--mat-sys-on-surface);
     }
     @keyframes note-in {
       from {
