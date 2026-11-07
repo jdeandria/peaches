@@ -140,7 +140,9 @@ History | Gear | Settings** (kept in `?view=`; Gear is `equipment`).
   swipe left to delete with Undo.
 - **Gear**: where you train and what's there (Home, Gym, Travel presets),
   up to eight places. **Add** to add one, tap one to edit it.
-- **Settings**: units, install, sign out, version.
+- **Settings**: units; **Account**, with **Sign out** (back to the sign-in
+  screen; in the demo, Continue with Google signs back in); **App**:
+  install, version.
 
 ## Paths
 
@@ -157,3 +159,4 @@ History | Gear | Settings** (kept in `?view=`; Gear is `equipment`).
 - **Switch Crates**: Crates → tap the Crate's name.
 - **Invite someone**: Crates → Peaches → Code.
 - **Set up your equipment**: You → Gear → Add.
+- **Sign out**: You → Settings → Sign out.

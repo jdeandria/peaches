@@ -391,12 +391,6 @@ export class PersonalPage {
 
   // ── Settings ─────────────────────────────────────────────────────────────
 
-  protected readonly canSignOut = computed(() => {
-    // Re-evaluated with the auth state; the provider set depends on it.
-    this.state.authUser();
-    return this.state.auth.availableProviders.size > 0;
-  });
-
   async saveUnits(peach: Peach, units: UnitSystem | null): Promise<void> {
     if (units === null || units === peach.units) return;
     await this.state.run((app) => app.peaches.save({ ...peach, units }));
@@ -406,8 +400,9 @@ export class PersonalPage {
     void this.pwa.install();
   }
 
+  /** Signs out; the app goes to the sign-in screen. */
   protected signOut(): void {
-    void this.state.auth.signOut();
+    void this.state.run(() => this.state.auth.signOut());
   }
 
   /** "This week", "Last week" or "Oct 5 – 11". */

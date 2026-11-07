@@ -232,6 +232,14 @@ test('joining with a bad invite code shows an error', async ({ page }) => {
   await expect(page.getByText('No Crate matches that invite code.')).toBeVisible();
 });
 
+test('signs out from You → Settings, and back in', async ({ page }) => {
+  await openApp(page, '/you?view=settings');
+  await page.getByRole('button', { name: /Sign out/ }).click();
+  await expect(page).toHaveURL(/\/sign-in/);
+  await page.getByRole('button', { name: 'Continue with Google' }).click();
+  await expect(page.getByRole('heading', { name: 'Plan', level: 1 })).toBeVisible();
+});
+
 test('signed-out demo signs in from the sign-in page', async ({ page }) => {
   await openApp(page, '/?demo=signed-out');
   await expect(page).toHaveURL(/\/sign-in/);
