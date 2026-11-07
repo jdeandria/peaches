@@ -6,13 +6,9 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { MatchupBoard } from '../../../application/season-service';
 import { addDays, LocalDate, startOfWeek } from '../../../domain/core/local-date';
 import { CategoryWeights, DEFAULT_WEIGHTS, weightsToJson } from '../../../domain/models/scoring';
+import { daysOf, plannedSetCount, WeekPlan } from '../../../domain/models/week-plan';
 import {
-  daysOf,
-  PlannedWorkout,
-  plannedSetCount,
-  WeekPlan,
-} from '../../../domain/models/week-plan';
-import {
+  doneCount,
   hasStarted,
   isSubmitted,
   planProgress,
@@ -21,15 +17,15 @@ import {
 import { AppState } from '../../../state/app-state';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
-import { ShapedAvatar } from '../../expressive/shaped-avatar';
 import { Fmt } from '../../format';
 import { ListCard } from '../../layout/list-card';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
-import { SwipeRow } from '../../layout/swipe-row';
 import { TwoPane } from '../../layout/two-pane';
 import { MatchupCard } from '../matchup/matchup-card';
+import { PlanActions } from './plan-actions';
+import { WorkoutCard, WorkoutView } from './workout-card';
 
 export type PlanWeek = 'this' | 'next';
 
@@ -38,30 +34,18 @@ const WEEKS: readonly ButtonGroupOption<PlanWeek>[] = [
   { value: 'next', label: 'Next week' },
 ];
 
-const STATE_ICONS = { planned: 'fitness_center', going: 'directions_run', done: 'check' } as const;
-
-interface WorkoutRow {
-  readonly workout: PlannedWorkout;
-  readonly state: 'planned' | 'going' | 'done';
-  readonly icon: string;
-  readonly subtitle: string;
-  readonly points: string | null;
-  readonly canLaunch: boolean;
-  /** Where tapping it goes: a done workout's summary, else the planner. */
-  readonly link: readonly unknown[];
-}
-
 interface DayView {
   readonly date: LocalDate;
   readonly label: string;
   readonly today: boolean;
   readonly past: boolean;
-  readonly workouts: readonly WorkoutRow[];
+  readonly workouts: readonly WorkoutView[];
 }
 
 /**
- * The home tab: plan the week, then work through it. Workouts go on days
- * (each built in the planner) and launch straight into the log. In a
+ * The home tab, and the one screen for planning the week and doing it.
+ * Workouts go on days (+ picks an exercise, a routine or a template) and
+ * open to their exercises, each of which starts the workout there. In a
  * Crate, each matchup shows what the plans are worth: before the week
  * against the opponent's plan as it changes, so there's a reason to plan
  * big; during it, against what was committed, since falling short costs.
@@ -79,12 +63,12 @@ interface DayView {
     LoadingIndicator,
     Page,
     Section,
-    ShapedAvatar,
     Stagger,
-    SwipeRow,
     TwoPane,
     MatchupCard,
+    WorkoutCard,
   ],
+  providers: [PlanActions],
   templateUrl: './plan.page.html',
   styleUrl: './plan.page.scss',
 })
@@ -93,6 +77,7 @@ export class PlanPage {
   readonly week = input<string>();
 
   protected readonly state = inject(AppState);
+  protected readonly actions = inject(PlanActions);
   private readonly router = inject(Router);
   protected readonly fmt = Fmt;
   protected readonly weeks = WEEKS;
@@ -209,6 +194,7 @@ export class PlanPage {
     const weights = this.rowWeights();
     const logs = this.logsById();
     const scoring = this.state.app.scoring;
+    const units = this.state.units();
     return daysOf(plan.weekStart).map((date) => ({
       date,
       label: Fmt.day(date),
@@ -216,8 +202,8 @@ export class PlanPage {
       past: date < today,
       workouts: plan.workouts
         .filter((w) => w.day === date)
-        .map((workout): WorkoutRow => {
-          const log = workout.logId ? logs.get(workout.logId) : undefined;
+        .map((workout): WorkoutView => {
+          const log = workout.logId ? (logs.get(workout.logId) ?? null) : null;
           const state = !log ? 'planned' : isSubmitted(log) ? 'done' : 'going';
           const sets = plannedSetCount(workout);
           const where = this.locationName(workout.locationId);
@@ -236,14 +222,25 @@ export class PlanPage {
               : state === 'done'
                 ? scoring.scoreLog(log!, weights).total
                 : scoring.scorePlan(workout.exercises, weights).total;
+          // What's planned, or under way (the session's own plan), or what was done.
+          const entries =
+            state === 'planned' ? workout.exercises : state === 'going' ? log!.plan : log!.entries;
           return {
             workout,
             state,
-            icon: STATE_ICONS[state],
+            log,
             subtitle,
             points: points === null ? null : `${state === 'done' ? '' : '~'}${Fmt.points(points)}`,
+            exercises: entries.map((entry) => {
+              const done = state === 'going' ? doneCount(log!, entry.exerciseId) : 0;
+              return {
+                entry,
+                summary: Fmt.entrySummary(entry, units),
+                done,
+                complete: state === 'done' || (state === 'going' && done >= entry.sets.length),
+              };
+            }),
             canLaunch: thisWeek && state !== 'done',
-            link: state === 'done' ? ['/log', log!.id] : ['/plan', plan.weekStart, workout.id],
           };
         }),
     }));
@@ -282,32 +279,24 @@ export class PlanPage {
     });
   }
 
-  /** Starts a planned workout (or carries on with it) in the log, set by set. */
-  protected async launch(w: PlannedWorkout): Promise<void> {
-    const me = this.me();
-    if (!me || this.busy()) return;
-    this.busy.set(true);
-    const log = await this.state.run((app) =>
-      app.planService.launch(me, this.monday(), w.id, this.state.now()),
-    );
-    this.busy.set(false);
-    if (log) await this.router.navigate(['/log'], { queryParams: { mode: 'log' } });
+  /** Which workouts are open: as toggled, else those under way and today's still to do. */
+  private readonly toggled = signal<ReadonlyMap<string, boolean>>(new Map());
+
+  protected isOpen(v: WorkoutView): boolean {
+    const set = this.toggled().get(v.workout.id);
+    if (set !== undefined) return set;
+    return v.state === 'going' || (v.state === 'planned' && v.workout.day === this.state.today());
   }
 
-  /** Takes a workout out of the plan at once, with Undo. */
-  protected async remove(w: PlannedWorkout): Promise<void> {
-    const me = this.me();
-    if (!me) return;
-    const monday = this.monday();
-    const removed = await this.state.run((app) =>
-      app.planService.removeWorkout(me, monday, w.id, this.state.now()),
-    );
-    if (!removed) return;
-    this.state.toast(`Took “${w.name}” off ${Fmt.day(w.day)}.`, () => {
-      void this.state.run((app) =>
-        app.planService.restoreWorkout(me, monday, removed, this.state.now()),
-      );
-    });
+  protected toggle(v: WorkoutView): void {
+    const open = !this.isOpen(v);
+    this.toggled.update((m) => new Map(m).set(v.workout.id, open));
+  }
+
+  /** Plans a workout on a day from the picker, and opens it. */
+  protected async add(day: LocalDate): Promise<void> {
+    const id = await this.actions.addWorkout(this.monday(), day);
+    if (id) this.toggled.update((m) => new Map(m).set(id, true));
   }
 
   /** Plans last week's workouts again, on the same days. */

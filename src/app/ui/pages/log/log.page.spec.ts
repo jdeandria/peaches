@@ -81,16 +81,6 @@ describe('LogPage', () => {
   };
   const key = (target: HTMLElement, name: string) =>
     target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
-  /** Types a value into one of the set logger's dials (Enter opens its entry). */
-  async function dial(f: ComponentFixture<unknown>, label: string, value: string) {
-    key(overlay().querySelector<HTMLElement>(`[role=slider][aria-label="${label}"]`)!, 'Enter');
-    await stable(f);
-    const input = overlay().querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
-    type(input, value);
-    key(input, 'Enter');
-    await stable(f);
-  }
-
   const pick = async (f: ComponentFixture<unknown>, el: HTMLElement, search: string) => {
     button(el, 'Add exercise')!.click();
     await stable(f);
@@ -107,44 +97,17 @@ describe('LogPage', () => {
       b.getAttribute('aria-label')?.startsWith('Done: set'),
     );
 
-  it('plans a run, starts the clock with the workout, logs it set by set and finishes', async () => {
-    const { f, el } = await render();
-    expect(text(el.querySelector('h1'))).toBe('Your workout');
-    expect(text(el.querySelector('.subtitle'))).toBe('Counts in 2 Crates');
-    // No clock until there's a workout going; an empty one starts with Add exercise.
-    expect(el.querySelector('.clock')).toBeNull();
-    expect(el.querySelectorAll('pch-section')).toHaveLength(0);
-    expect(el.querySelector('button.add-first')).not.toBeNull();
-    expect(button(el, 'Start workout')).toBeUndefined();
-    // Planning doesn't count: the clock waits.
+  it('does a launched run set by set, then finishes back on the Plan', async () => {
+    const run = loggableFromCatalog(backend.container.catalog.require('bw-run'));
+    const { f, el } = await render({
+      plan: [entryOf(run, { sets: [setLog({ meters: 5000, seconds: 1500 })] })],
+    });
     const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    expect(draft.timerStartedAt).toBeNull();
-
-    // Plan "Run" from the catalog: five kilometres in 25 minutes.
-    await pick(f, el, 'run');
-    rows()
-      .find((b) => text(b.querySelector('.pch-body-large')) === 'Run')!
-      .click();
-    await stable(f);
-    // Planning sets has no RPE: that's for after.
-    expect(overlay().querySelector('[role=radio]')).toBeNull();
-    await dial(f, 'Distance in km', '5');
-    await dial(f, 'Time in minutes', '25');
-    button(overlay(), 'Save')!.click();
-    await stable(f);
-
-    expect(text(el.querySelector('.item'))).toContain('Run');
-    expect(text(el.querySelector('.item'))).toContain('1 set · 5 km · 25:00');
-    expect(text(el.querySelector('.done-count'))).toBe('0/1');
-    // Nothing is done yet, so nothing adds up yet.
-    expect(el.querySelector('.total')).toBeNull();
-
-    button(el, 'Start workout')!.click();
-    await stable(f);
+    // A workout under way is done in the runner; there's no list of it here (the Plan has that).
+    expect(el.querySelector('pch-session-runner')).not.toBeNull();
+    expect(button(el, 'Add exercise')).toBeUndefined();
+    // Opening it started the clock.
     expect((await backend.container.logs.getById(draft.id))!.timerStartedAt).not.toBeNull();
-    expect(TestBed.inject(Router).url).toContain('mode=log');
-    f.componentRef.setInput('mode', 'log');
-    await stable(f);
 
     // Log mode: one set, its target on the dials, and Done.
     expect(el.querySelector('pch-page')).toBeNull();
@@ -171,7 +134,8 @@ describe('LogPage', () => {
         sets: [{ reps: null, loadKg: null, meters: 5000, seconds: 1500 }],
       }),
     ]);
-    expect(TestBed.inject(Router).url).toBe(`/log/${draft.id}`);
+    // Back to the Plan, where the day shows it done.
+    expect(TestBed.inject(Router).url).toBe('/');
   });
 
   it('log mode rests between sets, and skips and takes back sets', async () => {
@@ -263,42 +227,6 @@ describe('LogPage', () => {
     expect(text(el)).toContain('2 sets in');
   });
 
-  it('log mode takes the exercises in another order', async () => {
-    const { f, el } = await render();
-    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    const exercise = (id: string) => loggableFromCatalog(backend.container.catalog.require(id));
-    const squat = exercise('bb-back-squat');
-    await backend.container.loggingService.planExercise(
-      draft.id,
-      entryOf(squat, { sets: [1, 2].map(() => setLog({ reps: 5, loadKg: 100 })) }),
-    );
-    await backend.container.loggingService.planExercise(
-      draft.id,
-      entryOf(exercise('bw-forearm-plank'), { sets: [setLog({ seconds: 60 })] }),
-    );
-    f.componentRef.setInput('mode', 'log');
-    await stable(f);
-    expect(text(el.querySelector('h1'))).toBe(squat.name);
-
-    // The runner has no order control of its own: the order is changed in the workout's list.
-    expect(button(el, 'Exercise order')).toBeUndefined();
-    // Back to the workout's list (the router drops ?mode=log).
-    f.componentRef.setInput('mode', undefined);
-    await stable(f);
-    const rows = () => Array.from(el.querySelectorAll<HTMLElement>('pch-swipe-row'));
-    expect(rows().map((r) => text(r.querySelector('.text .pch-title-medium')))).toEqual([
-      squat.name,
-      'Forearm Plank',
-    ]);
-    rows()[0].dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true }),
-    );
-    await stable(f);
-    // The plank is next now.
-    const log = (await backend.container.logs.getById(draft.id))!;
-    expect(log.plan.map((e) => e.exerciseName)).toEqual(['Forearm Plank', squat.name]);
-  });
-
   it('finishing early from log mode asks first, and logs what was done', async () => {
     const { f, el } = await render();
     const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
@@ -332,7 +260,8 @@ describe('LogPage', () => {
   });
 
   it('leads with recent exercises and crate-mates’ ones, tagged with who', async () => {
-    const { f, el } = await render();
+    const [latest] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    const { f, el } = await render({ logId: latest.id });
     button(el, 'Add exercise')!.click();
     await stable(f);
     const groups = Array.from(overlay().querySelectorAll('h3.group')).map(text);
@@ -342,7 +271,8 @@ describe('LogPage', () => {
   });
 
   it('the picker: Enter takes the top match, Escape clears, arrows move through results', async () => {
-    const { f, el } = await render();
+    const [latest] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    const { f, el } = await render({ logId: latest.id });
     await pick(f, el, 'pushups');
     const search = overlay().querySelector<HTMLInputElement>('input[type=search]')!;
     expect(text(rows()[0].querySelector('.pch-body-large'))).toBe('Push Up');
@@ -364,68 +294,13 @@ describe('LogPage', () => {
     await stable(f);
     search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await stable(f);
-    // Straight on to planning its sets.
+    // Straight on to its sets.
     expect(text(overlay().querySelector('h2'))).toBe('Bodyweight Squat');
   });
 
-  it('swiping a planned exercise left removes it, and Undo puts it back in place', async () => {
-    const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
-    const [routine] = await backend.container.routines.forPeach(DEMO_PEACH_ID);
-    const { f, el } = await render({ plan: routine.exercises });
-    const names = () => Array.from(el.querySelectorAll('.item .pch-title-medium')).map(text);
-    const before = names();
-    const content = el.querySelectorAll<HTMLElement>('pch-swipe-row .content')[1];
-    let t = 0;
-    const fire = (type: string, x: number) => {
-      const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: 10 });
-      Object.defineProperties(e, {
-        pointerId: { value: 1 },
-        pointerType: { value: 'touch' },
-        timeStamp: { value: (t += 16) },
-      });
-      content.dispatchEvent(e);
-    };
-    fire('pointerdown', 300);
-    for (let x = 280; x >= 100; x -= 20) fire('pointermove', x);
-    fire('pointerup', 100);
-    await settle(400);
-    await stable(f);
-    expect(names()).toEqual(before.filter((_, i) => i !== 1));
-    toast.mock.calls.find(([m]) => m === `Removed ${before[1]}.`)![1]!();
-    await stable(f);
-    expect(names()).toEqual(before);
-  });
-
-  it('planned exercises move up and down the list, saved as they go', async () => {
-    const [routine] = await backend.container.routines.forPeach(DEMO_PEACH_ID);
-    const { f, el } = await render({ plan: routine.exercises });
-    const names = () => Array.from(el.querySelectorAll('.item .pch-title-medium')).map(text);
-    const before = names().map((n) => n ?? '');
-    expect(before.length).toBeGreaterThan(1);
-    const edit = (name: string) => button(el, `Edit sets: ${name}`)!;
-    const alt = (target: HTMLElement, name: string) =>
-      target.dispatchEvent(
-        new KeyboardEvent('keydown', { key: name, altKey: true, bubbles: true, cancelable: true }),
-      );
-
-    edit(before[0]).focus();
-    alt(edit(before[0]), 'ArrowDown');
-    await stable(f);
-    const moved = [before[1], before[0], ...before.slice(2)];
-    expect(names()).toEqual(moved);
-    // Focus goes with it, to move it again.
-    expect(document.activeElement).toBe(edit(before[0]));
-    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    expect(draft.plan.map((e) => e.exerciseName)).toEqual(moved);
-
-    // Nowhere further up for the first.
-    alt(edit(before[1]), 'ArrowUp');
-    await stable(f);
-    expect(names()).toEqual(moved);
-  });
-
   it('makes up an exercise on the spot', async () => {
-    const { f, el } = await render();
+    const [latest] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
+    const { f, el } = await render({ logId: latest.id });
     await pick(f, el, 'Rucking');
     rows()
       .find((b) => text(b)?.includes('Create “Rucking”'))!
@@ -437,13 +312,10 @@ describe('LogPage', () => {
     await stable(f);
     button(overlay(), 'Save')!.click();
     await stable(f);
-    const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
-    expect(draft.plan[0]).toMatchObject({
-      exerciseName: 'Rucking',
-      track: 'reps',
-      takesLoad: true,
-    });
-    expect(draft.plan[0].exerciseId.startsWith('custom-')).toBe(true);
+    const log = (await backend.container.logs.getById(latest.id))!;
+    const rucking = log.entries.find((e) => e.exerciseName === 'Rucking')!;
+    expect(rucking).toMatchObject({ track: 'reps', takesLoad: true });
+    expect(rucking.exerciseId.startsWith('custom-')).toBe(true);
   });
 
   it('a finished workout stays editable, time included', async () => {

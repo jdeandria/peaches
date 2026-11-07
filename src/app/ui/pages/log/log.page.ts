@@ -5,12 +5,9 @@ import {
   DestroyRef,
   effect,
   inject,
-  Injector,
   input,
-  linkedSignal,
   signal,
 } from '@angular/core';
-import { CdkDrag, CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { MatButton, MatIconButton } from '@angular/material/button';
@@ -23,14 +20,12 @@ import { localDateOfLocal } from '../../../domain/core/local-date';
 import { LoggableExercise } from '../../../domain/exercises/loggable';
 import { CategoryWeights, SCORING_CATEGORIES } from '../../../domain/models/scoring';
 import {
-  doneCount,
   elapsedSeconds,
   entryFor,
   ExerciseLogEntry,
   hasStarted,
   isSubmitted,
   loggableFromEntry,
-  nextPlannedSet,
   plannedFor,
   planProgress,
   WorkoutLog,
@@ -46,7 +41,7 @@ import { ListCard } from '../../layout/list-card';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
-import { HOLD_TO_DRAG, keepFocus, SwipeRow } from '../../layout/swipe-row';
+import { SwipeRow } from '../../layout/swipe-row';
 import { DisputeCard } from '../workout/dispute-card';
 import { StatTile, StatTiles } from '../../layout/stat-tiles';
 import { crateExercisesFor, openExercisePicker, recentEntries } from './exercise-picker-sheet';
@@ -62,28 +57,19 @@ interface EntryView {
   readonly summary: string;
 }
 
-interface PlannedView extends EntryView {
-  readonly done: number;
-  readonly complete: boolean;
-}
-
 /**
- * The workout launched from the plan, in two modes. Its exercises, with
- * how far along each is (add one, change targets, take one out, drag
- * them into another order); and Log
- * (`?mode=log`): a full-screen runner that takes you through the sets one
- * at a time; the clock starts then and runs only while the page is open.
- * Finish shares it with your Crates. With nothing launched it points back
- * to the plan: every workout starts there. With an id it shows one of your
- * logs, which you can keep editing (exercises, when it happened, how long
- * it took).
+ * The workout launched from the plan, done in a full-screen runner that
+ * takes you through the sets one at a time; the clock starts then and
+ * runs only while the page is open. Back to plan returns to the Plan,
+ * which shows how far along it is; Finish shares it with your Crates and
+ * goes back there too. With nothing launched it says so: every workout
+ * starts from the plan. With an id it shows one of your logs, which you
+ * can keep editing (exercises, when it happened, how long it took).
  */
 @Component({
   selector: 'pch-log-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    CdkDrag,
-    CdkDropList,
     DisputeCard,
     EmptyState,
     ListCard,
@@ -112,10 +98,7 @@ export class LogPage {
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
-  private readonly injector = inject(Injector);
-  protected readonly holdToDrag = HOLD_TO_DRAG;
   /** Changes to the plan's order, saved one at a time in the order they were made. */
-  private saving: Promise<unknown> = Promise.resolve();
 
   protected readonly busy = signal(false);
 
@@ -148,9 +131,8 @@ export class LogPage {
     const log = this.log();
     return log !== null && hasStarted(log);
   });
-  protected readonly running = computed(() => this.draft() && this.mode() === 'log');
-  /** Whether this page put the runner on the history stack (so Back closes it). */
-  private pushedRunner = false;
+  /** A workout under way is done in the runner; the Plan shows it otherwise. */
+  protected readonly running = computed(() => this.draft());
 
   /** Ticks every second while the clock runs. */
   private readonly tick = signal(this.state.now());
@@ -161,55 +143,12 @@ export class LogPage {
 
   protected readonly title = computed(() => {
     const log = this.log();
-    if (log && isSubmitted(log)) return Fmt.day(localDateOfLocal(log.startedAt));
-    return this.started() ? 'Workout in progress' : 'Your workout';
-  });
-
-  protected readonly clockHint = computed(() => {
-    if (!this.draft()) return 'Session time';
-    return this.started() ? 'Runs while this screen is open' : 'Starts when you start';
-  });
-
-  /** The plan's order: as last dragged, until the saved log catches up. */
-  private readonly order = linkedSignal(() => this.log()?.plan.map((e) => e.exerciseId) ?? []);
-
-  /** The session's plan, exercise by exercise, with how much is done. */
-  protected readonly planned = computed<PlannedView[]>(() => {
-    const log = this.log();
-    if (!log) return [];
-    const units = this.state.units();
-    const order = this.order();
-    const at = (id: string) => {
-      const i = order.indexOf(id);
-      return i < 0 ? order.length : i;
-    };
-    const plan = [...log.plan].sort((a, b) => at(a.exerciseId) - at(b.exerciseId));
-    return plan.map((entry) => {
-      const done = doneCount(log, entry.exerciseId);
-      return {
-        entry,
-        summary: Fmt.entrySummary(entry, units),
-        done,
-        complete: done >= entry.sets.length,
-      };
-    });
-  });
-  protected readonly progress = computed(() => {
-    const log = this.log();
-    return log ? planProgress(log) : { done: 0, total: 0 };
-  });
-  protected readonly hasNext = computed(() => {
-    const log = this.log();
-    return log !== null && nextPlannedSet(log) !== null;
+    return log ? Fmt.day(localDateOfLocal(log.startedAt)) : 'Workout';
   });
 
   protected readonly subtitle = computed(() => {
     const log = this.log();
-    if (log && isSubmitted(log)) {
-      return `${Fmt.time(log.startedAt)}${log.notes ? ` · ${log.notes}` : ''}`;
-    }
-    const crates = this.state.myCrates.value()?.length ?? 0;
-    return crates === 0 ? 'Just for you' : `Counts in ${Fmt.count(crates, 'Crate')}`;
+    return log ? `${Fmt.time(log.startedAt)}${log.notes ? ` · ${log.notes}` : ''}` : '';
   });
 
   protected readonly entries = computed<EntryView[]>(() => {
@@ -236,7 +175,7 @@ export class LogPage {
 
   /** The numbers at a glance: how long it took (once finished), then what it adds up to. */
   protected readonly tiles = computed<StatTile[]>(() => [
-    ...(this.draft() ? [] : [{ value: this.clock(), label: 'Session time' }]),
+    { value: this.clock(), label: 'Session time' },
     ...this.totals().map((t) => ({ value: t.amount, label: t.label })),
   ]);
 
@@ -369,30 +308,6 @@ export class LogPage {
     await this.logExercise(loggableFromEntry(entry, cues));
   }
 
-  /** A row dragged to another place: the one way to change the order (Alt and an arrow from a keyboard). */
-  protected drop(event: CdkDragDrop<unknown>): void {
-    this.moveExercise(event.previousIndex, event.currentIndex);
-  }
-
-  /** Moves the exercise at `from` to `to` in the list (from the keyboard, with `event`). */
-  protected moveExercise(from: number, to: number, event?: Event): void {
-    event?.preventDefault();
-    const log = this.log();
-    const ids = this.planned().map((p) => p.entry.exerciseId);
-    if (!log || !this.mine() || from === to || to < 0 || to >= ids.length) return;
-    if (event) keepFocus(this.injector);
-    moveItemInArray(ids, from, to);
-    // Shown in the new order at once; saved behind it.
-    this.order.set(ids);
-    this.saveOrder(log.id, ids);
-  }
-
-  private saveOrder(logId: string, ids: string[]): void {
-    this.saving = this.saving.then(() =>
-      this.state.run((app) => app.loggingService.reorderPlan(logId, ids)),
-    );
-  }
-
   /** Removes at once (it's one tap from the row), with Undo to put the sets back. */
 
   protected async removeEntry(entry: ExerciseLogEntry): Promise<void> {
@@ -432,26 +347,13 @@ export class LogPage {
     );
   }
 
-  /** Starts (or carries on with) the workout: the runner, set by set. */
-  protected async startWorkout(): Promise<void> {
-    const log = this.log();
-    if (!log || this.busy()) return;
-    const started = await this.state.run((app) =>
-      app.loggingService.startSession(log.id, this.state.now()),
-    );
-    if (!started) return;
-    this.pushedRunner = true;
-    await this.router.navigate([], { queryParams: { mode: 'log' } });
-  }
-
-  /** Back to planning. */
+  /** Back to the Plan, where the workout shows how far along it is. */
   protected closeRunner(): void {
-    if (this.pushedRunner) {
-      this.pushedRunner = false;
+    if (this.router.lastSuccessfulNavigation()?.previousNavigation) {
       this.location.back();
       return;
     }
-    void this.router.navigate([], { queryParams: {}, replaceUrl: true });
+    void this.router.navigate(['/'], { replaceUrl: true });
   }
 
   /**
@@ -477,7 +379,8 @@ export class LogPage {
       'Workout logged. Nice work.',
     );
     this.busy.set(false);
-    if (done) await this.router.navigate(['/log', done.id], { replaceUrl: true });
+    // Back to the Plan, where the day shows it done and what it earned.
+    if (done) await this.router.navigate(['/'], { replaceUrl: true });
   }
 
   /** Deletes this finished workout, with Undo, and goes back. */

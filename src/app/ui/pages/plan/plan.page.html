@@ -70,80 +70,26 @@
                 @if (d.today) {
                   <span class="today-chip pch-label-small">Today</span>
                 }
-                <a
+                <button
                   matIconButton
+                  type="button"
                   class="add"
-                  [routerLink]="['/plan', monday(), 'new']"
-                  [queryParams]="{ day: d.date }"
                   [matTooltip]="'Plan a workout on ' + d.label"
                   [attr.aria-label]="'Plan a workout on ' + d.label"
+                  (click)="add(d.date)"
                 >
                   <span class="material-symbols-rounded" aria-hidden="true">add</span>
-                </a>
+                </button>
               </div>
               @if (d.workouts.length > 0) {
                 <pch-list-card>
-                  @for (r of d.workouts; track r.workout.id) {
-                    <pch-swipe-row removable [removeLabel]="'Unplan'" (remove)="remove(r.workout)">
-                      <div class="workout" [attr.data-state]="r.state">
-                        <pch-shaped-avatar
-                          [shape]="r.state === 'done' ? 'softBurst' : 'circle'"
-                          [color]="
-                            r.state === 'done'
-                              ? 'primary-container'
-                              : r.state === 'going'
-                                ? 'tertiary-container'
-                                : 'surface-container-high'
-                          "
-                          [foreground]="
-                            r.state === 'done'
-                              ? 'on-primary-container'
-                              : r.state === 'going'
-                                ? 'on-tertiary-container'
-                                : 'on-surface-variant'
-                          "
-                        >
-                          <span class="material-symbols-rounded" aria-hidden="true">{{
-                            r.icon
-                          }}</span>
-                        </pch-shaped-avatar>
-                        <a class="text stretched" [routerLink]="r.link">
-                          <span class="pch-title-medium one-line">{{ r.workout.name }}</span>
-                          <span class="pch-body-small muted one-line">{{ r.subtitle }}</span>
-                        </a>
-                        @if (r.points) {
-                          <span class="pts pch-label-large">{{ r.points }} pts</span>
-                        }
-                        <span class="pch-swipe-actions">
-                          <button
-                            matIconButton
-                            type="button"
-                            matTooltip="Take off the plan"
-                            [attr.aria-label]="'Take ' + r.workout.name + ' off the plan'"
-                            (click)="remove(r.workout)"
-                          >
-                            <span class="material-symbols-rounded" aria-hidden="true">delete</span>
-                          </button>
-                        </span>
-                        @if (r.canLaunch) {
-                          <button
-                            matIconButton
-                            type="button"
-                            class="launch"
-                            [disabled]="busy()"
-                            [matTooltip]="r.state === 'going' ? 'Continue' : 'Start'"
-                            [attr.aria-label]="
-                              (r.state === 'going' ? 'Continue ' : 'Start ') + r.workout.name
-                            "
-                            (click)="launch(r.workout)"
-                          >
-                            <span class="material-symbols-rounded" aria-hidden="true"
-                              >play_arrow</span
-                            >
-                          </button>
-                        }
-                      </div>
-                    </pch-swipe-row>
+                  @for (v of d.workouts; track v.workout.id) {
+                    <pch-workout-card
+                      [view]="v"
+                      [monday]="monday()"
+                      [open]="isOpen(v)"
+                      (openChange)="toggle(v)"
+                    />
                   }
                 </pch-list-card>
               }
