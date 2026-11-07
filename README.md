@@ -32,7 +32,7 @@ Android, iOS and desktop, and updates itself in the background.
 | Angular UI (Material 3, light/dark, adaptive layout) | Done, unit + end-to-end tested |
 | PWA (manifest, service worker, offline, install, update prompts) | Done |
 | Persistence | In-memory demo backend and Firestore repositories (contract- and rules-tested on the Firestore emulator) |
-| Auth | Firebase Auth (Google, Apple, email) behind an `AuthService`; demo mode auto-signs in |
+| Auth | Firebase Auth (Google sign-in) behind an `AuthService`; demo mode auto-signs in |
 | CI (format, lint, type-check, unit, emulator, e2e, builds) | Done |
 | CD (Firebase Hosting with PR previews) | Workflows done; Hosting needs two secrets (`scripts/setup-ci.sh`) |
 

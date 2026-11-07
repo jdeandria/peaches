@@ -8,7 +8,7 @@ export interface AuthUser {
   readonly photoUrl: string | null;
 }
 
-export type AuthProvider = 'google' | 'apple' | 'email';
+export type AuthProvider = 'google';
 
 /**
  * Sign-in boundary. The Firebase implementation lives in the data layer;
@@ -29,17 +29,14 @@ export interface AuthService {
   readonly availableProviders: ReadonlySet<AuthProvider>;
 
   signInWithGoogle(): Promise<AuthUser>;
-  signInWithApple(): Promise<AuthUser>;
-  signInWithEmail(email: string, password: string): Promise<AuthUser>;
-  registerWithEmail(email: string, password: string, displayName: string): Promise<AuthUser>;
   signOut(): Promise<void>;
 }
 
 /**
  * Signs in as one fixed user; used by demo mode and tests.
  *
- * With `signedIn` false the demo starts on the sign-in screen and every
- * provider button signs in as `user`, which lets the sign-in flow be
+ * With `signedIn` false the demo starts on the sign-in screen and the
+ * Google button signs in as `user`, which lets the sign-in flow be
  * exercised without a backend.
  */
 export class DemoAuthService implements AuthService {
@@ -61,30 +58,12 @@ export class DemoAuthService implements AuthService {
   }
 
   get availableProviders(): ReadonlySet<AuthProvider> {
-    return this.state.value === null
-      ? new Set<AuthProvider>(['google', 'apple', 'email'])
-      : new Set<AuthProvider>();
+    return this.state.value === null ? new Set<AuthProvider>(['google']) : new Set<AuthProvider>();
   }
 
-  private async signIn(): Promise<AuthUser> {
+  async signInWithGoogle(): Promise<AuthUser> {
     this.state.next(this.user);
     return this.user;
-  }
-
-  signInWithGoogle(): Promise<AuthUser> {
-    return this.signIn();
-  }
-
-  signInWithApple(): Promise<AuthUser> {
-    return this.signIn();
-  }
-
-  signInWithEmail(): Promise<AuthUser> {
-    return this.signIn();
-  }
-
-  registerWithEmail(): Promise<AuthUser> {
-    return this.signIn();
   }
 
   async signOut(): Promise<void> {
