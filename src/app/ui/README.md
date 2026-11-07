@@ -145,6 +145,23 @@ Inputs: `variant: 'elevated' | 'filled' | 'outlined'` (default `elevated`),
 <button pch-card type="button" (click)="open()">…</button>
 ```
 
+### `pch-splash` — `Splash`
+
+The full-screen loading/error splash used by the app root: a peach pulsing
+slowly in a warm glow, greyed-out peaches (`SPLASH_FLOATERS`) drifting behind
+it, and a small M3 elevated name card (tonal heart icon, supporting line,
+the name as headline) with the dedication. Projected
+content (status text, an error and its retry) goes under the card. The static
+`#splash` in `src/index.html` mirrors it so the hand-off is seamless; both run
+on the page clock so the pulse carries on rather than restarting. Animations
+stop under `prefers-reduced-motion`.
+
+```html
+<pch-splash role="status" aria-live="polite">
+  <span class="pch-visually-hidden">Loading Peaches</span>
+</pch-splash>
+```
+
 ### `pch-list-card` — `ListCard`
 
 Input `variant: CardVariant` (default `elevated`). Card with 4px vertical

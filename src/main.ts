@@ -29,6 +29,7 @@ main().catch((err: unknown) => {
   console.error(err);
   const splash = document.getElementById('splash-message');
   if (splash) {
+    splash.classList.add('error');
     splash.textContent = `Peaches could not start: ${err instanceof Error ? err.message : String(err)}`;
   }
 });

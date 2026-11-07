@@ -12,6 +12,7 @@ export * from './layout/page';
 export * from './layout/section';
 export * from './layout/status-label';
 export * from './layout/card';
+export * from './layout/splash';
 export * from './layout/list-card';
 export * from './layout/list-row';
 export * from './layout/swipe-row';

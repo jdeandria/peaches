@@ -5,6 +5,7 @@ import { DateBadge, parseLocalDate } from './date-badge';
 import { formatPoints, StandingsRow, StandingsTable } from './standings-table';
 import { Card } from './card';
 import { Page } from './page';
+import { Splash, SPLASH_FLOATERS } from './splash';
 
 describe('parseLocalDate', () => {
   it('parses ISO dates without time zones', () => {
@@ -119,5 +120,31 @@ describe('Page', () => {
     expect(el.getAttribute('title')).toBeNull();
     expect(el.querySelector('button[aria-label="Back"]')).not.toBeNull();
     expect(el.querySelector('button[aria-label="Refresh"]')).toBeNull();
+  });
+});
+
+describe('Splash', () => {
+  it('shows the dedication over a field of hidden, decorative peaches', async () => {
+    @Component({
+      imports: [Splash],
+      template: `<pch-splash><p class="extra">Loading</p></pch-splash>`,
+    })
+    class Host {}
+    const f = TestBed.createComponent(Host);
+    await f.whenStable();
+    const el: HTMLElement = f.nativeElement;
+    expect(el.querySelector('.note-for')?.textContent).toBe('For the gayest & strongest boy');
+    expect(el.querySelector('.note-name')?.textContent).toBe('Stevie');
+    expect(el.querySelectorAll('.floater').length).toBe(SPLASH_FLOATERS.length);
+    expect(el.querySelector('.field')?.getAttribute('aria-hidden')).toBe('true');
+    expect(el.querySelector('.hero')?.getAttribute('aria-hidden')).toBe('true');
+    expect(el.querySelector('.extra')?.textContent).toBe('Loading');
+  });
+
+  it('starts its animations on the page clock', async () => {
+    const f = TestBed.createComponent(Splash);
+    await f.whenStable();
+    const clock = (f.nativeElement as HTMLElement).style.getPropertyValue('--pch-splash-clock');
+    expect(clock).toMatch(/^-?\d+ms$/);
   });
 });
