@@ -228,8 +228,9 @@ note under a section. Use it rather than an outlined card.
 
 ### `pch-workout-card` — `WorkoutCard` (`pages/plan/workout-card.ts`)
 
-A planned workout on the Plan: a row (state, name, what it's worth) that
-opens to its exercises, each with a play button; Add exercise, swipe to
+A planned workout on the Plan: a row led by a play button this week (else
+its state), then name and what it's worth, that opens to its exercises,
+each with a play button too; Add exercise, swipe to
 remove, drag to reorder and a ⋮ menu. Inputs `view: WorkoutView`,
 `monday: LocalDate`, `open: boolean`; output `openChange`. Its actions go
 through `PlanActions`, which the Plan page provides.

@@ -70,14 +70,14 @@ describe('PlanPage', () => {
       today: d.classList.contains('today'),
       workouts: Array.from(d.querySelectorAll<HTMLElement>('pch-workout-card')).map((w) => ({
         state: w.getAttribute('data-state'),
-        name: text(w.querySelector('.head .name')),
-        open: w.querySelector('.head')?.getAttribute('aria-expanded') === 'true',
+        name: text(w.querySelector('.toggle .name')),
+        open: w.querySelector('.toggle')?.getAttribute('aria-expanded') === 'true',
       })),
     }));
   /** A workout card by name (the last of that name: Saturday's repeats Monday's). */
   const card = (el: HTMLElement, name: string) =>
     Array.from(el.querySelectorAll<HTMLElement>('pch-workout-card'))
-      .filter((c) => text(c.querySelector('.head .name')) === name)
+      .filter((c) => text(c.querySelector('.toggle .name')) === name)
       .at(-1)!;
   const exercises = (c: HTMLElement) =>
     Array.from(c.querySelectorAll('.exercise .text > :first-child')).map(text);
@@ -134,18 +134,35 @@ describe('PlanPage', () => {
     expect(week[0].workouts).toEqual([{ state: 'done', name: expect.any(String), open: false }]);
     expect(week[2].workouts.map((w) => [w.state, w.open])).toEqual([['planned', false]]);
     expect(week[1].workouts).toEqual([]);
+    // A workout to do this week leads with play, open or not; a done one with its tick.
+    expect(button(el, 'Start workout: Run')).toBeDefined();
+    const monday = el.querySelector('li.day pch-workout-card')!;
+    expect(monday.querySelector('button.start')).toBeNull();
+    expect(monday.querySelector('pch-shaped-avatar')).not.toBeNull();
     // Everything happens here: no separate planner to go to.
     expect(el.querySelector('a[href^="/plan/"]')).toBeNull();
     expect(el.querySelectorAll('.exercise')).toHaveLength(0);
+  });
+
+  it('starts a workout from its row without opening it', async () => {
+    const f = await render();
+    const el: HTMLElement = f.nativeElement;
+    const run = card(el, 'Run');
+    expect(run.querySelector('.toggle')?.getAttribute('aria-expanded')).toBe('false');
+    button(run, 'Start workout: Run')!.click();
+    await stable(f);
+    expect(TestBed.inject(Router).url).toBe('/log?mode=log');
+    const plan = await backend.container.plans.get(DEMO_PEACH_ID, thisMonday);
+    expect(plan!.workouts.find((w) => w.name === 'Run')!.logId).not.toBeNull();
   });
 
   it('opens a workout to its exercises, and starts it at any of them', async () => {
     const f = await render();
     const el: HTMLElement = f.nativeElement;
     const saturday = card(el, 'Goblet Squat & more');
-    saturday.querySelector<HTMLButtonElement>('.head')!.click();
+    saturday.querySelector<HTMLButtonElement>('.toggle')!.click();
     await stable(f);
-    expect(saturday.querySelector('.head')?.getAttribute('aria-expanded')).toBe('true');
+    expect(saturday.querySelector('.toggle')?.getAttribute('aria-expanded')).toBe('true');
     expect(exercises(saturday)).toEqual(['Goblet Squat', 'Dumbbell Bench Press', 'Forearm Plank']);
 
     // Start at the second: it goes first, then the rest in order.
@@ -172,8 +189,10 @@ describe('PlanPage', () => {
     await stable(f);
     const going = card(el, 'Goblet Squat & more');
     expect(going.getAttribute('data-state')).toBe('going');
-    expect(going.querySelector('.head')?.getAttribute('aria-expanded')).toBe('true');
+    expect(going.querySelector('.toggle')?.getAttribute('aria-expanded')).toBe('true');
     expect(text(going.querySelector('.count'))).toBe('1/3');
+    // Its row carries on with it, open or closed.
+    expect(button(going, 'Continue workout: Goblet Squat & more')).toBeDefined();
     expect(button(going, 'Start Goblet Squat')).toBeDefined();
   });
 
@@ -195,7 +214,7 @@ describe('PlanPage', () => {
     expect(tuesday[0].exercises[0].sets.length).toBeGreaterThan(0);
     // It opens, ready to start.
     const added = card(el, 'Push Up');
-    expect(added.querySelector('.head')?.getAttribute('aria-expanded')).toBe('true');
+    expect(added.querySelector('.toggle')?.getAttribute('aria-expanded')).toBe('true');
     expect(button(added, 'Start Push Up')).toBeDefined();
   });
 
@@ -216,7 +235,7 @@ describe('PlanPage', () => {
     const f = await render();
     const el: HTMLElement = f.nativeElement;
     const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
-    card(el, 'Goblet Squat & more').querySelector<HTMLButtonElement>('.head')!.click();
+    card(el, 'Goblet Squat & more').querySelector<HTMLButtonElement>('.toggle')!.click();
     await stable(f);
     const saved = async () =>
       (await backend.container.plans.get(DEMO_PEACH_ID, thisMonday))!.workouts
@@ -267,7 +286,7 @@ describe('PlanPage', () => {
       Array.from(overlay().querySelectorAll<HTMLButtonElement>('[mat-menu-item]')).find(
         (b) => text(b) === label,
       )!;
-    card(el, 'Run').querySelector<HTMLButtonElement>('.head')!.click();
+    card(el, 'Run').querySelector<HTMLButtonElement>('.toggle')!.click();
     await stable(f);
     button(card(el, 'Run'), 'More for Run')!.click();
     await stable(f);
@@ -304,7 +323,7 @@ describe('PlanPage', () => {
     expect(lifters.headline).toMatch(/^Plan [\d.]+ more to match Cho$/);
     expect(lifters.when).toBe('Locks in 6 d');
     // Nothing starts before its week.
-    expect(el.querySelector('button.play')).toBeNull();
+    expect(el.querySelector('button.play, button.start')).toBeNull();
 
     // Repeating this week plans the same weekdays, and the plan's points go up.
     button(el, 'Repeat this week')!.click();

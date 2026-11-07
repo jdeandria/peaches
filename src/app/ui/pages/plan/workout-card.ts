@@ -46,8 +46,10 @@ const ICONS = { planned: 'fitness_center', going: 'directions_run', done: 'check
 let nextId = 0;
 
 /**
- * A workout on the Plan: one row that opens to its exercises. Each one
- * has a play button that starts the workout there; exercises are added
+ * A workout on the Plan: one row that opens to its exercises. The row
+ * leads with a play button (this week, until it's done) that starts the
+ * workout or carries on with it, open or not; each exercise has its own,
+ * to start there; exercises are added
  * from the picker (no numbers asked: last time's sets, dialled in when
  * done), swiped left to remove and held and dragged to reorder. The menu
  * holds the rest: move to another day, where, save as a routine, take off
@@ -70,43 +72,48 @@ let nextId = 0;
   template: `
     @let v = view();
     @let w = v.workout;
-    <button
-      type="button"
-      class="head"
-      [attr.aria-expanded]="open()"
-      [attr.aria-controls]="bodyId"
-      (click)="openChange.emit()"
-    >
-      <pch-shaped-avatar
-        [shape]="v.state === 'done' ? 'softBurst' : 'circle'"
-        [color]="
-          v.state === 'done'
-            ? 'primary-container'
-            : v.state === 'going'
-              ? 'tertiary-container'
-              : 'surface-container-high'
-        "
-        [foreground]="
-          v.state === 'done'
-            ? 'on-primary-container'
-            : v.state === 'going'
-              ? 'on-tertiary-container'
-              : 'on-surface-variant'
-        "
-      >
-        <span class="material-symbols-rounded" aria-hidden="true">{{ icon() }}</span>
-      </pch-shaped-avatar>
-      <span class="text">
-        <span class="name pch-title-medium one-line">{{ w.name }}</span>
-        <span class="pch-body-small muted one-line">{{ v.subtitle }}</span>
-      </span>
-      @if (v.points) {
-        <span class="pts pch-label-large">{{ v.points }} pts</span>
+    <div class="head">
+      <!-- Start (or carry on) from the row itself, open or not; otherwise what state it's in. -->
+      @if (v.canLaunch) {
+        <button
+          matIconButton
+          type="button"
+          class="start"
+          [attr.aria-label]="
+            (v.state === 'going' ? 'Continue workout: ' : 'Start workout: ') + w.name
+          "
+          (click)="playWorkout()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">play_arrow</span>
+        </button>
+      } @else {
+        <pch-shaped-avatar
+          [shape]="v.state === 'done' ? 'softBurst' : 'circle'"
+          [color]="v.state === 'done' ? 'primary-container' : 'surface-container-high'"
+          [foreground]="v.state === 'done' ? 'on-primary-container' : 'on-surface-variant'"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">{{ icon() }}</span>
+        </pch-shaped-avatar>
       }
-      <span class="material-symbols-rounded chevron" [class.open]="open()" aria-hidden="true"
-        >expand_more</span
+      <button
+        type="button"
+        class="toggle"
+        [attr.aria-expanded]="open()"
+        [attr.aria-controls]="bodyId"
+        (click)="openChange.emit()"
       >
-    </button>
+        <span class="text">
+          <span class="name pch-title-medium one-line">{{ w.name }}</span>
+          <span class="pch-body-small muted one-line">{{ v.subtitle }}</span>
+        </span>
+        @if (v.points) {
+          <span class="pts pch-label-large">{{ v.points }} pts</span>
+        }
+        <span class="material-symbols-rounded chevron" [class.open]="open()" aria-hidden="true"
+          >expand_more</span
+        >
+      </button>
+    </div>
 
     @if (open()) {
       <div class="body" [id]="bodyId">
@@ -237,10 +244,26 @@ let nextId = 0;
     .head {
       display: flex;
       align-items: center;
-      gap: 12px;
-      width: 100%;
+      gap: 4px;
       min-height: 64px;
-      padding: 8px 12px 8px 16px;
+      padding-inline-start: 12px;
+    }
+    .head pch-shaped-avatar {
+      margin: 0 4px;
+    }
+    .start {
+      flex: none;
+      background: var(--mat-sys-primary);
+      color: var(--mat-sys-on-primary);
+    }
+    .toggle {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      align-self: stretch;
+      padding: 8px 12px 8px 8px;
       border: 0;
       background: none;
       color: inherit;
@@ -248,14 +271,14 @@ let nextId = 0;
       text-align: start;
       cursor: pointer;
     }
-    .head:hover {
+    .toggle:hover {
       background: color-mix(
         in srgb,
         var(--mat-sys-on-surface) calc(var(--mat-sys-hover-state-layer-opacity) * 100%),
         transparent
       );
     }
-    .head:focus-visible {
+    .toggle:focus-visible {
       outline: var(--pch-focus-ring);
       outline-offset: -3px;
     }
@@ -297,7 +320,7 @@ let nextId = 0;
       align-items: center;
       gap: 8px;
       min-height: 56px;
-      padding: 4px 4px 4px 68px;
+      padding: 4px 4px 4px 64px;
     }
     .exercise.complete .text > :first-child {
       color: var(--mat-sys-on-surface-variant);
@@ -320,7 +343,7 @@ let nextId = 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 4px 0 56px;
+      padding: 0 4px 0 48px;
     }
     .more {
       margin-inline-start: auto;
@@ -360,6 +383,11 @@ export class WorkoutCard {
   protected remove(e: ExerciseView): void {
     const v = this.view();
     void this.actions.removeExercise(this.monday(), v.workout, v.log, e.entry);
+  }
+
+  /** Starts the workout, or carries on where it left off. */
+  protected playWorkout(): void {
+    void this.actions.play(this.monday(), this.view().workout);
   }
 
   protected play(e: ExerciseView): void {

@@ -254,10 +254,15 @@ export class PlanActions {
   }
 
   /**
-   * Starts the workout (or carries on with it) at one exercise: it goes
-   * first, so the runner takes it next, then the rest in order.
+   * Starts the workout (or carries on with it), at one exercise if given:
+   * it goes first, so the runner takes it next, then the rest in order.
+   * Without one, the runner takes the first with sets left.
    */
-  async play(monday: LocalDate, w: PlannedWorkout, exerciseId: string): Promise<void> {
+  async play(
+    monday: LocalDate,
+    w: PlannedWorkout,
+    exerciseId: string | null = null,
+  ): Promise<void> {
     const me = this.me();
     if (!me) return;
     const log = await this.state.run((app) =>
@@ -265,7 +270,7 @@ export class PlanActions {
     );
     if (!log) return;
     const ids = log.plan.map((e) => e.exerciseId);
-    if (ids[0] !== exerciseId && ids.includes(exerciseId)) {
+    if (exerciseId !== null && ids[0] !== exerciseId && ids.includes(exerciseId)) {
       const order = [exerciseId, ...ids.filter((id) => id !== exerciseId)];
       await this.state.run((app) => app.loggingService.reorderPlan(log.id, order));
     }

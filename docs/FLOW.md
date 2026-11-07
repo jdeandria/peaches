@@ -72,10 +72,13 @@ planner.
   sets of ten, three 30-second holds, one solid session's distance), and
   they're dialled in set by set when it's done.
 - **A workout** is one row (planned, in progress with sets done, or done
-  with what it earned) that taps open to its exercises. Those under way,
-  and today's still to do, start open.
-- **Each exercise** has a play button, this week, that starts the workout
-  there: it goes first and the rest follow in order. In a workout under
+  with what it earned). This week, until it's done, the row leads with a
+  play button that starts it, or carries on where it left off, open or
+  closed; otherwise it leads with its state (a tick when done). Tapping
+  the rest of the row opens it to its exercises. Those under way, and
+  today's still to do, start open.
+- **Each exercise** has a play button too, this week, that starts the
+  workout there: it goes first and the rest follow in order. In a workout under
   way it carries on, showing sets done ("1/3") and a tick for each one
   finished. Swipe an exercise left to remove it (with Undo; the last one
   takes the workout off the plan), hold and drag it to reorder, or add one
@@ -84,7 +87,7 @@ planner.
   (once you have equipment locations; it filters the picker), while it's
   not started; **Save as routine**; **Take off the plan** (with Undo).
 
-Play opens the runner (`/log?mode=log`) on that exercise. Between sets the
+Play opens the runner (`/log?mode=log`), on that exercise if it was an exercise's. Between sets the
 rest timer pops in between the dials, which already show the next set,
 pushing them out to the sides, greyed and still until it's over. **Back to
 plan** returns to the Plan, where the workout shows how far along it is;
@@ -136,9 +139,9 @@ History | Gear | Settings** (kept in `?view=`; Gear is `equipment`).
 - **Plan next week**: Plan → Next week → + on a day → pick an exercise, a
   routine or a template. Watch the matchup card: plan more to match your
   opponent.
-- **Do today's workout**: Plan → play on its first exercise → runner →
-  Finish.
-- **Pick a workout back up**: Plan → play on the exercise to carry on with.
+- **Do today's workout**: Plan → play on its row → runner → Finish.
+- **Pick a workout back up**: Plan → play on its row (or on the exercise
+  to carry on with).
 - **Do something you didn't plan**: Plan → + on today → pick → play.
 - **Fix an old workout**: You → History → tap it → edit.
 - **Check the score**: Crates → This week → tap the matchup card.

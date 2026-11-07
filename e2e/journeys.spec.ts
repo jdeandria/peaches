@@ -41,10 +41,9 @@ test('core journey: plan against your opponent, launch a workout, see it score',
   await expect(page.getByText('Oct 19 – 25 · 1 workout planned')).toBeVisible();
   await expect(page.getByRole('slider')).toHaveCount(0);
 
-  // This week: open Wednesday's run and start it straight into the sets.
+  // This week: start Wednesday's run from its row, straight into the sets.
   await page.getByRole('radio', { name: 'This week' }).click();
-  await page.getByRole('button', { name: /^Run\b/ }).click();
-  await page.getByRole('button', { name: 'Start Run' }).click();
+  await page.getByRole('button', { name: 'Start workout: Run' }).click();
   await expect(page.getByRole('heading', { name: 'Run' })).toBeVisible();
   await page.getByRole('button', { name: 'Done: set 1 of Run' }).click();
   await expect(page.getByRole('heading', { name: 'Workout complete' })).toBeVisible();
@@ -123,11 +122,11 @@ test('plan a routine, launch it and tick it off, resting between sets', async ({
   await expect(page.getByRole('timer')).toBeVisible();
   await page.getByRole('button', { name: 'Skip rest' }).click();
   await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
-  // The Plan shows how far along it is; play carries on where it left off.
+  // The Plan shows how far along it is; the row's play carries on where it left off.
   await page.getByRole('button', { name: 'Back to plan' }).click();
   await expect(page.getByText('In progress · 1 of 6 sets')).toBeVisible();
   await expect(page.getByText('1/3')).toBeVisible();
-  await page.getByRole('button', { name: 'Start Kettlebell Swing' }).click();
+  await page.getByRole('button', { name: 'Continue workout: Swing day' }).click();
   await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
 });
 
@@ -137,7 +136,7 @@ test('repeat this week as next week’s plan, and take a workout off it', async 
   await expect(page.getByText('Planned 4 workouts from the week before.')).toBeVisible();
   await expect(page.getByText('Oct 19 – 25 · 4 workouts planned')).toBeVisible();
   // A workout's menu takes it off the plan.
-  await page.locator('pch-workout-card .head').first().click();
+  await page.locator('pch-workout-card .toggle').first().click();
   await page
     .getByRole('button', { name: /^More for/ })
     .first()
@@ -335,7 +334,7 @@ test('every icon renders as a glyph from the subset font', async ({ page }) => {
   }
   // An open workout: play buttons and its menu.
   await page.goto('/');
-  await page.locator('pch-workout-card .head').last().click();
+  await page.locator('pch-workout-card .toggle').last().click();
   await expect(page.getByRole('button', { name: /^Start / }).first()).toBeVisible();
   await check('an open workout');
 });
