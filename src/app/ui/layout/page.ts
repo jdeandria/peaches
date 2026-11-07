@@ -9,7 +9,6 @@ import {
   inject,
   input,
   numberAttribute,
-  output,
   signal,
   viewChild,
 } from '@angular/core';
@@ -55,11 +54,6 @@ export class Page {
   readonly showBack = input(false, { transform: booleanAttribute });
   /** Where back goes when there is no in-app history (default `/`). */
   readonly backLink = input<string>('/');
-  /** Show a refresh button in the toolbar that emits `refresh`. */
-  readonly refreshable = input(false, { transform: booleanAttribute });
-  /** Disables the refresh button while a refresh is in flight. */
-  readonly refreshing = input(false, { transform: booleanAttribute });
-  readonly refresh = output<void>();
 
   protected readonly collapsed = signal(false);
   private readonly headline = viewChild.required<ElementRef<HTMLElement>>('headline');

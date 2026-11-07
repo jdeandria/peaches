@@ -68,13 +68,9 @@ interface MetricRow {
             <span class="material-symbols-rounded" aria-hidden="true">edit</span>
           </a>
         }
-        <p class="pch-body-medium muted intro" [pchStagger]="0">
-          {{
-            d.canDispute
-              ? 'Numbers look off? Dispute them. If more than half the Crate votes to strike, they stop scoring here.'
-              : 'Its week is over, so its scores are final.'
-          }}
-        </p>
+        @if (!d.canDispute) {
+          <p class="pch-note" [pchStagger]="0">Its week is over, so its scores are final.</p>
+        }
         <pch-list-card [pchStagger]="1">
           @for (m of metrics(); track m.target) {
             <div class="item">
@@ -127,9 +123,6 @@ interface MetricRow {
     }
     .muted {
       color: var(--mat-sys-on-surface-variant);
-    }
-    .intro {
-      margin: 0 0 16px;
     }
     .item {
       display: flex;

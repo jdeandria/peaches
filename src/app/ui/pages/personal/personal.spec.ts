@@ -52,24 +52,32 @@ describe('PersonalPage', () => {
   it('shows who you are, then your stats', async () => {
     const f = await render();
     const el: HTMLElement = f.nativeElement;
+    // Who you are is the header itself, not a card under it.
     expect(text(el.querySelector('h1'))).toBe('You');
-    expect(text(el.querySelector('pch-card.identity h2'))).toBe('You');
-    expect(text(el.querySelector('pch-card.identity'))).toContain('2 Crates');
+    expect(text(el.querySelector('.subtitle'))).toBe('2 Crates');
+    expect(el.querySelector('.identity')).toBeNull();
     const views = Array.from(el.querySelectorAll('pch-button-group.views [role=radio]'));
     expect(views.map(text)).toEqual(['Stats', 'History', 'Gear', 'Settings']);
     expect(views[0].getAttribute('aria-checked')).toBe('true');
-    expect(sections(el)).toEqual(['This week', 'Plan kept', 'Workouts per week', 'Records']);
+    expect(sections(el)).toEqual([
+      'This week',
+      'Plan kept',
+      'Workouts per week',
+      'Heaviest lifts',
+      'Bests in one go',
+    ]);
 
-    // This Monday morning's workout, done at 7.
-    const stats = Array.from(el.querySelectorAll('.stat')).map((s) => [
+    // This Monday morning's workout, done at 7: the same tiles a workout's summary uses.
+    const stats = Array.from(el.querySelectorAll('pch-stat-tiles .tile')).map((s) => [
       text(s.querySelector('.value')),
       text(s.querySelector('.label')),
     ]);
-    expect(stats).toEqual([
+    expect(stats.slice(0, 3)).toEqual([
       ['1', 'Workout'],
       ['9', 'Sets'],
       ['60', 'Active min'],
     ]);
+    expect(stats.slice(3).map(([, label]) => label)).toEqual(['Weight moved', 'Reps']);
     // The two weeks planned so far, each with a bar.
     expect(text(el.querySelector('.kept-summary'))).toMatch(
       /^\d+ of \d+ planned workouts done in the last 4 weeks$/,
@@ -97,7 +105,7 @@ describe('PersonalPage', () => {
   it('lists every workout a week at a time', async () => {
     const f = await render({ view: 'history' });
     const el: HTMLElement = f.nativeElement;
-    const weeks = Array.from(el.querySelectorAll('h3.week')).map(text);
+    const weeks = sections(el);
     expect(weeks[0]).toBe('This week');
     expect(weeks.length).toBeGreaterThan(1);
     const rows = el.querySelectorAll('a[pch-list-row][href^="/log"]');
@@ -125,10 +133,10 @@ describe('PersonalPage', () => {
     const first = f.nativeElement.querySelector('a[pch-list-row][href^="/log"]');
     expect(first?.getAttribute('href')).toBe('/log');
     expect(text(first)).toContain('In progress');
-    expect(text(f.nativeElement.querySelector('h3.week'))).toBe('This week');
+    expect(sections(f.nativeElement)[0]).toBe('This week');
   });
 
-  it('swipes a workout left to delete it (with Undo), right to edit it', async () => {
+  it('swipes a workout left to delete it, with Undo; tapping is the one way to open it', async () => {
     const f = await render({ view: 'history' });
     const el: HTMLElement = f.nativeElement;
     const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
@@ -164,9 +172,11 @@ describe('PersonalPage', () => {
     await stable(f);
     expect(hrefs()).toEqual(before);
 
+    // Swiping right does nothing: the row is a link, so a tap opens it.
     swipe(rows()[1], 200);
     await stable(f);
-    expect(TestBed.inject(Router).url).toBe(before[1]);
+    expect(TestBed.inject(Router).url).toBe('/');
+    expect(hrefs()).toEqual(before);
   });
 
   it('adds a location from a preset, edits it and deletes it with Undo', async () => {
@@ -174,9 +184,11 @@ describe('PersonalPage', () => {
     const el: HTMLElement = f.nativeElement;
     const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
     expect(sections(el)).toEqual(['Where you train']);
-    expect(text(el.querySelector('.no-locations'))).toContain('No locations yet.');
+    expect(text(el)).toContain('Add Home, Gym or Travel');
+    // One way to add a place: the section's Add.
+    expect(button(el, 'Add a location')).toBeUndefined();
 
-    button(el, 'Add a location').click();
+    button(el, 'Add').click();
     await stable(f);
     const dialog = () => document.querySelector<HTMLElement>('pch-location-dialog')!;
     /** Saves the dialog and waits for it to close. */
@@ -204,12 +216,12 @@ describe('PersonalPage', () => {
       'wall',
       'chair',
     ]);
-    const row = () => el.querySelector('.locations pch-list-row');
+    const row = () => el.querySelector('.locations [pch-list-row]');
     expect(text(row())).toContain('Home');
     expect(text(row())).toContain('Dumbbells, Resistance bands and 4 more');
 
-    // Editing keeps the id; a name can't be blank.
-    el.querySelector<HTMLButtonElement>('button[aria-label="Edit Home"]')!.click();
+    // Tapping a place edits it, keeping the id; a name can't be blank.
+    el.querySelector<HTMLButtonElement>('.locations button[pch-list-row]')!.click();
     await stable(f);
     const name = dialog().querySelector<HTMLInputElement>('input')!;
     name.value = ' ';
@@ -263,7 +275,11 @@ describe('PersonalPage', () => {
   it('starts empty for a new Peach', async () => {
     const f = await render({ seed: false });
     const el: HTMLElement = f.nativeElement;
-    expect(Array.from(el.querySelectorAll('.stat .value')).map(text)).toEqual(['0', '0', '0']);
+    expect(Array.from(el.querySelectorAll('pch-stat-tiles .value')).map(text)).toEqual([
+      '0',
+      '0',
+      '0',
+    ]);
     expect(text(el)).toContain('Plan your weeks on the Plan tab');
     expect(text(el)).toContain('Your personal bests show up here');
   });

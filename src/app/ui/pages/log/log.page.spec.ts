@@ -280,21 +280,23 @@ describe('LogPage', () => {
     await stable(f);
     expect(text(el.querySelector('h1'))).toBe(squat.name);
 
-    button(el, 'Exercise order')!.click();
+    // The runner has no order control of its own: the order is changed in the workout's list.
+    expect(button(el, 'Exercise order')).toBeUndefined();
+    // Back to the workout's list (the router drops ?mode=log).
+    f.componentRef.setInput('mode', undefined);
     await stable(f);
-    const order = () => Array.from(overlay().querySelectorAll('.row .pch-title-medium')).map(text);
-    expect(order()).toEqual([squat.name, 'Forearm Plank']);
-    expect(button(overlay(), `Move ${squat.name} up`)!.disabled).toBe(true);
-    button(overlay(), 'Move Forearm Plank up')!.click();
-    await stable(f);
-    expect(order()).toEqual(['Forearm Plank', squat.name]);
-    button(overlay(), 'Done')!.click();
+    const rows = () => Array.from(el.querySelectorAll<HTMLElement>('pch-swipe-row'));
+    expect(rows().map((r) => text(r.querySelector('.text .pch-title-medium')))).toEqual([
+      squat.name,
+      'Forearm Plank',
+    ]);
+    rows()[0].dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true }),
+    );
     await stable(f);
     // The plank is next now.
     const log = (await backend.container.logs.getById(draft.id))!;
     expect(log.plan.map((e) => e.exerciseName)).toEqual(['Forearm Plank', squat.name]);
-    expect(text(el.querySelector('h1'))).toBe('Forearm Plank');
-    expect(text(el.querySelector('.title p'))).toBe('Exercise 1 of 2 · Set 1 of 1');
   });
 
   it('finishing early from log mode asks first, and logs what was done', async () => {
@@ -449,7 +451,10 @@ describe('LogPage', () => {
     const { f, el } = await render({ logId: latest.id });
     expect(text(el.querySelector('h1'))).toBe('Mon, Oct 12');
     expect(text(el)).toContain(latest.entries[0].exerciseName);
-    expect(text(el.querySelector('.clock'))).toContain('Session time');
+    // The same tiles as the week's stats, with how long it took first.
+    const tiles = Array.from(el.querySelectorAll('pch-stat-tiles .label')).map(text);
+    expect(tiles[0]).toBe('Session time');
+    expect(el.querySelector('.clock')).toBeNull();
     expect(button(el, 'Add exercise')).toBeDefined();
     expect(
       Array.from(el.querySelectorAll('button')).some((b) => text(b)?.startsWith('Finish')),
@@ -520,11 +525,14 @@ describe('LogPage', () => {
     expect((await backend.container.logs.getById(fresh.id))!.timerStartedAt).not.toBeNull();
   });
 
-  it('with nothing launched, points back to the plan', async () => {
+  it('with nothing launched, says every workout starts from the plan', async () => {
     const { el } = await render({ launched: false });
     expect(text(el.querySelector('pch-empty-state'))).toContain('Nothing under way');
-    const link = Array.from(el.querySelectorAll('a')).find((a) => text(a) === 'Go to your plan');
-    expect(link?.getAttribute('href')).toBe('/');
+    expect(text(el.querySelector('pch-empty-state'))).toContain(
+      'Every workout starts from your plan',
+    );
+    // The Plan tab is the way there; no second link to it.
+    expect(el.querySelector('a[href="/"]')).toBeNull();
     expect(await backend.container.loggingService.currentLog(DEMO_PEACH_ID)).toBeNull();
   });
 });

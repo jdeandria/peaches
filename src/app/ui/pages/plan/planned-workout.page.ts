@@ -9,7 +9,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { CdkDrag, CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -34,11 +34,7 @@ import {
   loggableFromEntry,
 } from '../../../domain/models/workout-log';
 import { lastEntry } from '../../../domain/services/last-entry';
-import {
-  templateWorkout,
-  WORKOUT_TEMPLATES,
-  WorkoutTemplate,
-} from '../../../domain/services/workout-templates';
+import { templateWorkout, WORKOUT_TEMPLATES } from '../../../domain/services/workout-templates';
 import { AppState } from '../../../state/app-state';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
@@ -49,24 +45,19 @@ import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
 import { HOLD_TO_DRAG, keepFocus, SwipeRow } from '../../layout/swipe-row';
-import { crateExercisesFor, openExercisePicker, recentEntries } from '../log/exercise-picker-sheet';
+import {
+  crateExercisesFor,
+  openExercisePicker,
+  recentEntries,
+  WorkoutStarter,
+} from '../log/exercise-picker-sheet';
 import { SaveRoutineData, SaveRoutineDialog, SaveRoutineResult } from '../log/save-routine-dialog';
 import { openSetLogger } from '../log/set-logger-sheet';
 
 const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' });
 
-/** Where the templates list being open or closed is kept, per device. */
-const TEMPLATES_KEY = 'pch-templates-open';
-/** Crate-mates' latest workouts offered at the top of the templates. */
+/** Crate-mates' latest workouts offered with the templates. */
 const CRATE_WORKOUTS = 5;
-
-function readTemplatesOpen(): boolean {
-  try {
-    return localStorage.getItem(TEMPLATES_KEY) !== 'closed';
-  } catch {
-    return true;
-  }
-}
 
 /** "Mon" for a date. */
 function weekdayOf(date: LocalDate): string {
@@ -91,7 +82,8 @@ function suggestName(exercises: readonly ExerciseLogEntry[]): string {
 /**
  * Plans one workout of a week: its day, where (a location's equipment
  * decides which exercises and templates are offered), and its exercises
- * with target sets, from scratch, a routine or a template. Shows what it's
+ * with target sets, picked one by one or, for an empty workout, from a
+ * routine, a crate-mate's workout or a template (all in the picker). Shows what it's
  * worth in each Crate with a Season on. The exercises can be dragged into
  * another order (held first on a touch screen; Alt and an arrow from a
  * keyboard). Nothing is saved until Save.
@@ -100,7 +92,6 @@ function suggestName(exercises: readonly ExerciseLogEntry[]): string {
   selector: 'pch-planned-workout-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    RouterLink,
     ButtonGroup,
     CdkDrag,
     CdkDropList,
@@ -281,16 +272,13 @@ export class PlannedWorkoutPage {
     })),
   );
 
-  /** Times each template was shuffled, so a reshuffle draws a fresh mix. */
-  private readonly shuffles = signal<Readonly<Record<string, number>>>({});
   /** Ready-made workouts that fit where it's planned, filled at random. */
   protected readonly templates = computed(() => {
     const date = this.date() ?? this.state.today();
-    const shuffles = this.shuffles();
     const logs = this.myLogs() ?? [];
     const kit = this.kit()?.equipment ?? null;
     return WORKOUT_TEMPLATES.map((template) => {
-      const seed = stableHash(`${date}:${template.id}:${shuffles[template.id] ?? 0}`);
+      const seed = stableHash(`${date}:${template.id}`);
       const exercises = templateWorkout(
         template,
         this.state.catalog,
@@ -367,8 +355,34 @@ export class PlannedWorkoutPage {
     });
   });
 
-  /** Whether the templates (and crate-mates' workouts) are listed; kept per device. */
-  protected readonly templatesOpen = signal(readTemplatesOpen());
+  /** Whole workouts to start from, offered in the exercise picker. */
+  private readonly starters = computed<WorkoutStarter[]>(() => [
+    ...this.routines().map((r) => ({
+      key: r.routine.id,
+      group: 'Your routines',
+      name: r.routine.name,
+      tag: null,
+      summary: r.summary,
+      exercises: r.routine.exercises,
+      removable: true,
+    })),
+    ...this.crateWorkouts().map((c) => ({
+      key: c.id,
+      group: 'From your Crates',
+      name: c.name,
+      tag: c.from,
+      summary: c.summary,
+      exercises: c.exercises,
+    })),
+    ...this.templates().map((t) => ({
+      key: t.template.id,
+      group: 'Templates',
+      name: t.template.name,
+      tag: t.template.kit,
+      summary: t.summary,
+      exercises: t.exercises,
+    })),
+  ]);
 
   private readonly fromCrates = this.state.query(
     () => this.me() ?? undefined,
@@ -381,20 +395,6 @@ export class PlannedWorkoutPage {
 
   protected setLocation(id: string | null): void {
     this.locationId.set(id);
-  }
-
-  protected toggleTemplates(): void {
-    const open = !this.templatesOpen();
-    this.templatesOpen.set(open);
-    try {
-      localStorage.setItem(TEMPLATES_KEY, open ? 'open' : 'closed');
-    } catch {
-      // Private mode or blocked storage: it lasts this visit only.
-    }
-  }
-
-  protected shuffle(template: WorkoutTemplate): void {
-    this.shuffles.update((s) => ({ ...s, [template.id]: (s[template.id] ?? 0) + 1 }));
   }
 
   /** Adds exercises after those already planned, skipping repeats. */
@@ -414,6 +414,10 @@ export class PlannedWorkoutPage {
       units: this.state.units(),
       newId: () => this.state.app.ids.newId(),
       kit: this.kit(),
+      // A workout with nothing in it yet can start from a whole one.
+      starters: this.exercises().length === 0 ? this.starters() : [],
+      useStarter: (w) => this.use(w.exercises, w.name),
+      removeStarter: (w) => void this.deleteRoutine(w.key),
     });
     if (exercise) await this.setTargets(exercise);
   }

@@ -65,6 +65,35 @@ describe('PlannedWorkoutPage', () => {
   const pressed = (el: HTMLElement) =>
     Array.from(el.querySelectorAll('.chips .chip[aria-pressed=true]')).map(text);
 
+  /** Opens the exercise picker, where whole workouts to start from are listed first. */
+  async function openPicker(f: ComponentFixture<unknown>, el: HTMLElement): Promise<HTMLElement> {
+    button(el, 'Add exercise')!.click();
+    await stable(f);
+    return overlay().querySelector<HTMLElement>('pch-exercise-picker-sheet')!;
+  }
+  /** The picker's whole workouts: group, name, tag and summary. */
+  const starters = (picker: HTMLElement) =>
+    Array.from(picker.querySelectorAll<HTMLElement>('li.starter')).map((li) => ({
+      group: text(li.closest('ul')?.previousElementSibling),
+      name: li.querySelector('.text .pch-body-large')?.firstChild?.textContent?.trim(),
+      tag: text(li.querySelector('.tag')),
+      summary: text(li.querySelector('.text .muted')),
+      use: li.querySelector<HTMLButtonElement>('button.row')!,
+    }));
+  /** Plans a whole workout from the picker, by group and name. */
+  async function startFrom(
+    f: ComponentFixture<unknown>,
+    el: HTMLElement,
+    group: string,
+    name?: string,
+  ): Promise<void> {
+    const picker = await openPicker(f, el);
+    const pick = starters(picker).find((w) => w.group === group && (!name || w.name === name))!;
+    pick.use.click();
+    await settle(400);
+    await stable(f);
+  }
+
   it('plans a new workout from a template, on the day asked for', async () => {
     const f = await render({ week: nextMonday, workoutId: 'new', day: '2026-10-21' });
     const el: HTMLElement = f.nativeElement;
@@ -72,11 +101,15 @@ describe('PlannedWorkoutPage', () => {
     expect(nameInput(el).placeholder).toBe('New workout');
     expect(text(el.querySelector('.subtitle'))).toBe('Wednesday, October 21');
     expect(el.querySelector('pch-button-group.days')).toBeNull();
-    expect(pressed(el)).toEqual(['Anywhere']);
+    // No places set up: no Where to choose, and no second way into the Gear settings.
+    expect(el.querySelector('.chips')).toBeNull();
+    expect(el.querySelector('a[href*="equipment"]')).toBeNull();
     expect(button(el, 'Add to plan')!.disabled).toBe(true);
+    // One way to add exercises: routines and templates are in the picker, not on the page.
+    expect(el.querySelectorAll('button.add')).toHaveLength(1);
+    expect(el.querySelector('.templates, .routine-use')).toBeNull();
 
-    el.querySelector<HTMLButtonElement>('button.template-use')!.click();
-    await stable(f);
+    await startFrom(f, el, 'Templates', 'Full body');
     expect(el.querySelectorAll('pch-swipe-row .item.clickable').length).toBeGreaterThan(0);
     // What it's worth in each Crate with a Season on.
     expect(text(el.querySelector('.worth'))).toMatch(/^Worth [\d.]+ pts in Lunch Break Lifters/);
@@ -92,8 +125,7 @@ describe('PlannedWorkoutPage', () => {
   it('puts the exercises in another order', async () => {
     const f = await render({ week: nextMonday, workoutId: 'new', day: '2026-10-21' });
     const el: HTMLElement = f.nativeElement;
-    el.querySelector<HTMLButtonElement>('button.template-use')!.click();
-    await stable(f);
+    await startFrom(f, el, 'Templates', 'Full body');
     const before = names(el).map((n) => n ?? '');
     expect(before.length).toBeGreaterThan(1);
     const remove = (name: string) => button(el, `Remove ${name}`)!;
@@ -152,9 +184,9 @@ describe('PlannedWorkoutPage', () => {
     const el: HTMLElement = f.nativeElement;
     expect(pressed(el)).toEqual(['Home']);
     // Gym templates make do with what's at home; none comes out empty.
-    const templates = Array.from(el.querySelectorAll('button.template-use')).map(text);
+    const templates = starters(await openPicker(f, el)).filter((w) => w.group === 'Templates');
     expect(templates.length).toBeGreaterThan(0);
-    expect(templates.every((t) => !t?.includes('0 exercises'))).toBe(true);
+    expect(templates.every((t) => !t.summary?.startsWith('0 exercises'))).toBe(true);
   });
 
   it('a workout that isn’t in the plan says so', async () => {
@@ -168,21 +200,28 @@ describe('PlannedWorkoutPage', () => {
     const f = await render({ week: nextMonday, workoutId: 'new' });
     const toast = vi.spyOn(TestBed.inject(AppState), 'toast').mockImplementation(() => undefined);
     const el: HTMLElement = f.nativeElement;
+    const picker = await openPicker(f, el);
     const routines = () =>
-      Array.from(
-        el.querySelectorAll('.routine-use:not(.template-use, .crate-use) .pch-title-medium'),
-      ).map(text);
+      starters(picker)
+        .filter((w) => w.group === 'Your routines')
+        .map((w) => w.name);
     expect(routines()).toEqual(['Full body', 'Swing day']);
-    button(el, 'Delete routine Swing day')!.click();
+    button(picker, 'Delete routine Swing day')!.click();
     await stable(f);
     expect(routines()).toEqual(['Full body']);
+    expect((await backend.container.routines.forPeach(DEMO_PEACH_ID)).map((r) => r.name)).toEqual([
+      'Full body',
+    ]);
     toast.mock.calls.find(([m]) => m === 'Deleted “Swing day”.')![1]!();
     await stable(f);
-    expect(routines()).toEqual(['Full body', 'Swing day']);
-
-    el.querySelectorAll<HTMLButtonElement>(
-      '.routine-use:not(.template-use, .crate-use)',
-    )[0].click();
+    expect((await backend.container.routines.forPeach(DEMO_PEACH_ID)).map((r) => r.name)).toEqual([
+      'Full body',
+      'Swing day',
+    ]);
+    starters(picker)
+      .find((w) => w.name === 'Full body')!
+      .use.click();
+    await settle(400);
     await stable(f);
     expect(names(el)).toEqual([
       'Goblet Squat',
@@ -213,62 +252,42 @@ describe('PlannedWorkoutPage', () => {
     expect(toast).toHaveBeenCalledWith('Saved “Upper & lower”.');
   });
 
-  it('lists crate-mates’ workouts first, and folds the templates away', async () => {
-    localStorage.removeItem('pch-templates-open');
+  it('offers routines, then crate-mates’ workouts, then templates, only while it’s empty', async () => {
     const f = await render({ week: nextMonday, workoutId: 'new' });
     const el: HTMLElement = f.nativeElement;
-    const toggle = () => button(el, 'Templates')!;
-    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+    const all = starters(await openPicker(f, el));
+    const groups = [...new Set(all.map((w) => w.group))];
+    expect(groups).toEqual(['Your routines', 'From your Crates', 'Templates']);
+    // Crate-mates' workouts are tagged with who did them; templates with the kit they need.
+    const crate = all.filter((w) => w.group === 'From your Crates');
+    expect(crate.length).toBeGreaterThan(0);
+    expect(crate.every((w) => /^[A-Z]\w+$/.test(w.tag ?? ''))).toBe(true);
+    const template = (name: string) => all.find((w) => w.group === 'Templates' && w.name === name)!;
+    expect(template('Full body').tag).toBe('Dumbbells');
+    expect(template('Easy run').summary).toMatch(/1 exercise · (Run|Easy Jog)/);
 
-    // Folded away, and remembered on this device.
-    toggle().click();
-    await stable(f);
-    expect(toggle().getAttribute('aria-expanded')).toBe('false');
-    expect(el.querySelector('#pch-templates')).toBeNull();
-    expect(localStorage.getItem('pch-templates-open')).toBe('closed');
-    toggle().click();
-    await stable(f);
-    expect(localStorage.getItem('pch-templates-open')).toBe('open');
-
-    // Crate-mates' workouts lead, tagged with who did them.
-    const first = el.querySelector<HTMLButtonElement>('#pch-templates .item button')!;
-    expect(first.classList).toContain('crate-use');
-    expect(text(first.querySelector('.kit.from'))).toMatch(/^group ?[A-Z]\w+$/);
-    first.click();
+    crate[0].use.click();
+    await settle(400);
     await stable(f);
     expect(names(el).length).toBeGreaterThan(0);
     expect(nameInput(el).value).not.toBe('');
-    localStorage.removeItem('pch-templates-open');
+    // Once it has exercises, the picker is for exercises only.
+    const picker = await openPicker(f, el);
+    expect(starters(picker)).toHaveLength(0);
   });
 
-  it('offers templates, reshuffled on demand', async () => {
+  it('starts from a template', async () => {
     const f = await render({ week: nextMonday, workoutId: 'new' });
     const el: HTMLElement = f.nativeElement;
-    const template = (name: string) =>
-      Array.from(el.querySelectorAll<HTMLButtonElement>('.template-use')).find((b) =>
-        text(b.querySelector('.pch-title-medium'))?.startsWith(name),
-      )!;
-    expect(text(template('Full body').querySelector('.kit'))).toBe('Dumbbells');
-    expect(text(template('Easy run'))).toMatch(/1 exercise · (Run|Easy Jog)/);
-    // Shuffling draws another mix; some shuffle soon differs.
-    const before = text(template('Upper body'));
-    let after = before;
-    for (let i = 0; i < 5 && after === before; i++) {
-      button(el, 'Shuffle Upper body')!.click();
-      await stable(f);
-      after = text(template('Upper body'));
-    }
-    expect(after).not.toBe(before);
-    template('Upper body').click();
-    await stable(f);
+    await startFrom(f, el, 'Templates', 'Upper body');
     expect(names(el)).toHaveLength(5);
+    expect(nameInput(el).value).toBe('Upper body');
   });
 
   it('a workout for today can be added and started at once', async () => {
     const f = await render({ week: thisMonday, workoutId: 'new', day: '2026-10-12' });
     const el: HTMLElement = f.nativeElement;
-    el.querySelector<HTMLButtonElement>('button.template-use')!.click();
-    await stable(f);
+    await startFrom(f, el, 'Templates', 'Full body');
     button(el, 'Add and start')!.click();
     await stable(f);
     expect(TestBed.inject(Router).url).toBe('/log?mode=log');
@@ -282,8 +301,7 @@ describe('PlannedWorkoutPage', () => {
   it('only today’s workouts start from the planner', async () => {
     const f = await render({ week: nextMonday, workoutId: 'new' });
     const el: HTMLElement = f.nativeElement;
-    el.querySelector<HTMLButtonElement>('button.template-use')!.click();
-    await stable(f);
+    await startFrom(f, el, 'Templates', 'Full body');
     expect(button(el, 'Add and start')).toBeUndefined();
   });
 });

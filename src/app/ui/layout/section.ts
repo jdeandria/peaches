@@ -19,7 +19,7 @@ import { ChangeDetectionStrategy, Component, input, numberAttribute } from '@ang
       align-items: center;
       gap: 8px;
       min-height: 40px;
-      padding: 24px 4px 12px;
+      padding: 24px 0 8px;
     }
     h2 {
       flex: 1;

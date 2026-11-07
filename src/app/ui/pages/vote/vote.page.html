@@ -14,10 +14,9 @@
     showBack
     [backLink]="'/crates/' + crateId()"
   >
-    <p class="intro pch-body-large" [pchStagger]="0">
-      Vote on how your Crate scores. First split {{ budget }} points across the kinds of training:
-      each number is the points for one “par”, a solid session of that kind. The Crate uses the
-      average of everyone’s votes.
+    <p class="pch-note" [pchStagger]="0">
+      Split {{ budget }} points across the kinds of training, each for one solid session. The Crate
+      uses everyone’s average.
     </p>
 
     <div class="budget" [pchStagger]="0" role="status">
@@ -77,11 +76,7 @@
     </button>
 
     <pch-section title="Plans" />
-    <p class="pch-body-medium muted plan-intro">
-      Each week you commit to what your plan is worth, and your opponent sees the number as you
-      plan. Hit it and you earn a bonus; fall short and you pay for every point you miss. For each
-      rule, the middle vote wins.
-    </p>
+    <p class="pch-note">For each rule, the middle vote wins.</p>
     <pch-list-card [pchStagger]="2">
       @for (r of planRules(); track r.key) {
         <div class="category">
@@ -126,26 +121,15 @@
       }
     </pch-list-card>
 
-    <div class="actions">
-      <button
-        matButton="filled"
-        type="button"
-        class="save"
-        [disabled]="busy() || left() !== 0"
-        (click)="save()"
-      >
-        {{ d.mine ? 'Update my vote' : 'Cast my vote' }}
-      </button>
-    </div>
     @if (d.season) {
-      <p class="pch-body-small muted note">
+      <p class="pch-note season-note">
         “{{ d.season.name }}” keeps the rules it started with; votes apply to the next Season.
       </p>
     }
 
     @if (d.manager && grace() !== null) {
       <pch-section title="Grace period" />
-      <pch-card variant="outlined" class="grace" [pchStagger]="3">
+      <pch-card class="grace" [pchStagger]="3">
         <div class="what">
           <span class="pch-title-medium">{{ grace() }} h after Sunday</span>
           <span class="pch-body-small muted"
@@ -175,5 +159,17 @@
         </div>
       </pch-card>
     }
+
+    <div pageBottomBar class="actions">
+      <button
+        matButton="filled"
+        type="button"
+        class="save"
+        [disabled]="busy() || left() !== 0"
+        (click)="save()"
+      >
+        {{ d.mine ? 'Update my vote' : 'Cast my vote' }}
+      </button>
+    </div>
   </pch-page>
 }

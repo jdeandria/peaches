@@ -62,7 +62,7 @@ export interface ButtonGroupOption<T> {
       flex: 1 1 0;
       min-width: 0;
       height: var(--pch-bg-height);
-      padding: 0 12px;
+      padding: 0 8px;
       border: 0;
       border-radius: 8px;
       background: var(--mat-sys-surface-container-highest);
@@ -117,7 +117,8 @@ export class ButtonGroup<T> {
   readonly allowDeselect = input(false, { transform: booleanAttribute });
   /** Accessible name of the group. */
   readonly label = input<string>();
-  readonly height = input(48, { transform: numberAttribute });
+  /** Height in px: one size everywhere, so switchers look alike from screen to screen. */
+  readonly height = input(40, { transform: numberAttribute });
   /** Emitted when the user changes the selection. */
   readonly selectionChange = output<T | null>();
 

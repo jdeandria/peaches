@@ -25,6 +25,13 @@ describe('Fmt', () => {
     });
   });
 
+  it('writes negative points with a real minus sign, and never −0', () => {
+    expect(Fmt.points(19.5)).toBe('19.5');
+    expect(Fmt.points(-39.5)).toBe('−39.5');
+    expect(Fmt.points(-40)).toBe('−40');
+    expect(Fmt.points(-0.01)).toBe('0.0');
+  });
+
   it('volume groups thousands in the chosen units', () => {
     expect(Fmt.volume(2450, 'metric')).toBe('2,450 kg');
     expect(Fmt.volume(1000, 'imperial')).toBe('2,205 lb');

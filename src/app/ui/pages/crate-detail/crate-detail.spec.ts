@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
@@ -8,6 +9,7 @@ import { Crate } from '../../../domain/models/crate';
 import { categoryWeights, DEFAULT_PLAN_RULES } from '../../../domain/models/scoring';
 import { matchup, Round } from '../../../domain/models/season';
 import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
+import { CrateSheetData } from '../crates/crate-actions-sheet';
 import { CrateDetailPage, roundViews } from './crate-detail.page';
 import { NewSeasonDialog, startWeekOptions } from './new-season-dialog';
 
@@ -52,69 +54,67 @@ describe('CrateDetailPage', () => {
 
   afterEach(() => localStorage.clear());
 
-  it('leads with this week’s matchup and switches between my Crates', async () => {
+  it('leads with this week’s matchup, and switches Crates from the headline', async () => {
     const crate = await myCrate(backend, 'Weekend Warriors');
     const lifters = await myCrate(backend, 'Lunch Break Lifters');
     const el = await render(crate.id);
-    // The tab's own page: no way back, a chip per Crate instead.
+    // The tab's own page: no way back. The name is the way to another Crate.
     expect(el.querySelector('button[aria-label=Back]')).toBeNull();
-    const chips = Array.from(el.querySelectorAll<HTMLElement>('pch-crate-switcher .chip'));
-    expect(chips.map((c) => c.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
-      'Lunch Break Lifters',
-      'check Weekend Warriors',
-      'add Add Crate',
-    ]);
-    expect(chips[1].getAttribute('aria-current')).toBe('page');
-    expect(chips[0].getAttribute('href')).toBe(`/crates/${lifters.id}`);
+    const title = el.querySelector<HTMLButtonElement>('h1 button')!;
+    expect(title.textContent).toContain('Weekend Warriors');
+    expect(el.querySelector('pch-crate-switcher, .chips')).toBeNull();
+    const sheet = TestBed.inject(MatBottomSheet);
+    const open = vi.spyOn(sheet, 'open');
+    title.click();
+    expect(open).toHaveBeenCalledTimes(1);
+    const data = open.mock.calls[0][1]?.data as CrateSheetData;
+    expect(data.current).toBe(crate.id);
+    expect(data.crates.map((c) => c.id).sort()).toEqual([crate.id, lifters.id].sort());
+    sheet.dismiss();
     // The Crates tab reopens it next time.
     expect(localStorage.getItem('pch.lastCrate')).toBe(crate.id);
 
-    // Week 3 against Cho, with both plans.
-    const hero = el.querySelector('pch-matchup-hero-card')!;
-    expect(hero.textContent).toContain('vs Cho');
-    expect(hero.textContent).toContain('Week 3 · Oct 12 – 18');
-    const plans = Array.from(hero.querySelectorAll('.plans li > span:last-child')).map((li) =>
-      li.textContent?.replace(/\s+/g, ' ').trim(),
+    // The Season and week under the name; the views right under that.
+    expect(el.querySelector('.subtitle')?.textContent?.trim()).toBe(
+      'Autumn Kick-off · Week 3 of 6',
     );
-    expect(plans).toHaveLength(2);
-    expect(plans[0]).toMatch(/^You [\d.]+ of [\d.]+ planned$/);
-    expect(plans[1]).toMatch(/^Cho [\d.]+ of [\d.]+ planned$/);
-    expect(hero.querySelector('a')?.getAttribute('href')).toMatch(/^\/matchups\//);
+    const header = el.querySelector('.header')!;
+    const views = el.querySelector('pch-button-group')!;
+    expect(header.nextElementSibling?.contains(views)).toBe(true);
+    expect(el.querySelector('.content')?.firstElementChild?.tagName).toBe('PCH-BUTTON-GROUP');
+
+    // Week 3 against Cho: the same card as on the Plan, without the week again.
+    const card = el.querySelector('pch-matchup-card')!;
+    const sides = Array.from(card.querySelectorAll('.side')).map((s) =>
+      [s.querySelector('.name'), s.querySelector('.caption')].map((e) => e?.textContent?.trim()),
+    );
+    expect(sides).toHaveLength(2);
+    expect(sides[0].join(' ')).toMatch(/^You [\d.]+ of [\d.]+ planned$/);
+    expect(sides[1].join(' ')).toMatch(/^Cho [\d.]+ of [\d.]+ planned$/);
+    expect(card.querySelector('.meta')).toBeNull();
+    expect(card.querySelector('a')?.getAttribute('href')).toMatch(/^\/matchups\//);
   });
 
-  it('a Season that hasn’t started says when, and asks for a plan', async () => {
+  it('a Season that hasn’t started says when', async () => {
     const lifters = await myCrate(backend, 'Lunch Break Lifters');
     const el = await render(lifters.id);
-    const note = el.querySelector('.week-note')!;
-    expect(note.textContent).toContain('Strength Block 1 starts Mon, Oct 19.');
-    expect(note.querySelector('a')?.getAttribute('href')).toBe('/?week=next');
-    expect(el.querySelector('pch-matchup-hero-card')).toBeNull();
+    expect(el.textContent).toContain('Strength Block 1 starts Mon, Oct 19.');
+    expect(el.querySelector('pch-matchup-card')).toBeNull();
+    // The Plan tab is where planning happens; no shortcut to it here.
+    expect(el.querySelector('a[href="/?week=next"]')).toBeNull();
   });
 
   it('shows disputes to vote on, then the Season, activity or members', async () => {
     const crate = await myCrate(backend, 'Weekend Warriors');
     const el = await render(crate.id);
-    expect(el.querySelector('h1')?.textContent).toBe('Weekend Warriors');
-    expect(el.textContent).toContain('Every workout counts. Most points each week wins.');
-    expect(el.textContent).toContain('Rules · 3 of 5 voted');
-    expect(el.querySelector('.chips a.chip')?.getAttribute('href')).toBe(
-      `/crates/${crate.id}/vote`,
-    );
-    expect(el.textContent).toContain(`Code ${crate.inviteCode}`);
+    expect(el.querySelector('h1')?.textContent).toContain('Weekend Warriors');
 
     const headings = () => Array.from(el.querySelectorAll('h2')).map((h) => h.textContent?.trim());
-    expect(headings()).toEqual([
-      'This week',
-      'Your vote needed',
-      'Autumn Kick-off',
-      'Your results',
-      'Coming up',
-      'Weeks',
-    ]);
-    // Two weeks played, three to come.
-    expect(el.querySelectorAll('.results pch-matchup-row')).toHaveLength(2);
-    expect(el.querySelector('.record')?.textContent?.trim()).toMatch(/^\d-\d(-\d)?$/);
-    expect(el.querySelectorAll('.coming-up pch-matchup-row')).toHaveLength(3);
+    // What needs me first, then what's live, then the rest.
+    expect(headings()).toEqual(['Your vote needed', 'This week', 'Standings', 'Weeks', 'Rules']);
+    const rules = el.querySelector<HTMLAnchorElement>('a.rules')!;
+    expect(rules.getAttribute('href')).toBe(`/crates/${crate.id}/vote`);
+    expect(rules.textContent).toContain('3 of 5 voted');
     const views = Array.from(el.querySelectorAll('pch-button-group [role=radio]'));
     expect(views.map((v) => v.textContent?.trim())).toEqual(['Season', 'Activity', 'Peaches']);
     expect(views[0].getAttribute('aria-checked')).toBe('true');
@@ -122,13 +122,20 @@ describe('CrateDetailPage', () => {
     const dispute = el.querySelector<HTMLAnchorElement>('a.dispute-link')!;
     expect(dispute.textContent).toContain('Ben disputed it');
     expect(dispute.getAttribute('href')).toMatch(new RegExp(`^/crates/${crate.id}/logs/`));
-    expect(el.textContent).toContain('Active');
     expect(el.querySelectorAll('pch-standings-table tbody tr')).toHaveLength(5);
     expect(el.querySelector('pch-standings-table [aria-current]')?.textContent).toContain('You');
 
-    const weeks = el.querySelectorAll('.weeks pch-list-row');
+    // Each week once, with my result in it: no separate results or coming-up lists.
+    const weeks = Array.from(el.querySelectorAll('.weeks pch-list-row')).map((w) =>
+      Array.from(w.querySelectorAll('.stretched, [rowSubtitle]'))
+        .map((e) => e.textContent?.trim())
+        .join(' '),
+    );
     expect(weeks).toHaveLength(6);
-    expect(weeks[2].textContent).toContain('Week 3 · Oct 12 – 18');
+    expect(weeks[0]).toMatch(/Week 1 · Sep 28 – Oct 4 vs Ben · (Won|Lost|Tie) [\d.]+–[\d.]+/);
+    expect(weeks[2]).toBe('Week 3 · Oct 12 – 18 vs Cho');
+    expect(weeks[3]).toBe('Bye');
+    expect(el.querySelectorAll('pch-matchup-row')).toHaveLength(0);
     // Not a manager: statuses, no Open/Close buttons, no Season FAB.
     expect(el.querySelector('.weeks button')).toBeNull();
     expect(el.querySelector('button[matFab]')).toBeNull();
@@ -136,7 +143,7 @@ describe('CrateDetailPage', () => {
     expect(el.querySelectorAll('.weeks a.stretched')).toHaveLength(3);
 
     await show('activity');
-    expect(headings()).toEqual(['This week', 'Your vote needed', 'Recent workouts', 'Exercises']);
+    expect(headings()).toEqual(['Recent workouts', 'Exercises']);
     // Every workout opens: mine to edit, crate-mates' to view and dispute.
     const activity = el.querySelectorAll<HTMLAnchorElement>('.activity a[pch-list-row]');
     expect(activity).toHaveLength(8);
@@ -161,7 +168,10 @@ describe('CrateDetailPage', () => {
     expect(exercises.some((e) => e?.includes('From you'))).toBe(true);
 
     await show('peaches');
-    expect(headings()).toEqual(['This week', 'Your vote needed', 'Peaches']);
+    expect(headings()).toEqual(['Invite', 'Peaches']);
+    // The Crate's description and its invite code live with its members.
+    expect(el.textContent).toContain('Every workout counts. Most points each week wins.');
+    expect(el.querySelector('button.invite')?.textContent).toContain(`Code ${crate.inviteCode}`);
     const members = el.querySelectorAll('.members pch-list-row');
     expect(members).toHaveLength(5);
     expect(members[0].textContent).toContain('Ada');
@@ -181,9 +191,8 @@ describe('CrateDetailPage', () => {
       now: FIXED_NOW,
     });
     el = await render(crate.id);
-    expect(el.textContent).toContain('No Season yet. Start one');
-    expect(el.querySelector('.week-note')?.textContent).toContain(
-      'No Season yet, so no matchup this week. Start one below.',
+    expect(el.textContent).toContain(
+      'No Season yet, so no matchup this week. Start one with the Season button.',
     );
     expect(el.querySelector('button[matFab]')?.textContent).toContain('Season');
     await show('activity');
@@ -228,10 +237,19 @@ describe('roundViews', () => {
     expect(views.map((v) => v.action)).toEqual([null, null, null, null]);
     expect(views.map((v) => v.subtitle)).toEqual([
       'Bye',
-      'You have a matchup',
+      'vs your opponent',
       null,
-      'You have a matchup',
+      'vs your opponent',
     ]);
+    const named = roundViews({
+      rounds,
+      matchups,
+      me: 'me',
+      canManage: false,
+      today,
+      names: new Map([['ada', 'Ada']]),
+    });
+    expect(named[1].subtitle).toBe('vs Ada');
     expect(views.map((v) => v.matchupLink)).toEqual([
       ['/matchups', 'm0'],
       ['/matchups', 'm1'],

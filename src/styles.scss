@@ -46,3 +46,13 @@ html {
     white-space: nowrap;
   }
 }
+
+// A line of quiet text in place of a card: what an empty list says, or a
+// note under a section. One style for all of them, aligned with the content.
+.pch-note {
+  margin: 0;
+  padding: 4px 0 8px;
+  font: var(--mat-sys-body-medium);
+  letter-spacing: var(--mat-sys-body-medium-tracking);
+  color: var(--mat-sys-on-surface-variant);
+}

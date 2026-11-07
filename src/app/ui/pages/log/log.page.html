@@ -9,9 +9,6 @@
       title="Nothing under way"
       message="Every workout starts from your plan: put it on a day, then start it."
     />
-    <div class="empty-action">
-      <a matButton="filled" routerLink="/">Go to your plan</a>
-    </div>
   </pch-page>
 } @else if (!log() || !mine()) {
   <pch-page title="Workout" showBack backLink="/">
@@ -27,48 +24,46 @@
 } @else {
   <pch-page [title]="title()" [subtitle]="subtitle()" showBack backLink="/">
     @if (!draft()) {
-      <button
-        pageActions
-        matIconButton
-        type="button"
-        matTooltip="Delete workout"
-        aria-label="Delete workout"
-        (click)="deleteWorkout()"
-      >
-        <span class="material-symbols-rounded" aria-hidden="true">delete</span>
-      </button>
+      <ng-container pageActions>
+        <button
+          matIconButton
+          type="button"
+          matTooltip="Edit details"
+          aria-label="Edit details"
+          (click)="editDetails()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">edit_calendar</span>
+        </button>
+        <button
+          matIconButton
+          type="button"
+          matTooltip="Delete workout"
+          aria-label="Delete workout"
+          (click)="deleteWorkout()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+        </button>
+      </ng-container>
     }
-    @if (!draft() || started()) {
-      <div class="clock" [class.running]="draft() && started()" [pchStagger]="0">
+    @if (draft() && started()) {
+      <div class="clock running" [pchStagger]="0">
         <span class="material-symbols-rounded" aria-hidden="true">timer</span>
         <span class="pch-display-small time" [attr.aria-label]="'Session time ' + clock()">{{
           clock()
         }}</span>
         <span class="pch-body-small hint">{{ clockHint() }}</span>
-        @if (!draft()) {
-          <button matButton type="button" class="edit-details" (click)="editDetails()">
-            <span class="material-symbols-rounded" aria-hidden="true">edit_calendar</span>
-            Edit details
-          </button>
-        }
       </div>
     }
 
-    @if (totals().length > 0) {
-      <h2 id="totals-caption" class="caption pch-label-large" [pchStagger]="1">
-        This workout adds up to
-      </h2>
-      <ul class="totals" [pchStagger]="1" aria-labelledby="totals-caption">
-        @for (t of totals(); track t.category) {
-          <li class="total">
-            <span class="material-symbols-rounded" aria-hidden="true">{{ t.icon }}</span>
-            <span class="pch-title-medium">{{ t.amount }}</span>
-            <span class="pch-label-small muted">{{ t.label }}</span>
-          </li>
-        }
-      </ul>
+    @if (tiles().length > 0) {
+      <pch-stat-tiles
+        class="tiles"
+        [pchStagger]="1"
+        [tiles]="tiles()"
+        aria-label="This workout adds up to"
+      />
       @if (cratePoints().length > 0) {
-        <p class="points pch-body-medium" [pchStagger]="1">
+        <p class="pch-note points" [pchStagger]="1">
           @for (c of cratePoints(); track c.name; let last = $last) {
             <span
               ><strong>{{ c.points }} pts</strong> in {{ c.name }}{{ last ? '' : ' · ' }}</span
@@ -84,22 +79,7 @@
           <span sectionTrailing class="pch-label-large muted"
             >{{ progress().done }} of {{ progress().total }} sets done</span
           >
-          @if (planned().length > 1) {
-            <button
-              sectionTrailing
-              matIconButton
-              type="button"
-              matTooltip="Exercise order"
-              aria-label="Exercise order"
-              (click)="reorder()"
-            >
-              <span class="material-symbols-rounded" aria-hidden="true">swap_vert</span>
-            </button>
-          }
         </pch-section>
-        <p class="swipe-hint pch-body-small muted">
-          Swipe an exercise right to edit, left to remove; hold it to move it.
-        </p>
         <pch-list-card
           [pchStagger]="2"
           cdkDropList
@@ -109,11 +89,9 @@
         >
           @for (p of planned(); track p.entry.exerciseId; let i = $index) {
             <pch-swipe-row
-              editable
               removable
               cdkDrag
               [cdkDragStartDelay]="holdToDrag"
-              (edit)="editEntry(p.entry)"
               (remove)="removeEntry(p.entry)"
               (keydown.alt.arrowup)="moveExercise(i, i - 1, $event)"
               (keydown.alt.arrowdown)="moveExercise(i, i + 1, $event)"
@@ -177,17 +155,9 @@
       }
     } @else if (entries().length > 0) {
       <pch-section title="Exercises" />
-      <p class="swipe-hint pch-body-small muted">
-        Swipe an exercise right to edit, left to remove.
-      </p>
       <pch-list-card [pchStagger]="2">
         @for (v of entries(); track v.entry.exerciseId) {
-          <pch-swipe-row
-            editable
-            removable
-            (edit)="editEntry(v.entry)"
-            (remove)="removeEntry(v.entry)"
-          >
+          <pch-swipe-row removable (remove)="removeEntry(v.entry)">
             <!-- The row is a larger mouse target; keyboard and screen readers use its buttons. -->
             <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
             <div class="item clickable" (click)="rowClick($event, v.entry)">

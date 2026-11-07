@@ -8,67 +8,6 @@
   margin: 24px auto;
 }
 
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 16px 0 8px;
-  box-sizing: border-box;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: var(--pch-radius-small);
-  background: none;
-  color: var(--mat-sys-on-surface);
-  text-decoration: none;
-  font: var(--mat-sys-label-large);
-  letter-spacing: var(--mat-sys-label-large-tracking);
-
-  .material-symbols-rounded {
-    font-size: 18px;
-    color: var(--mat-sys-primary);
-  }
-}
-
-.chip.action {
-  cursor: pointer;
-
-  // 48px touch target around the 32px chip.
-  &::before {
-    content: '';
-    position: absolute;
-    inset: -8px 0;
-  }
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: var(--mat-sys-on-surface);
-    opacity: 0;
-    transition: opacity 150ms linear;
-  }
-
-  &:hover::after {
-    opacity: var(--mat-sys-hover-state-layer-opacity);
-  }
-
-  &:active::after {
-    opacity: var(--mat-sys-pressed-state-layer-opacity);
-  }
-}
-
-.no-season {
-  margin-top: 24px;
-}
-
 .round-number {
   display: grid;
   place-items: center;
@@ -140,7 +79,15 @@ pch-two-pane,
 }
 
 .views {
-  margin: 24px 0 8px;
+  margin-bottom: 8px;
+}
+
+.icon {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.description {
+  padding-top: 8px;
 }
 
 .disputes {
@@ -157,37 +104,4 @@ pch-two-pane,
 
 .show-all {
   margin-top: 8px;
-}
-
-.switcher {
-  margin-bottom: 8px;
-}
-
-.hero {
-  margin-bottom: 16px;
-}
-
-.week-note {
-  --pch-card-padding: 16px 20px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 16px;
-  margin-bottom: 16px;
-
-  p {
-    flex: 1;
-    min-width: 200px;
-    margin: 0;
-  }
-
-  .material-symbols-rounded {
-    margin-inline-end: 8px;
-    font-size: 20px;
-  }
-}
-
-.record {
-  color: var(--mat-sys-on-surface-variant);
-  font-variant-numeric: tabular-nums;
 }

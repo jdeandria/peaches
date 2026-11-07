@@ -22,7 +22,8 @@ test('core journey: plan against your opponent, launch a workout, see it score',
 }) => {
   await openApp(page);
   await expect(page.getByRole('heading', { name: 'Plan', level: 1 })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '1 of 4 workouts done' })).toBeVisible();
+  // How the week is going sits under the title, as every tab's context line does.
+  await expect(page.getByText('Oct 12 – 18 · 1 of 4 done')).toBeVisible();
 
   // Next week: Cho has planned and I haven't, so the strip says how far behind I am.
   await page.getByRole('radio', { name: 'Next week' }).click();
@@ -53,7 +54,7 @@ test('core journey: plan against your opponent, launch a workout, see it score',
   await expect(page.getByText('1 set · 5 km · 25:00')).toBeVisible();
   await expect(page.getByText(/pts in Lunch Break Lifters/)).toBeVisible();
   await page.getByRole('button', { name: 'Add to plan' }).click();
-  await expect(page.getByRole('heading', { name: '1 workout planned' })).toBeVisible();
+  await expect(page.getByText('Oct 19 – 25 · 1 workout planned')).toBeVisible();
 
   // This week: launch Wednesday's run straight into the sets.
   await page.getByRole('radio', { name: 'This week' }).click();
@@ -65,22 +66,22 @@ test('core journey: plan against your opponent, launch a workout, see it score',
   await expect(page.getByText('Workout logged. Nice work.')).toBeVisible();
   await expect(page.getByText(/pts in Weekend Warriors/)).toBeVisible();
   await nav(page, 'Plan').click();
-  await expect(page.getByRole('heading', { name: '2 of 4 workouts done' })).toBeVisible();
+  await expect(page.getByText('Oct 12 – 18 · 2 of 4 done')).toBeVisible();
 
   // It counts in this week's matchup, line by line, plans included.
   await nav(page, 'Crates').click();
   await expect(page.getByRole('heading', { name: 'Weekend Warriors', level: 1 })).toBeVisible();
   await page.getByRole('link', { name: /View matchup/ }).click();
   await expect(page.getByRole('heading', { name: 'You vs Cho' })).toBeVisible();
-  await expect(page.getByText(/Live · You lead/)).toBeVisible();
+  // The same matchup card as on the Plan and the Crate, then how the score adds up.
+  await expect(page.getByText('Ends in 6 d')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'How the score adds up' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Plans' })).toBeVisible();
 
   // Vote on the Crate's rules.
   await nav(page, 'Crates').click();
   await expect(page.getByText('Autumn Kick-off')).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'W-L-T' })).toBeVisible();
-  await page.getByRole('link', { name: /Rules ·/ }).click();
+  await page.getByRole('link', { name: /What each workout is worth/ }).click();
   await page.getByRole('button', { name: 'Even split' }).click();
   await page.getByRole('button', { name: 'More: Shortfall penalty' }).click();
   await page.getByRole('button', { name: 'Cast my vote' }).click();
@@ -110,7 +111,7 @@ test('make up an exercise, add it for today and start it; crate-mates see it cam
 
   // It's on today's plan, done.
   await nav(page, 'Plan').click();
-  await expect(page.getByRole('heading', { name: '2 of 5 workouts done' })).toBeVisible();
+  await expect(page.getByText('Oct 12 – 18 · 2 of 5 done')).toBeVisible();
 
   await nav(page, 'Crates').click();
   await page.getByRole('radio', { name: 'Activity' }).click();
@@ -121,15 +122,20 @@ test('make up an exercise, add it for today and start it; crate-mates see it cam
 test('every workout starts from the plan', async ({ page }) => {
   await openApp(page, '/log');
   await expect(page.getByRole('heading', { name: 'Nothing under way' })).toBeVisible();
-  await page.getByRole('link', { name: 'Go to your plan' }).click();
+  // The Plan tab is the one way there.
+  await nav(page, 'Plan').click();
   await expect(page.getByRole('heading', { name: 'Plan', level: 1 })).toBeVisible();
 });
 
 test('plan a routine, launch it and tick it off, resting between sets', async ({ page }) => {
   await openApp(page);
   await page.getByRole('link', { name: 'Plan a workout on Tue, Oct 13' }).click();
-  // One tap fills the workout from the routine.
-  await page.getByRole('button', { name: /^Swing day/ }).click();
+  // Routines are in the exercise picker: one tap fills the workout from one.
+  await page.getByRole('button', { name: 'Add exercise' }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: /^Swing day/ })
+    .click();
   await expect(page.getByText('6 sets')).toBeVisible();
   await page.getByRole('button', { name: 'Add to plan' }).click();
   await page.getByRole('button', { name: 'Start Swing day' }).click();
@@ -151,16 +157,16 @@ test('repeat this week as next week’s plan, and take a workout off it', async 
   await openApp(page, '/?week=next');
   await page.getByRole('button', { name: 'Repeat this week' }).click();
   await expect(page.getByText('Planned 4 workouts from the week before.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: '4 workouts planned' })).toBeVisible();
+  await expect(page.getByText('Oct 19 – 25 · 4 workouts planned')).toBeVisible();
   // On touch screens swiping does this; the button is there for keyboards.
   await page
     .getByRole('button', { name: /off the plan$/ })
     .first()
     .focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: '3 workouts planned' })).toBeVisible();
+  await expect(page.getByText('Oct 19 – 25 · 3 workouts planned')).toBeVisible();
   await page.getByRole('button', { name: 'Undo' }).click();
-  await expect(page.getByRole('heading', { name: '4 workouts planned' })).toBeVisible();
+  await expect(page.getByText('Oct 19 – 25 · 4 workouts planned')).toBeVisible();
 });
 
 test('dispute a crate-mate’s numbers and vote on them', async ({ page }) => {
@@ -201,7 +207,7 @@ test('You shows the seeded Peach, saves a location and switches units', async ({
   await expect(page.getByRole('heading', { name: 'Plan kept' })).toBeVisible();
 
   await page.getByRole('radio', { name: 'Gear' }).click();
-  await page.getByRole('button', { name: /Add a location/ }).click();
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Home' }).click();
   await dialog.getByRole('button', { name: 'Save' }).click();
@@ -215,14 +221,18 @@ test('You shows the seeded Peach, saves a location and switches units', async ({
 
 test('creating a crate opens its detail page', async ({ page }) => {
   await openApp(page, '/crates');
-  await page.getByRole('button', { name: 'Add Crate' }).click();
+  // The Crate's name is the way to another one, or a new one.
+  await page.getByRole('button', { name: /switch Crate/ }).click();
   await page.getByRole('button', { name: /Create a Crate/ }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name').fill('Garage Gym');
   await dialog.getByRole('button', { name: 'Create' }).click();
   await expect(page.getByRole('heading', { name: 'Garage Gym', level: 1 })).toBeVisible();
+  await expect(page.getByText(/No Season yet, so no matchup this week/)).toBeVisible();
+  // Inviting is with the Peaches.
+  await page.getByRole('radio', { name: 'Peaches' }).click();
   await expect(page.getByText(/Code [A-Z0-9]{6}/)).toBeVisible();
-  await expect(page.getByText(/No Season yet\. Start one/)).toBeVisible();
+  await page.getByRole('radio', { name: 'Season' }).click();
 
   // The owner starts the first Season.
   await page.getByRole('button', { name: 'Season' }).click();
@@ -230,13 +240,13 @@ test('creating a crate opens its detail page', async ({ page }) => {
   await season.getByLabel('Name').fill('Block 1');
   await season.getByRole('radio', { name: /This week/ }).click();
   await season.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByRole('heading', { name: 'Block 1' })).toBeVisible();
+  await expect(page.getByText(/^Block 1/)).toBeVisible();
   await expect(page.getByRole('link', { name: 'Week 1 · Oct 12 – 18' })).toBeVisible();
 });
 
 test('joining with a bad invite code shows an error', async ({ page }) => {
   await openApp(page, '/crates');
-  await page.getByRole('button', { name: 'Add Crate' }).click();
+  await page.getByRole('button', { name: /switch Crate/ }).click();
   await page.getByRole('button', { name: /Join with invite code/ }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Invite code').fill('NOPE');

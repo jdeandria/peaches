@@ -25,61 +25,67 @@ and a cost to planning bigger than you'll do.
 Plan is the home tab. Every screen orders its content the same way: first
 what needs you, then what's live, then what's next, then what's done.
 
+Every screen is also laid out the same way (DECISIONS.md #39): a header
+(the title and one line of context), at most one view switcher right under
+it, at most one highlighted card for what's live, then sections of the
+same list cards, and at most one button pinned at the bottom on screens
+that edit. A matchup is the same card wherever it shows. There is one way
+to do each thing: tap a row to open it, swipe it left to remove it, drag
+it to reorder, and use the tab bar to get to a tab.
+
 Old paths still land somewhere sensible: `/compete` goes to `/crates`,
 `/profile` to `/you`, and `/matchups/:id/lineup` to the matchup.
 
 ### Plan `/` (and `/?week=next`)
 
-A **This week | Next week** switch at the top (kept in `?week=`).
+The subtitle is the week and how it's going ("Oct 12 – 18 · 1 of 4
+done", or "4 workouts planned" next week). A **This week | Next week**
+switch sits under it (kept in `?week=`).
 
-1. **Workout in progress**, if one is going that isn't on the plan, with
-   Continue.
-2. **The week at a glance**, once anything is planned: this week, workouts
-   done of planned with a progress bar; next week, what's planned. An empty
-   week shows no card, just the days; if the week before had workouts, the
-   Days heading offers **Repeat last week** (or **Repeat this week**),
-   which plans the same workouts on the same weekdays.
-3. **Your matchups**, one strip per Crate playing that week (tap for the
-   matchup):
+1. **Workout in progress**, if one is going that isn't on the plan: tap to
+   continue.
+2. **Matchups**, one matchup card per Crate playing that week, tap for
+   the matchup:
    - **Next week**, before the lock: your plan's points against your
      opponent's commitment, both live, with the one line that matters ("Plan
      30.5 more to match Cho", "12 ahead of Cho's plan"), what hitting it
      earns, and when plans lock. A bye still shows your plan, which earns
      its bonus.
-   - **This week**, locked: each side's points so far against what they
-     committed to, and how it stands ("53.3 to go to hit your plan", "Plan
-     hit: +26.1 bonus"), with the live score.
+   - **This week**, locked: each side's live score, on a bar of their
+     points so far against what they committed to, and how it stands ("53.3
+     to go to hit your plan", "Plan hit: +26.1 bonus").
    - A Crate with no matchup that week gets one line saying so. With no
      Crate at all: "Just for you."
-4. **Days**, Monday to Sunday, today marked. Each day has **+** (plan a
-   workout on it) and its workouts:
+3. **Days**, Monday to Sunday, today marked. If the week is empty and the
+   week before had workouts, the heading offers **Repeat last week** (or
+   **Repeat this week**), which plans the same workouts on the same
+   weekdays. Each day has **+** (plan a workout on it) and its workouts:
    - planned, with what it's worth and **Start** (this week only);
    - in progress, with sets done and **Continue**;
    - done, with what it earned.
-   Tap a workout to edit it; swipe right to edit, left to take it off the
-   plan (with Undo).
+   Tap a workout to open it (the planner, or a done one's summary); swipe
+   left to take it off the plan (with Undo).
 
 Start launches the workout: a draft log with the planned exercises as its
 session plan, straight into the runner (`/log?mode=log`). Between sets the
 rest timer pops in between the dials, which already show the next set,
-pushing them out to the sides, greyed and still until it's over; the
-exercises can be put in another order from the runner's top bar, or by
-dragging them in the workout's list. Back to plan in
-the runner shows the workout's exercises at `/log`, where one can be added
-or changed for this session. Finish leads to the workout's summary at
-`/log/:id`, and the day shows it done. With nothing launched, `/log` says
-so and links back to the plan.
+pushing them out to the sides, greyed and still until it's over. Back to
+plan in the runner shows the workout's exercises at `/log`, where one can
+be added or changed for this session, or dragged into another order.
+Finish leads to the workout's summary at `/log/:id` (stat tiles, then the
+exercises; Edit details and Delete in the top bar), and the day shows it
+done. With nothing launched, `/log` says so.
 
 ### Planning a workout `/plan/:week/:id` (`new`, with `?day=`)
 
 The name is the headline, typed over in place (suggested from the
 exercises). A new workout goes on the day its **+** was on (the subtitle
 says which); one already planned can move with **Day** (Mon to Sun).
-**Where** (Anywhere, or one of your equipment locations; it filters the
-exercise picker and fits templates to the kit), then **Exercises**: Add
-exercise, or start from **Your routines** or **Templates**, which fold
-away (remembered on the device) and lead with crate-mates' latest
-workouts, tagged with who did them. Each exercise's target
+**Where** (Anywhere, or one of your equipment locations, shown once you
+have one; it filters the exercise picker and fits templates to the kit),
+then **Exercises**: Add exercise. While the workout is empty, the picker
+lists whole workouts to start from first: **Your routines**, crate-mates'
+latest workouts (tagged with who did them) and **Templates**. Each exercise's target
 sets are set on the dials, as before. Once there are exercises it shows
 what the workout is worth in each Crate with a Season on. Save as routine
 and Take off the plan sit in the top bar; **Add to plan** (or Save) in the
@@ -89,49 +95,52 @@ saves it and goes straight into the runner. Nothing is saved until then.
 ### Crates `/crates` → a Crate `/crates/:id`
 
 `/crates` opens the Crate you looked at last (or the first with a Season
-on); with none, it offers Create and Join. A Crate has no back button: a
-chip row at the top switches between your Crates, with **Add Crate**.
+on); with none, it offers Create and Join. A Crate has no back button: its
+name is the headline, and tapping it opens **Your Crates**, a sheet to
+switch to another, **Create a Crate** or **Join with invite code**. The
+subtitle is the Season and its week ("Autumn Kick-off · Week 3 of 6"), and
+**Season | Activity | Peaches** sits right under it (kept in `?view=`).
 
-1. **This week**: your matchup's hero card (live score, and each side's
-   points against their plan), or why there isn't one. If the Season starts
-   next week, **Plan your week**.
-2. What needs you: the rules vote chip, the invite code, and disputes
-   waiting for your vote.
-3. **Season | Activity | Peaches** (kept in `?view=`). Season has the
-   standings, your results and record, what's coming, and the weeks.
+- **Season**: disputes waiting for your vote; **This week**, your matchup
+  card (or why there isn't one); **Standings**; **Weeks**, each with your
+  opponent and result ("vs Ada · Won 207.2–79.3"); and **Rules**, the
+  vote on what each workout is worth.
+- **Activity**: recent workouts and every exercise members have logged.
+- **Peaches**: the Crate's description, the **invite code** (tap to share
+  or copy) and the members.
 
-The **matchup** page shows the score, how it adds up (workouts, then plan
-bonus or penalty), each side's **plan** (committed, how far along, hit or
-short), points by category, disputes, and both sides' workouts. Before
-the week it shows commitments so far and **Plan your week**; during it,
-**Go to your plan**.
+The **matchup** page leads with the same matchup card (not a link there),
+then how the score adds up (workouts, then plan bonus or penalty), points
+by category, disputes, and both sides' workouts.
 
 ### You `/you`
 
-An identity card, then **Stats | History | Gear | Settings** (kept in
-`?view=`; Gear is `equipment`).
+Your name, with how many Crates you're in under it, then **Stats |
+History | Gear | Settings** (kept in `?view=`; Gear is `equipment`).
 
-- **Stats**: this week's workouts, sets, active minutes and totals; **plan
+- **Stats**: this week's workouts, sets, active minutes and totals, as
+  the same stat tiles a workout's summary uses; **plan
   kept** over the last four weeks (planned workouts done of planned, week
   by week); workouts per week; and records (heaviest lifts, longest run,
   ride and swim, most reps in a set).
-- **History**: every workout, grouped by week, ten at a time. Swipe right
-  to edit, left to delete with Undo.
+- **History**: every workout, grouped by week, ten at a time. Tap to open,
+  swipe left to delete with Undo.
 - **Gear**: where you train and what's there (Home, Gym, Travel presets),
-  up to eight places.
+  up to eight places. **Add** to add one, tap one to edit it.
 - **Settings**: units, install, sign out, version.
 
 ## Paths
 
-- **Plan next week**: Plan → Next week → + on a day → Add exercise (or a
-  routine or template) → Add to plan. Watch the strip: plan more to match
-  your opponent.
+- **Plan next week**: Plan → Next week → + on a day → Add exercise (an
+  exercise, or a routine or template) → Add to plan. Watch the matchup
+  card: plan more to match your opponent.
 - **Do today's workout**: Plan → Start on today's workout → runner → Finish.
 - **Pick a workout back up**: Plan → Continue on it.
 - **Do something you didn't plan**: Plan → + on today → add exercises →
   Add and start.
-- **Fix an old workout**: You → History → swipe right or tap → edit.
-- **Check the score**: Crates → This week → View matchup.
-- **Vote on the rules**: Crates → Rules chip.
-- **Set up your equipment**: You → Gear → Add a location (or from the
-  workout planner's Where chips).
+- **Fix an old workout**: You → History → tap it → edit.
+- **Check the score**: Crates → This week → tap the matchup card.
+- **Vote on the rules**: Crates → Season → Rules.
+- **Switch Crates**: Crates → tap the Crate's name.
+- **Invite someone**: Crates → Peaches → Code.
+- **Set up your equipment**: You → Gear → Add.

@@ -15,7 +15,6 @@ import {
   viewChild,
 } from '@angular/core';
 import { MatButton, MatIconButton } from '@angular/material/button';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatTooltip } from '@angular/material/tooltip';
 import { NgTemplateOutlet } from '@angular/common';
 
@@ -30,7 +29,6 @@ import {
 import { AppState } from '../../../state/app-state';
 import { ButtonGroup, ButtonGroupOption } from '../../expressive/button-group';
 import { WavyProgress } from '../../expressive/wavy-progress';
-import { exerciseOrderItems, openExerciseOrder } from './exercise-order-sheet';
 import { SetDials } from './set-dials';
 import { SetDraft, SetFormat } from './set-format';
 
@@ -121,7 +119,6 @@ export class SessionRunner {
   readonly finish = output<void>();
 
   private readonly state = inject(AppState);
-  private readonly sheet = inject(MatBottomSheet);
   private readonly destroyRef = inject(DestroyRef);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
@@ -330,22 +327,6 @@ export class SessionRunner {
     await this.state.run((app) =>
       app.loggingService.skipSet(this.log().id, next.exercise.exerciseId),
     );
-  }
-
-  /** Changes the order of the exercises; whatever is first with sets left is next. */
-  protected async reorder(): Promise<void> {
-    const id = this.log().id;
-    // One move at a time, in the order they were made.
-    let saving: Promise<unknown> = Promise.resolve();
-    await openExerciseOrder(this.sheet, {
-      items: exerciseOrderItems(this.log()),
-      reorder: (ids) => {
-        saving = saving.then(() =>
-          this.state.run((app) => app.loggingService.reorderPlan(id, ids)),
-        );
-      },
-    });
-    await saving;
   }
 
   protected async rate(rpe: number | null): Promise<void> {

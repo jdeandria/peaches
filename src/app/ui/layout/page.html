@@ -14,19 +14,6 @@
     </div>
     <div #actions class="actions">
       <ng-content select="[pageActions]" />
-      @if (refreshable()) {
-        <button
-          mat-icon-button
-          type="button"
-          aria-label="Refresh"
-          matTooltip="Refresh"
-          [disabled]="refreshing()"
-          [attr.aria-busy]="refreshing()"
-          (click)="refresh.emit()"
-        >
-          <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
-        </button>
-      }
     </div>
   </div>
 </header>

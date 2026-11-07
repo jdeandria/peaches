@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { CdkDrag, CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Location } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
@@ -48,7 +48,7 @@ import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
 import { HOLD_TO_DRAG, keepFocus, SwipeRow } from '../../layout/swipe-row';
 import { DisputeCard } from '../workout/dispute-card';
-import { exerciseOrderItems, openExerciseOrder } from './exercise-order-sheet';
+import { StatTile, StatTiles } from '../../layout/stat-tiles';
 import { crateExercisesFor, openExercisePicker, recentEntries } from './exercise-picker-sheet';
 import { LogDetailsData, LogDetailsDialog, LogDetailsResult } from './log-details-dialog';
 import { SessionRunner } from './session-runner';
@@ -92,10 +92,10 @@ interface PlannedView extends EntryView {
     MatIconButton,
     MatTooltip,
     Page,
-    RouterLink,
     Section,
     SessionRunner,
     Stagger,
+    StatTiles,
     SwipeRow,
   ],
   templateUrl: './log.page.html',
@@ -234,6 +234,12 @@ export class LogPage {
     }));
   });
 
+  /** The numbers at a glance: how long it took (once finished), then what it adds up to. */
+  protected readonly tiles = computed<StatTile[]>(() => [
+    ...(this.draft() ? [] : [{ value: this.clock(), label: 'Session time' }]),
+    ...this.totals().map((t) => ({ value: t.amount, label: t.label })),
+  ]);
+
   /**
    * This week's matchups: the Season's weights, for points per Crate.
    */
@@ -363,17 +369,7 @@ export class LogPage {
     await this.logExercise(loggableFromEntry(entry, cues));
   }
 
-  /** Changes the order the workout's exercises are done in, from a sheet. */
-  protected async reorder(): Promise<void> {
-    const log = this.log();
-    if (!log || !this.mine()) return;
-    await openExerciseOrder(this.sheet, {
-      items: exerciseOrderItems(log),
-      reorder: (ids) => this.saveOrder(log.id, ids),
-    });
-    await this.saving;
-  }
-
+  /** A row dragged to another place: the one way to change the order (Alt and an arrow from a keyboard). */
   protected drop(event: CdkDragDrop<unknown>): void {
     this.moveExercise(event.previousIndex, event.currentIndex);
   }

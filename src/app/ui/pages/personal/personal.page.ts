@@ -28,6 +28,7 @@ import { ListRow } from '../../layout/list-row';
 import { Page } from '../../layout/page';
 import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
+import { StatTile, StatTiles } from '../../layout/stat-tiles';
 import { SwipeRow } from '../../layout/swipe-row';
 import {
   equipmentSummary,
@@ -114,6 +115,7 @@ const PLAN_WEEKS = 4;
     Section,
     ShapedAvatar,
     Stagger,
+    StatTiles,
     SwipeRow,
     WavyProgress,
   ],
@@ -152,11 +154,10 @@ export class PersonalPage {
     () => this.state.peachId() !== null && this.state.peach.value() === undefined,
   );
 
-  protected readonly identityLine = computed(() => {
-    const p = this.peach();
-    const crates = this.state.myCrates.value()?.length ?? 0;
-    return [...(p?.email ? [p.email] : []), Fmt.count(crates, 'Crate')].join(' · ');
-  });
+  /** "2 Crates": under the name, in place of a profile card. */
+  protected readonly identityLine = computed(() =>
+    Fmt.count(this.state.myCrates.value()?.length ?? 0, 'Crate'),
+  );
 
   protected readonly logs = this.state.myLogs.value;
   private readonly thisWeek = computed(() => startOfWeek(this.state.today()));
@@ -175,6 +176,12 @@ export class PersonalPage {
       { value: String(Math.round(minutes)), label: 'Active min' },
     ];
   });
+
+  /** This week at a glance: workouts, sets, active minutes, then what it adds up to. */
+  protected readonly weekTiles = computed<StatTile[]>(() => [
+    ...this.stats(),
+    ...this.weekTotals().map((t) => ({ value: t.amount, label: t.label })),
+  ]);
 
   /** What this week adds up to, per category (active minutes are in the tiles). */
   protected readonly weekTotals = computed(() => {
@@ -298,11 +305,6 @@ export class PersonalPage {
 
   protected showMore(): void {
     this.historyShown.update((n) => n + HISTORY_PAGE);
-  }
-
-  /** Opens a workout to change it: a finished one's page, or the one going. */
-  protected openLog(r: LogRowView): void {
-    void this.router.navigate(r.submitted ? ['/log', r.log.id] : ['/log']);
   }
 
   /** Deletes a workout at once, with Undo to put it back. */
