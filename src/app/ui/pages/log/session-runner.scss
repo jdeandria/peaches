@@ -133,12 +133,19 @@ button .material-symbols-rounded {
 
 @include set-screen.set-screen;
 
-// "Set 2 of 3", and the target beside it once the dials are off it.
-.where {
+// The line under the buttons: what was just logged, or the target once
+// the dials are off it. Always there, so nothing moves when it fills.
+.status {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  column-gap: 6px;
+  min-height: 20px;
+  text-align: center;
+
+  strong {
+    color: var(--mat-sys-on-surface);
+    font-weight: 500;
+  }
 }
 
 .stage {
@@ -285,9 +292,14 @@ button .material-symbols-rounded {
   }
 }
 
-// The exercise strip: names can be long, so a chip stops at a sensible width.
+// The exercise strip, and the header: the exercise being done is a big
+// chip, with its name and set, on the primary colour; the rest stay small
+// beside it. Names can be long, so a chip stops at a sensible width.
 .chips {
-  margin: -4px -8px 12px;
+  align-items: center;
+  margin: -4px -16px 12px;
+  padding: 4px 16px;
+  scroll-padding-inline: 16px;
 }
 .chip {
   max-width: 152px;
@@ -295,12 +307,48 @@ button .material-symbols-rounded {
   &.complete {
     opacity: 0.6;
   }
+
+  &.selected {
+    align-items: flex-start;
+    gap: 2px;
+    height: 80px;
+    max-width: min(320px, calc(100vw - 96px));
+    padding: 0 24px;
+    border-radius: var(--pch-radius-extra-large);
+    background: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+    text-align: start;
+
+    &:hover {
+      background: color-mix(
+        in srgb,
+        var(--mat-sys-on-primary-container) 8%,
+        var(--mat-sys-primary-container)
+      );
+    }
+
+    // Already doing it: no press feedback.
+    &:active {
+      transform: none;
+    }
+  }
 }
 .chip-name {
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.chip-set {
+  opacity: 1;
+  animation: set-in var(--pch-spring-spatial-default-duration) var(--pch-spring-spatial-default)
+    both;
+}
+@keyframes set-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
 }
 .chip-summary .material-symbols-rounded {
   font-size: 16px;

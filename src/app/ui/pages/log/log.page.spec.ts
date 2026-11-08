@@ -111,9 +111,9 @@ describe('LogPage', () => {
 
     // Log mode: one set, its target on the dials, and Done.
     expect(el.querySelector('pch-page')).toBeNull();
-    expect(text(el.querySelector('h1'))).toBe('Run');
-    // Where you are, and nothing the dials and chips already say.
-    expect(text(el.querySelector('.title p'))).toBe('Set 1 of 1');
+    // The exercise and set head the screen, on its chip; nothing else says them.
+    expect(text(el.querySelector('h1'))).toBe('Run, set 1 of 1');
+    expect(text(el.querySelector('.chip.selected'))).toBe('Run Set 1 of 1');
     expect(el.querySelector('.target')).toBeNull();
     button(el, 'Done: set 1 of Run')!.click();
     await stable(f);
@@ -154,8 +154,8 @@ describe('LogPage', () => {
     );
     f.componentRef.setInput('mode', 'log');
     await stable(f);
-    const heading = () => text(el.querySelector('h1'));
-    const where = () => text(el.querySelector('.title p'));
+    const heading = () => text(el.querySelector('.chip.selected .chip-name'));
+    const where = () => text(el.querySelector('.chip.selected .chip-set'));
     const done = () => doneButton(el)!.click();
     const squats = async () =>
       (await backend.container.logs.getById(draft.id))!.entries.find(
@@ -167,7 +167,7 @@ describe('LogPage', () => {
     // A rep short of the target: dial it down, and the target shows beside the set, then Done.
     key(el.querySelector<HTMLElement>('[role=slider][aria-label="Reps"]')!, 'ArrowDown');
     await stable(f);
-    expect(text(el.querySelector('.target'))).toBe('· Target 5 × 100 kg');
+    expect(text(el.querySelector('.target'))).toBe('Target 5 × 100 kg');
     done();
     await stable(f);
     expect((await squats()).map((s) => s.reps)).toEqual([4]);
@@ -187,7 +187,7 @@ describe('LogPage', () => {
     await stable(f);
     expect(el.querySelector('[role=timer]')?.getAttribute('aria-label')).toBe('Rest 1:45');
     // What was just done.
-    expect(text(el.querySelector('.up-next'))).toBe('Logged 4 × 100 kg');
+    expect(text(el.querySelector('.status'))).toBe('Logged 4 × 100 kg');
     button(el, 'Skip rest')!.click();
     await stable(f);
     expect(el.querySelector('[role=timer]')).toBeNull();
@@ -225,7 +225,7 @@ describe('LogPage', () => {
 
     button(el, 'Skip set 1')!.click();
     await stable(f);
-    expect(heading()).toBe('Workout complete');
+    expect(text(el.querySelector('h1'))).toBe('Workout complete');
     expect(text(el)).toContain('2 sets in');
   });
 
@@ -242,7 +242,7 @@ describe('LogPage', () => {
     const [draft] = await backend.container.logs.forPeach(DEMO_PEACH_ID);
     const chips = () => Array.from(el.querySelectorAll<HTMLButtonElement>('.chips .chip'));
     expect(chips().map((c) => c.getAttribute('aria-label'))).toEqual([
-      `${squat.name}, 0 of 2 sets`,
+      `${squat.name}, set 1 of 2`,
       'Forearm Plank, 0 of 1 sets',
     ]);
     expect(chips()[0].getAttribute('aria-current')).toBe('step');
@@ -250,16 +250,16 @@ describe('LogPage', () => {
     // Tap the plank: it's next, and the plan keeps its order.
     chips()[1].click();
     await stable(f);
-    expect(text(el.querySelector('h1'))).toBe('Forearm Plank');
-    expect(text(el.querySelector('.title p'))).toBe('Set 1 of 1');
+    expect(text(el.querySelector('h1'))).toBe('Forearm Plank, set 1 of 1');
     expect(chips()[1].getAttribute('aria-current')).toBe('step');
+    expect(chips()[1].getAttribute('aria-label')).toBe('Forearm Plank, set 1 of 1');
     expect((await backend.container.logs.getById(draft.id))!.plan[0].exerciseId).toBe(squat.id);
     // Once it's done, the plan's order takes over again.
     doneButton(el)!.click();
     await stable(f);
     button(el, 'Skip rest')?.click();
     await stable(f);
-    expect(text(el.querySelector('h1'))).toBe(squat.name);
+    expect(text(el.querySelector('h1'))).toBe(`${squat.name}, set 1 of 2`);
     expect(chips()[1].getAttribute('aria-label')).toBe('Forearm Plank, done');
 
     // Alt and an arrow (or holding and dragging) moves one.
@@ -283,7 +283,7 @@ describe('LogPage', () => {
     const f = TestBed.createComponent(LogPage);
     f.componentRef.setInput('exercise', plank.id);
     await stable(f);
-    expect(text(f.nativeElement.querySelector('h1'))).toBe('Forearm Plank');
+    expect(text(f.nativeElement.querySelector('h1'))).toBe('Forearm Plank, set 1 of 1');
   });
 
   it('finishing early from log mode asks first, and logs what was done', async () => {
@@ -455,7 +455,7 @@ describe('LogPage', () => {
     // Planned, not started.
     expect(fresh.timerStartedAt).toBeNull();
     const { el } = await render({ mode: 'log', launched: false });
-    expect(text(el.querySelector('h1'))).toBe(squat.name);
+    expect(text(el.querySelector('h1'))).toBe(`${squat.name}, set 1 of 1`);
     expect((await backend.container.logs.getById(fresh.id))!.timerStartedAt).not.toBeNull();
   });
 

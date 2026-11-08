@@ -95,7 +95,8 @@ interface Rest {
  * on the dials as the timer pops in between them, pushing them out to the
  * sides, and they close up again when it's over. Finishing an exercise
  * asks how hard it was. Sets can be skipped and taken back. A strip of
- * chips, one per exercise with its sets done, skips around: tap one to do
+ * chips, one per exercise with its sets done, heads the screen (the one
+ * being done is big, with its name and set) and skips around: tap one to do
  * it now (the plan keeps its order, and comes back once it's done), hold
  * and drag one to reorder. What the plan holds is changed on the Plan.
  * Keeps the screen awake while open.
@@ -131,6 +132,7 @@ export class SessionRunner {
   private readonly state = inject(AppState);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
   protected readonly rpeOptions = RPE_OPTIONS;
@@ -181,12 +183,11 @@ export class SessionRunner {
     return total === 0 ? 0 : done / total;
   });
 
-  /** Which exercise, and which set of it. */
+  /** Which set of the exercise. */
   protected readonly position = computed(() => {
     const next = this.next();
     if (!next) return null;
     return {
-      exercise: next.exercise.exerciseId,
       set: next.index + 1,
       sets: next.exercise.sets.length,
     };
@@ -239,24 +240,6 @@ export class SessionRunner {
     return format.dials(draft, this.target(), (patch) =>
       this.draft.update((d) => (d ? { ...d, ...patch } : d)),
     );
-  });
-
-  /** What comes after the set on the card. */
-  protected readonly upNext = computed(() => {
-    const next = this.next();
-    if (!next) return null;
-    const plan = this.log().plan;
-    if (next.index + 1 < next.exercise.sets.length) {
-      const format = this.format()!;
-      return `Set ${next.index + 2} · ${format.describe(format.draft(next.exercise.sets[next.index + 1]))}`;
-    }
-    // What the plan's order comes back to: the first other exercise with sets left.
-    const following = plan.find(
-      (e) =>
-        e.exerciseId !== next.exercise.exerciseId &&
-        doneCount(this.log(), e.exerciseId) < e.sets.length,
-    );
-    return following ? following.exerciseName : 'you’re done';
   });
 
   /** Whether a rest is counting down (the timer is up between the dials). */
@@ -319,6 +302,17 @@ export class SessionRunner {
     this.destroyRef.onDestroy(() => clearInterval(timer));
 
     afterNextRender(() => this.heading()?.nativeElement.focus());
+    // Keep the exercise being done in view along the strip.
+    effect(() => {
+      if (!this.next()?.exercise.exerciseId) return;
+      afterNextRender(
+        () =>
+          this.host.nativeElement
+            .querySelector<HTMLElement>('.chip.selected')
+            ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }),
+        { injector: this.injector },
+      );
+    });
     this.keepAwake();
   }
 

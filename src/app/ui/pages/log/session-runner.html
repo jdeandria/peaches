@@ -40,8 +40,12 @@
     <span class="pch-label-medium">{{ progress().done }} of {{ progress().total }} sets</span>
   </div>
 
-  <!-- Skip around: tap an exercise to do it now; hold and drag to reorder (Alt and an arrow). -->
-  @if (chips().length > 1) {
+  <!--
+    The exercises, and the header: the one being done is big, with its name
+    and which set. Tap another to do it now; hold and drag to reorder (Alt and
+    an arrow).
+  -->
+  @if (chips().length > 1 || next()) {
     <div
       class="chips"
       role="group"
@@ -62,21 +66,35 @@
           [class.complete]="c.complete"
           [attr.aria-current]="c.current ? 'step' : null"
           [attr.aria-label]="
-            c.name + (c.complete ? ', done' : ', ' + c.done + ' of ' + c.total + ' sets')
+            c.name +
+            (c.complete
+              ? ', done'
+              : c.current
+                ? ', set ' + (c.done + 1) + ' of ' + c.total
+                : ', ' + c.done + ' of ' + c.total + ' sets')
           "
           aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
           (click)="jump(c.id)"
           (keydown.alt.arrowleft)="moveChip(i, i - 1, $event)"
           (keydown.alt.arrowright)="moveChip(i, i + 1, $event)"
         >
-          <span class="chip-name pch-label-large">{{ c.name }}</span>
-          <span class="chip-summary pch-label-small">
-            @if (c.complete) {
-              <span class="material-symbols-rounded" aria-hidden="true">check</span>
-            } @else {
-              {{ c.done }}/{{ c.total }}
+          @if (c.current) {
+            <span class="chip-name pch-title-large">{{ c.name }}</span>
+            @for (k of [c.done]; track k) {
+              <span class="chip-summary chip-set pch-label-large">
+                Set {{ c.done + 1 }} of {{ c.total }}
+              </span>
             }
-          </span>
+          } @else {
+            <span class="chip-name pch-label-large">{{ c.name }}</span>
+            <span class="chip-summary pch-label-small">
+              @if (c.complete) {
+                <span class="material-symbols-rounded" aria-hidden="true">check</span>
+              } @else {
+                {{ c.done }}/{{ c.total }}
+              }
+            </span>
+          }
         </button>
       }
     </div>
@@ -128,26 +146,10 @@
       the dials, pushing them out to the sides, and goes again for the next set.
     -->
     <section class="set" aria-labelledby="pch-runner-heading">
-      @for (k of [pos.exercise + ':' + pos.set]; track k) {
-        <div class="title slide">
-          <h1 id="pch-runner-heading" #heading tabindex="-1" class="pch-headline-small">
-            {{ next()!.exercise.exerciseName }}
-          </h1>
-          <!-- The chips say which exercise; the dials start on the target, so it only shows once they're off it. -->
-          <p class="where pch-label-large">
-            <span class="muted">Set {{ pos.set }} of {{ pos.sets }}</span>
-            @if (targetNote(); as note) {
-              <span class="target">
-                <span class="muted" aria-hidden="true">·</span>
-                @if (note.ghost) {
-                  <span class="ghost-dot" aria-hidden="true"></span>
-                }
-                {{ note.text }}
-              </span>
-            }
-          </p>
-        </div>
-      }
+      <!-- The chip up top shows it; this is for screen readers, and takes focus. -->
+      <h1 id="pch-runner-heading" #heading tabindex="-1" class="pch-visually-hidden">
+        {{ next()!.exercise.exerciseName }}, set {{ pos.set }} of {{ pos.sets }}
+      </h1>
       <div class="stage" [class.resting]="resting">
         <pch-set-dials fill [apart]="resting" [dials]="dials()" [joiner]="format()!.joiner" />
         @if (resting) {
@@ -240,11 +242,23 @@
           </button>
         }
       </div>
-      <p class="up-next pch-body-medium">
+      <!--
+        One line, its room kept so the dials don't jump: what was just logged
+        during a rest, else the target once the dials are off it (they start
+        on it, so until then it'd say what they say).
+      -->
+      <p class="status pch-body-medium">
         @if (resting) {
-          Logged{{ restNote() }} <strong>{{ rest()!.logged }}</strong>
-        } @else {
-          Then: {{ upNext() }}
+          <span class="muted"
+            >Logged{{ restNote() }} <strong>{{ rest()!.logged }}</strong></span
+          >
+        } @else if (targetNote(); as note) {
+          <span class="target">
+            @if (note.ghost) {
+              <span class="ghost-dot" aria-hidden="true"></span>
+            }
+            {{ note.text }}
+          </span>
         }
       </p>
     </section>
