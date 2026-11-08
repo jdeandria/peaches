@@ -133,6 +133,14 @@ button .material-symbols-rounded {
 
 @include set-screen.set-screen;
 
+// "Set 2 of 3", and the target beside it once the dials are off it.
+.where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 6px;
+}
+
 .stage {
   // How big the rest timer is: it's the thing to watch now. The dials' rims
   // already sit ~64px apart (the joiner and their insets); each moves out by

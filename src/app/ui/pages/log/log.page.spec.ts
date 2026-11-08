@@ -112,8 +112,9 @@ describe('LogPage', () => {
     // Log mode: one set, its target on the dials, and Done.
     expect(el.querySelector('pch-page')).toBeNull();
     expect(text(el.querySelector('h1'))).toBe('Run');
-    expect(text(el)).toContain('Exercise 1 of 1 · Set 1 of 1');
-    expect(text(el.querySelector('.target'))).toBe('Target 5.0 km');
+    // Where you are, and nothing the dials and chips already say.
+    expect(text(el.querySelector('.title p'))).toBe('Set 1 of 1');
+    expect(el.querySelector('.target')).toBeNull();
     button(el, 'Done: set 1 of Run')!.click();
     await stable(f);
     expect(text(el.querySelector('h1'))).toBe('Workout complete');
@@ -162,10 +163,11 @@ describe('LogPage', () => {
       )?.sets ?? [];
 
     expect(heading()).toBe(squat.name);
-    expect(text(el.querySelector('.target'))).toBe('Target 5 × 100 kg');
-    // A rep short of the target: dial it down, then Done.
+    expect(where()).toBe('Set 1 of 2');
+    // A rep short of the target: dial it down, and the target shows beside the set, then Done.
     key(el.querySelector<HTMLElement>('[role=slider][aria-label="Reps"]')!, 'ArrowDown');
     await stable(f);
+    expect(text(el.querySelector('.target'))).toBe('· Target 5 × 100 kg');
     done();
     await stable(f);
     expect((await squats()).map((s) => s.reps)).toEqual([4]);
@@ -175,8 +177,8 @@ describe('LogPage', () => {
     // A rest, which can be stretched or skipped: a pause on the set screen,
     // the next set already on the dials and the timer parting them.
     expect(heading()).toBe(squat.name);
-    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
-    expect(text(el.querySelector('.target'))).toBe('Target 5 × 100 kg');
+    expect(where()).toBe('Set 2 of 2');
+    expect(el.querySelector('.target')).toBeNull();
     expect(el.querySelector('pch-set-dials')?.classList).toContain('apart');
     // Greyed out of the way: they can't be turned until the rest is over.
     expect(el.querySelector('pch-set-dials')?.hasAttribute('inert')).toBe(true);
@@ -185,13 +187,13 @@ describe('LogPage', () => {
     await stable(f);
     expect(el.querySelector('[role=timer]')?.getAttribute('aria-label')).toBe('Rest 1:45');
     // What was just done.
-    expect(text(el.querySelector('.up-next'))).toBe(`Done 4 × 100 kg · ${squat.name} · Set 1 of 2`);
+    expect(text(el.querySelector('.up-next'))).toBe('Logged 4 × 100 kg');
     button(el, 'Skip rest')!.click();
     await stable(f);
     expect(el.querySelector('[role=timer]')).toBeNull();
     expect(el.querySelector('pch-set-dials')?.classList).not.toContain('apart');
     expect(el.querySelector('pch-set-dials')?.hasAttribute('inert')).toBe(false);
-    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
+    expect(where()).toBe('Set 2 of 2');
 
     // Changing the plan is for plan mode: here sets are only done or skipped.
     expect(button(el, 'Add a set')).toBeUndefined();
@@ -203,7 +205,7 @@ describe('LogPage', () => {
     expect(heading()).toBe('Forearm Plank');
     button(el, 'Undo last set')!.click();
     await stable(f);
-    expect(where()).toBe('Exercise 1 of 2 · Set 2 of 2');
+    expect(where()).toBe('Set 2 of 2');
     expect(await squats()).toHaveLength(1);
 
     // Without the rest timer, finishing an exercise still asks how it went.
@@ -249,7 +251,8 @@ describe('LogPage', () => {
     chips()[1].click();
     await stable(f);
     expect(text(el.querySelector('h1'))).toBe('Forearm Plank');
-    expect(text(el.querySelector('.title p'))).toBe('Exercise 2 of 2 · Set 1 of 1');
+    expect(text(el.querySelector('.title p'))).toBe('Set 1 of 1');
+    expect(chips()[1].getAttribute('aria-current')).toBe('step');
     expect((await backend.container.logs.getById(draft.id))!.plan[0].exerciseId).toBe(squat.id);
     // Once it's done, the plan's order takes over again.
     doneButton(el)!.click();
@@ -302,7 +305,10 @@ describe('LogPage', () => {
     await stable(f);
     button(el, 'Skip rest')!.click();
     await stable(f);
-    expect(text(el.querySelector('.target'))).toBe('Target 5 × 102.5 kg');
+    expect(
+      el.querySelector('[role=slider][aria-label="Weight in kg"]')?.getAttribute('aria-valuenow'),
+    ).toBe('102.5');
+    expect(el.querySelector('.target')).toBeNull();
 
     button(el, 'Finish')!.click();
     await stable(f);

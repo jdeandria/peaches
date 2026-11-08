@@ -80,8 +80,9 @@ interface Rest {
   readonly total: number;
   /** The exercise whose last set this was, to rate it. */
   readonly finished: ExerciseLogEntry | null;
-  /** The set just done, where it was ("Back Squat · Set 1 of 3") and what it was. */
-  readonly after: string;
+  /** The exercise of the set just done, and what it was ("5 × 100 kg"). */
+  readonly exerciseId: string;
+  readonly exerciseName: string;
   readonly logged: string;
 }
 
@@ -180,15 +181,12 @@ export class SessionRunner {
     return total === 0 ? 0 : done / total;
   });
 
-  /** Which exercise of the plan, and which set of it. */
+  /** Which exercise, and which set of it. */
   protected readonly position = computed(() => {
     const next = this.next();
     if (!next) return null;
-    const plan = this.log().plan;
-    const index = plan.findIndex((e) => e.exerciseId === next.exercise.exerciseId);
     return {
-      exercise: index + 1,
-      exercises: plan.length,
+      exercise: next.exercise.exerciseId,
       set: next.index + 1,
       sets: next.exercise.sets.length,
     };
@@ -205,14 +203,6 @@ export class SessionRunner {
     const format = this.format();
     return next && format ? format.draft(next.exercise.sets[next.index]) : null;
   });
-  protected readonly targetText = computed(() => {
-    const target = this.target();
-    const format = this.format();
-    if (!target || !format) return '';
-    // A weighted exercise with no weight yet (a template, say): ask for one.
-    const ask = format.weighted && target.load === 0 ? ' · set the weight' : '';
-    return `${format.describe(target)}${ask}`;
-  });
 
   /** What's on the dials: the target, until the Peach turns them (or moves on). */
   protected readonly draft = linkedSignal<string, SetDraft | null>({
@@ -223,6 +213,23 @@ export class SessionRunner {
         : '';
     },
     computation: () => untracked(this.target),
+  });
+
+  /**
+   * The target beside the set number, only once the dials are off it (they
+   * start on it, so until then it'd say what they say). A weighted exercise
+   * with no weight planned (a template, say) asks for one instead.
+   */
+  protected readonly targetNote = computed<{ text: string; ghost: boolean } | null>(() => {
+    const target = this.target();
+    const format = this.format();
+    const draft = this.draft();
+    if (!target || !format || !draft) return null;
+    if (format.weighted && target.load === 0) {
+      return draft.load === 0 ? { text: 'Set the weight', ghost: false } : null;
+    }
+    const same = (Object.keys(target) as (keyof SetDraft)[]).every((k) => target[k] === draft[k]);
+    return same ? null : { text: `Target ${format.describe(target)}`, ghost: true };
   });
 
   protected readonly dials = computed(() => {
@@ -252,15 +259,6 @@ export class SessionRunner {
     return following ? following.exerciseName : 'you’re done';
   });
 
-  /** During a rest: the set coming up. */
-  protected readonly upNextAfterRest = computed(() => {
-    const next = this.next();
-    const format = this.format();
-    const target = this.target();
-    if (!next || !format || !target) return '';
-    return `Set ${next.index + 1} · ${format.describe(target)}`;
-  });
-
   /** Whether a rest is counting down (the timer is up between the dials). */
   protected readonly counting = computed(() => (this.rest()?.endsAt ?? null) !== null);
 
@@ -277,6 +275,16 @@ export class SessionRunner {
     return RING * (1 - this.remaining() / rest.total);
   });
   protected readonly ring = RING;
+
+  /**
+   * Which exercise the set logged during a rest was, only when it isn't the
+   * one on screen and the rating (which names it) isn't up.
+   */
+  protected readonly restNote = computed(() => {
+    const rest = this.rest();
+    if (!rest || rest.finished) return '';
+    return rest.exerciseId === this.next()?.exercise.exerciseId ? '' : ` ${rest.exerciseName}`;
+  });
 
   /** How hard the just-finished exercise was, as logged. */
   protected readonly finishedRpe = computed(() => {
@@ -345,7 +353,8 @@ export class SessionRunner {
         endsAt: timed ? Date.now() + seconds * 1000 : null,
         total: seconds,
         finished,
-        after: `${next.exercise.exerciseName} · Set ${next.index + 1} of ${next.exercise.sets.length}`,
+        exerciseId: id,
+        exerciseName: next.exercise.exerciseName,
         logged: format.describe(draft),
       });
     } else {

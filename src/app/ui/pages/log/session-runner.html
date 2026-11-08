@@ -133,14 +133,21 @@
           <h1 id="pch-runner-heading" #heading tabindex="-1" class="pch-headline-small">
             {{ next()!.exercise.exerciseName }}
           </h1>
-          <p class="pch-label-large muted">
-            Exercise {{ pos.exercise }} of {{ pos.exercises }} · Set {{ pos.set }} of {{ pos.sets }}
+          <!-- The chips say which exercise; the dials start on the target, so it only shows once they're off it. -->
+          <p class="where pch-label-large">
+            <span class="muted">Set {{ pos.set }} of {{ pos.sets }}</span>
+            @if (targetNote(); as note) {
+              <span class="target">
+                <span class="muted" aria-hidden="true">·</span>
+                @if (note.ghost) {
+                  <span class="ghost-dot" aria-hidden="true"></span>
+                }
+                {{ note.text }}
+              </span>
+            }
           </p>
         </div>
       }
-      <p class="target pch-label-large">
-        <span class="ghost-dot" aria-hidden="true"></span>Target {{ targetText() }}
-      </p>
       <div class="stage" [class.resting]="resting">
         <pch-set-dials fill [apart]="resting" [dials]="dials()" [joiner]="format()!.joiner" />
         @if (resting) {
@@ -235,7 +242,7 @@
       </div>
       <p class="up-next pch-body-medium">
         @if (resting) {
-          Done <strong>{{ rest()!.logged }}</strong> · {{ rest()!.after }}
+          Logged{{ restNote() }} <strong>{{ rest()!.logged }}</strong>
         } @else {
           Then: {{ upNext() }}
         }
