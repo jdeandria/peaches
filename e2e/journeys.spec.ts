@@ -117,17 +117,17 @@ test('plan a routine, launch it and tick it off, resting between sets', async ({
     .click();
   await expect(page.getByText('2 exercises · 6 sets')).toBeVisible();
   await page.getByRole('button', { name: 'Start Kettlebell Swing' }).click();
-  await expect(page.getByText('Exercise 1 of 2 · Set 1 of 3')).toBeVisible();
+  await expect(page.getByText('Set 1 of 3', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /^Done: set 1/ }).click();
   await expect(page.getByRole('timer')).toBeVisible();
   await page.getByRole('button', { name: 'Skip rest' }).click();
-  await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
+  await expect(page.getByText('Set 2 of 3', { exact: true })).toBeVisible();
   // The Plan shows how far along it is; the row's play carries on where it left off.
   await page.getByRole('button', { name: 'Back to plan' }).click();
   await expect(page.getByText('In progress · 1 of 6 sets')).toBeVisible();
   await expect(page.getByText('1/3')).toBeVisible();
   await page.getByRole('button', { name: 'Continue workout: Swing day' }).click();
-  await expect(page.getByText('Exercise 1 of 2 · Set 2 of 3')).toBeVisible();
+  await expect(page.getByText('Set 2 of 3', { exact: true })).toBeVisible();
 });
 
 test('repeat this week as next week’s plan, and take a workout off it', async ({ page }) => {
