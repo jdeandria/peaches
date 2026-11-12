@@ -220,6 +220,32 @@ describe.skipIf(!EMULATOR_HOST)('firestore.rules (emulator)', () => {
     ).rejects.toThrow();
   });
 
+  it('owners add and remove bots on the Crate; members can’t', async () => {
+    const service = (uid: string) =>
+      new CrateService(new FirestoreCrateRepository(client(uid)), new SequentialIdGenerator(uid));
+    const bot = await service('a').addBot({
+      crateId: 'c1',
+      peachId: 'a',
+      level: 'steady',
+      style: 'lifter',
+      now,
+    });
+    const stored = await getDoc(doc(client('b'), COLLECTIONS.crates, 'c1'));
+    expect(stored.data()?.['bots']).toEqual([
+      expect.objectContaining({ id: bot.id, name: 'Sprocket', level: 'steady', removedAt: null }),
+    ]);
+    // A member can't, even by writing the document straight.
+    await expect(
+      service('b').addBot({ crateId: 'c1', peachId: 'a', level: 'easy', style: 'runner', now }),
+    ).rejects.toThrow();
+    await expect(
+      updateDoc(doc(client('b'), COLLECTIONS.crates, 'c1'), { bots: [] }),
+    ).rejects.toThrow();
+    await service('a').removeBot('c1', 'a', bot.id, now);
+    const removed = await getDoc(doc(client('a'), COLLECTIONS.crates, 'c1'));
+    expect(removed.data()?.['bots'][0]['removedAt']).toBe(now.toISOString());
+  });
+
   it('a Peach’s own logs, drafts included, are private', async () => {
     await seed((db) => setDoc(doc(db, COLLECTIONS.workoutLogs, 'l1'), submitted('b')));
     await expect(getDoc(doc(client('b'), COLLECTIONS.workoutLogs, 'l1'))).resolves.toBeTruthy();

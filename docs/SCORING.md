@@ -130,6 +130,9 @@ for late logs and dispute votes, then `closeRound` stores the result.
 Results are final: logging, editing or striking anything after that
 changes nothing.
 
+Bots (DECISIONS.md #41) score the same way: their plan is their
+commitment, and their finished workouts are logs shared with the Crate.
+
 A bye records points-for only. Standings sort by win percentage (ties count
 half), then wins, then point differential, then points for.
 

@@ -120,7 +120,10 @@ subtitle is the Season and its week ("Autumn Kick-off · Week 3 of 6"), and
   vote on what each workout is worth.
 - **Activity**: recent workouts and every exercise members have logged.
 - **Peaches**: the Crate's description, the **invite code** (tap to share
-  or copy) and the members.
+  or copy), the members, and **Bots**. Owners and admins **Add a bot**
+  (a name, how hard it trains and what it likes; up to 7) and swipe one
+  left to remove it, with Undo. A bot plays from the next Season, and its
+  workouts show in Activity like anyone's (its numbers can't be disputed).
 
 The **matchup** page leads with the same matchup card (not a link there),
 then how the score adds up (workouts, then plan bonus or penalty), points
@@ -158,5 +161,7 @@ History | Gear | Settings** (kept in `?view=`; Gear is `equipment`).
 - **Vote on the rules**: Crates → Season → Rules.
 - **Switch Crates**: Crates → tap the Crate's name.
 - **Invite someone**: Crates → Peaches → Code.
+- **Play without friends**: Crates → Peaches → Add a bot (a few), then
+  Season.
 - **Set up your equipment**: You → Gear → Add.
 - **Sign out**: You → Settings → Sign out.

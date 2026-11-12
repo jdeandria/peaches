@@ -18,6 +18,7 @@ describe('RoundWindowService', () => {
     timeZone: 'UTC',
     createdAt: utc(2026, 1, 1),
     settings: crateSettings({ loggingGraceHours: 3 }),
+    bots: [],
   };
   const round: Round = {
     id: 'r',

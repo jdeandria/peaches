@@ -1,5 +1,16 @@
 import { IdGenerator } from '../domain/core/ids';
 import {
+  activeBots,
+  BOT_NAME_MAX,
+  botId,
+  BotLevel,
+  BotStyle,
+  CrateBot,
+  findBot,
+  MAX_BOTS,
+  nextBotName,
+} from '../domain/models/bot';
+import {
   canManage,
   Crate,
   CrateMembership,
@@ -42,6 +53,7 @@ export class CrateService {
       inviteCode: await this.uniqueInviteCode(),
       timeZone: args.timeZone ?? 'UTC',
       settings: args.settings ?? DEFAULT_CRATE_SETTINGS,
+      bots: [],
       createdAt: args.now,
     };
     await this.crates.save(crate);
@@ -89,14 +101,7 @@ export class CrateService {
 
   /** Owners and admins change a Crate's settings. */
   async updateSettings(crateId: string, peachId: string, settings: CrateSettings): Promise<Crate> {
-    const crate = await this.crates.getById(crateId);
-    if (!crate) throw new DomainError('Crate not found.');
-    const membership = (await this.crates.membershipsOf(crateId)).find(
-      (m) => m.peachId === peachId && isActiveMembership(m),
-    );
-    if (!membership || !canManage(membership)) {
-      throw new DomainError('Only the owner can change Crate settings.');
-    }
+    const crate = await this.managed(crateId, peachId, 'Only the owner can change Crate settings.');
     let checked: CrateSettings;
     try {
       checked = crateSettings(settings);
@@ -108,8 +113,85 @@ export class CrateService {
     return updated;
   }
 
+  /**
+   * Adds a bot to play in the Crate (see `CrateBot`), named `name` or the
+   * next free bot name. It plays from the next Season scheduled.
+   */
+  async addBot(args: {
+    crateId: string;
+    peachId: string;
+    level: BotLevel;
+    style: BotStyle;
+    name?: string;
+    now: Date;
+  }): Promise<CrateBot> {
+    const crate = await this.managed(args.crateId, args.peachId, 'Only the owner can add bots.');
+    const bots = activeBots(crate);
+    if (bots.length >= MAX_BOTS) throw new DomainError(`A Crate holds up to ${MAX_BOTS} bots.`);
+    const name = (args.name ?? '').trim().replace(/\s+/g, ' ') || nextBotName(crate);
+    if (name.length > BOT_NAME_MAX) {
+      throw new DomainError(`Keep the name to ${BOT_NAME_MAX} characters.`);
+    }
+    if (bots.some((b) => b.name.toLowerCase() === name.toLowerCase())) {
+      throw new DomainError(`There’s already a bot called ${name}.`);
+    }
+    const bot: CrateBot = {
+      id: botId(crate.id, crate.bots.length + 1),
+      name,
+      level: args.level,
+      style: args.style,
+      addedAt: args.now,
+      removedAt: null,
+    };
+    await this.crates.save({ ...crate, bots: [...crate.bots, bot] });
+    return bot;
+  }
+
+  /**
+   * Takes a bot out of the Crate: it stops training now. A Season it's in
+   * keeps it, and its weeks still to come are walkovers. Returns it, to put
+   * back with {@link restoreBot}.
+   */
+  async removeBot(crateId: string, peachId: string, id: string, now: Date): Promise<CrateBot> {
+    const crate = await this.managed(crateId, peachId, 'Only the owner can remove bots.');
+    const bot = findBot(crate, id);
+    if (!bot) throw new DomainError('That bot isn’t in this Crate.');
+    if (bot.removedAt !== null) return bot;
+    const removed: CrateBot = { ...bot, removedAt: now };
+    await this.crates.save({ ...crate, bots: crate.bots.map((b) => (b.id === id ? removed : b)) });
+    return removed;
+  }
+
+  /** Puts back a bot just removed, as if it had never left. */
+  async restoreBot(crateId: string, peachId: string, id: string): Promise<CrateBot> {
+    const crate = await this.managed(crateId, peachId, 'Only the owner can add bots.');
+    const bot = findBot(crate, id);
+    if (!bot) throw new DomainError('That bot isn’t in this Crate.');
+    if (bot.removedAt === null) return bot;
+    if (activeBots(crate).length >= MAX_BOTS) {
+      throw new DomainError(`A Crate holds up to ${MAX_BOTS} bots.`);
+    }
+    const restored: CrateBot = { ...bot, removedAt: null };
+    await this.crates.save({
+      ...crate,
+      bots: crate.bots.map((b) => (b.id === id ? restored : b)),
+    });
+    return restored;
+  }
+
   async activeMembers(crateId: string): Promise<CrateMembership[]> {
     return (await this.crates.membershipsOf(crateId)).filter(isActiveMembership);
+  }
+
+  /** The Crate, if `peachId` is one of its owners or admins. */
+  private async managed(crateId: string, peachId: string, refusal: string): Promise<Crate> {
+    const crate = await this.crates.getById(crateId);
+    if (!crate) throw new DomainError('Crate not found.');
+    const membership = (await this.crates.membershipsOf(crateId)).find(
+      (m) => m.peachId === peachId && isActiveMembership(m),
+    );
+    if (!membership || !canManage(membership)) throw new DomainError(refusal);
+    return crate;
   }
 
   private async uniqueInviteCode(): Promise<string> {

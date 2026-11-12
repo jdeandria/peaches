@@ -1,5 +1,6 @@
 import { IdGenerator } from '../domain/core/ids';
 import { LocalDate, weekday } from '../domain/core/local-date';
+import { activeBots } from '../domain/models/bot';
 import { Crate, isActiveMembership } from '../domain/models/crate';
 import { withoutStruck } from '../domain/models/dispute';
 import { WeekScore } from '../domain/models/commitment';
@@ -84,8 +85,8 @@ export class SeasonService {
   }
 
   /**
-   * Creates and schedules a Season for every active member of `crate`,
-   * freezing the Crate's current vote on how it scores.
+   * Creates and schedules a Season for every active member of `crate` and
+   * every bot it has, freezing the Crate's current vote on how it scores.
    */
   async createSeason(args: {
     crate: Crate;
@@ -104,16 +105,18 @@ export class SeasonService {
     }
     const members = (await crates.membershipsOf(args.crate.id))
       .filter(isActiveMembership)
-      .map((m) => m.peachId)
-      .sort();
+      .map((m) => m.peachId);
     if (members.length === 0) throw new DomainError('A Season needs at least one member.');
+    // The Crate as stored now, for the bots it has.
+    const crate = (await crates.getById(args.crate.id)) ?? args.crate;
+    const participants = [...members, ...activeBots(crate).map((b) => b.id)].sort();
     const season: Season = {
       id: ids.newId(),
       crateId: args.crate.id,
       name: args.name.trim() || 'Season',
       startWeek: args.startWeek,
       weeks: args.weeks,
-      participantIds: members,
+      participantIds: participants,
       rules: await voting.currentRules(args.crate.id),
       status: 'scheduled',
       createdAt: args.now,

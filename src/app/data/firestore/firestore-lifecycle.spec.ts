@@ -47,7 +47,7 @@ service cloud.firestore { match /{document=**} { allow read, write: if true; } }
     }
   });
 
-  runLifecycleSuite('firestore', async () => {
+  runLifecycleSuite('firestore', async (clock) => {
     // Each container gets a wiped database and a fresh client (a client's
     // cache would otherwise serve documents the wipe removed).
     await fetch(`${emulatorUrl}/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`, {
@@ -66,6 +66,7 @@ service cloud.firestore { match /{document=**} { allow read, write: if true; } }
       ExerciseCatalog.standard(),
       new SequentialIdGenerator(`t${instance}`),
       new UtcZoneClock(),
+      clock,
     );
   });
 });

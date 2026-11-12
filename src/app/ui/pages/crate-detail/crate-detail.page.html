@@ -217,6 +217,59 @@
           } @else {
             <pch-loading-indicator class="loading" [size]="40" />
           }
+
+          @if (bots().length > 0 || canManage()) {
+            <pch-section title="Bots" />
+            <pch-list-card [pchStagger]="3" class="bots">
+              @for (b of bots(); track b.bot.id) {
+                @if (canManage()) {
+                  <pch-swipe-row removable removeLabel="Remove" (remove)="removeBot(c, b.bot)">
+                    <div class="bot">
+                      <pch-list-row>
+                        <pch-shaped-avatar rowLeading [shapeId]="b.bot.id">
+                          <span class="material-symbols-rounded" aria-hidden="true">smart_toy</span>
+                        </pch-shaped-avatar>
+                        {{ b.bot.name }}
+                        <span rowSubtitle>{{ b.subtitle }}</span>
+                      </pch-list-row>
+                      <span class="pch-swipe-actions">
+                        <button
+                          matIconButton
+                          type="button"
+                          matTooltip="Remove"
+                          [attr.aria-label]="'Remove ' + b.bot.name"
+                          (click)="removeBot(c, b.bot)"
+                        >
+                          <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                        </button>
+                      </span>
+                    </div>
+                  </pch-swipe-row>
+                } @else {
+                  <pch-list-row>
+                    <pch-shaped-avatar rowLeading [shapeId]="b.bot.id">
+                      <span class="material-symbols-rounded" aria-hidden="true">smart_toy</span>
+                    </pch-shaped-avatar>
+                    {{ b.bot.name }}
+                    <span rowSubtitle>{{ b.subtitle }}</span>
+                  </pch-list-row>
+                }
+              }
+              @if (canAddBot()) {
+                <button pch-list-row type="button" class="add-bot" (click)="addBot(c)">
+                  <span rowLeading class="material-symbols-rounded icon" aria-hidden="true"
+                    >add</span
+                  >
+                  Add a bot
+                  <span rowSubtitle>{{
+                    bots().length === 0
+                      ? 'No one to play? A bot plans, trains and competes like a crate-mate.'
+                      : 'Another crate-mate to play against'
+                  }}</span>
+                </button>
+              }
+            </pch-list-card>
+          }
         </div>
       }
     }

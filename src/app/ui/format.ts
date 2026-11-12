@@ -1,6 +1,7 @@
 import { addDays, LocalDate, monthOf, toUtcDate } from '../domain/core/local-date';
 import { DistanceUnits, WeightUnits } from '../domain/core/units';
 import { MovementPattern } from '../domain/exercises/taxonomy';
+import { BotLevel, BotStyle, CrateBot } from '../domain/models/bot';
 import { CATEGORY_INFO, ScoringCategory } from '../domain/models/scoring';
 import { RoundStatus, SeasonStatus } from '../domain/models/season';
 import { UnitSystem } from '../domain/models/training';
@@ -10,6 +11,13 @@ import {
   totalReps,
   totalSeconds,
 } from '../domain/models/workout-log';
+
+const BOT_LEVEL: Record<BotLevel, string> = { easy: 'Easy', steady: 'Steady', strong: 'Strong' };
+const BOT_STYLE: Record<BotStyle, string> = {
+  allRounder: 'All-rounder',
+  lifter: 'Lifter',
+  runner: 'Runner',
+};
 
 /** Only English strings ship today; pinning the locale keeps output stable. */
 const LOCALE = 'en-US';
@@ -225,6 +233,19 @@ export const Fmt = {
 
   roundStatus(status: RoundStatus): string {
     return ROUND_STATUS[status];
+  },
+
+  botLevel(level: BotLevel): string {
+    return BOT_LEVEL[level];
+  },
+
+  botStyle(style: BotStyle): string {
+    return BOT_STYLE[style];
+  },
+
+  /** "Bot · Steady all-rounder" */
+  bot(bot: Pick<CrateBot, 'level' | 'style'>): string {
+    return `Bot · ${BOT_LEVEL[bot.level]} ${BOT_STYLE[bot.style].toLowerCase()}`;
   },
 
   /** "1 Crate", "3 Crates" */

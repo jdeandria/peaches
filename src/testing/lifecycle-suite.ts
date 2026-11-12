@@ -6,6 +6,7 @@ import { localDate } from '../app/domain/core/local-date';
 import { Crate } from '../app/domain/models/crate';
 import { peach } from '../app/domain/models/peach';
 import { SESSION_TIME } from '../app/domain/models/dispute';
+import { botId, BotLevel, MAX_BOTS } from '../app/domain/models/bot';
 import {
   categoryWeights,
   DEFAULT_PLAN_RULES,
@@ -24,20 +25,24 @@ import { DemoSeeder } from '../app/data/demo/demo-seeder';
 
 /**
  * The full application-level behaviour, run against every backend.
- * `create` must return a fresh, empty container each time.
+ * `create` must return a fresh, empty container each time, telling the
+ * time with `clock`.
  */
 export function runLifecycleSuite(
   backend: string,
-  create: () => AppContainer | Promise<AppContainer>,
+  create: (clock: () => Date) => AppContainer | Promise<AppContainer>,
 ) {
   /** Saturday 10 October 2026, 09:00 UTC. */
   const now = new Date(Date.UTC(2026, 9, 10, 9));
   const utc = (month: number, day: number, hour = 0) =>
     new Date(Date.UTC(2026, month - 1, day, hour));
   let app: AppContainer;
+  /** What the container's clock says; tests move it. */
+  let clockNow = now;
 
   beforeEach(async () => {
-    app = await create();
+    clockNow = now;
+    app = await create(() => clockNow);
     for (const id of ['a', 'b', 'c']) {
       await app.peaches.save(peach({ id, displayName: id, createdAt: now }));
     }
@@ -808,9 +813,168 @@ export function runLifecycleSuite(
     });
   });
 
+  describe(`${backend} Bots`, () => {
+    const addBot = (crateId: string, peachId = 'a', level: BotLevel = 'steady') =>
+      app.crateService.addBot({ crateId, peachId, level, style: 'allRounder', now });
+
+    it('owners add bots, named in turn; members cannot; there is a limit', async () => {
+      const crate = await crateWithMembers(['a', 'b']);
+      const first = await addBot(crate.id);
+      expect(first).toEqual(
+        expect.objectContaining({ id: botId(crate.id, 1), name: 'Sprocket', removedAt: null }),
+      );
+      const second = await app.crateService.addBot({
+        crateId: crate.id,
+        peachId: 'a',
+        level: 'strong',
+        style: 'runner',
+        name: '  Robo   Rita ',
+        now,
+      });
+      expect(second.name).toBe('Robo Rita');
+      await expect(addBot(crate.id, 'b')).rejects.toThrow(DomainError);
+      await expect(
+        app.crateService.addBot({
+          crateId: crate.id,
+          peachId: 'a',
+          level: 'easy',
+          style: 'lifter',
+          name: 'sprocket',
+          now,
+        }),
+      ).rejects.toThrow('already a bot called');
+      for (let i = 2; i < MAX_BOTS; i++) await addBot(crate.id);
+      await expect(addBot(crate.id)).rejects.toThrow(`up to ${MAX_BOTS} bots`);
+
+      const stored = (await app.crates.getById(crate.id))!;
+      expect(stored.bots).toHaveLength(MAX_BOTS);
+      expect(new Set(stored.bots.map((b) => b.name)).size).toBe(MAX_BOTS);
+      // Bots aren't members: they don't vote or count towards majorities.
+      expect(await app.crateService.activeMembers(crate.id)).toHaveLength(2);
+      // Their profiles read like anyone's.
+      expect((await app.peaches.getById(first.id))?.displayName).toBe('Sprocket');
+      const profiles = await app.peaches.getByIds(['a', first.id, second.id]);
+      expect(profiles.map((p) => p.displayName).sort()).toEqual(['Robo Rita', 'Sprocket', 'a']);
+    });
+
+    it('removing a bot frees its name and place; Undo puts it back', async () => {
+      const crate = await crateWithMembers(['a']);
+      const bot = await addBot(crate.id);
+      await expect(app.crateService.removeBot(crate.id, 'b', bot.id, now)).rejects.toThrow(
+        DomainError,
+      );
+      const removed = await app.crateService.removeBot(crate.id, 'a', bot.id, now);
+      expect(removed.removedAt).toEqual(now);
+      expect((await addBot(crate.id)).name).toBe('Sprocket');
+      await expect(app.crateService.restoreBot(crate.id, 'a', bot.id)).resolves.toEqual(
+        expect.objectContaining({ removedAt: null }),
+      );
+      const stored = (await app.crates.getById(crate.id))!;
+      expect(stored.bots.map((b) => b.id)).toEqual([botId(crate.id, 1), botId(crate.id, 2)]);
+    });
+
+    it('play a Season: committed, logging through the week, scored at the close', async () => {
+      const crate = await crateWithMembers(['a']);
+      const bot = await addBot(crate.id, 'a', 'strong');
+      const season = await app.seasonService.createSeason({
+        crate,
+        name: 'Me v the machine',
+        startWeek: localDate(2026, 10, 12),
+        weeks: 2,
+        now,
+      });
+      expect(season.participantIds).toEqual(['a', bot.id].sort());
+      const [week1, week2] = await app.seasons.roundsOf(season.id);
+      const matchup = (await app.seasons.matchupsInRound(week1.id))[0];
+      expect(matchup.awayPeachId === bot.id || matchup.homePeachId === bot.id).toBe(true);
+
+      // The bot's plan shows a week ahead, and holds at the lock.
+      const committed = await app.planService.committed(season.id, week1.id, bot.id);
+      expect(committed).toBeGreaterThan(0);
+      expect(await app.planService.committed(season.id, week2.id, bot.id)).toBe(0);
+      const commitment = (await app.seasons.getCommitment(season.id, week1.id, bot.id))!;
+      expect(commitment.locksAt).toEqual(utc(10, 12));
+
+      // Nothing done before the week; then its workouts arrive as they finish.
+      await app.seasonService.syncSeason(season.id, utc(10, 12, 1));
+      clockNow = utc(10, 12, 1);
+      const side = async () => {
+        const board = (await app.seasonService.board(matchup.id))!;
+        return board.home.peachId === bot.id ? board.home : board.away!;
+      };
+      expect((await side()).logs).toEqual([]);
+      clockNow = utc(10, 15, 12);
+      const midweek = (await side()).logs.length;
+      clockNow = utc(10, 19, 0);
+      const week = await side();
+      expect(week.logs.length).toBeGreaterThanOrEqual(midweek);
+      expect(week.logs.length).toBeGreaterThan(0);
+      expect(week.committed).toBe(committed);
+      expect(week.logs.every((l) => l.peachId === bot.id && l.sharedWith[0] === crate.id)).toBe(
+        true,
+      );
+
+      // They're in the Crate's activity and exercises, and open on their own.
+      // (It trained the Saturday it was added, too.)
+      const recent = await app.logs.recentlySharedWith(crate.id, 20);
+      const thisWeek = recent.filter((l) => l.peachId === bot.id && l.startedAt >= utc(10, 12));
+      expect(thisWeek).toEqual(week.logs);
+      expect(recent.every((l) => l.startedAt >= now)).toBe(true);
+      const exercises = await app.logs.exercisesSharedWith(crate.id);
+      expect(exercises.some((e) => e.peachId === bot.id)).toBe(true);
+      const opened = await app.logs.getShared(crate.id, week.logs[0].id);
+      expect(opened).toEqual(week.logs[0]);
+      // A bot's numbers can't be disputed.
+      await expect(
+        app.disputeService.open({
+          crateId: crate.id,
+          logId: week.logs[0].id,
+          target: SESSION_TIME,
+          peachId: 'a',
+          now: clockNow,
+        }),
+      ).rejects.toThrow('can’t be disputed');
+
+      // The close scores the bot's week like anyone's.
+      await logSession('a', utc(10, 13, 7), run(5));
+      await app.seasonService.syncSeason(season.id, utc(10, 19, 7));
+      const closed = (await app.seasons.getMatchup(matchup.id))!;
+      const botHome = closed.homePeachId === bot.id;
+      const { homePoints, awayPoints } = closed.result!;
+      expect(botHome ? homePoints : awayPoints).toBe(week.score.total);
+      expect(winnerId(closed)).toBe(
+        (botHome ? homePoints > awayPoints : awayPoints > homePoints) ? bot.id : 'a',
+      );
+    });
+
+    it('bots added later wait for the next Season; removed ones stop training', async () => {
+      const crate = await crateWithMembers(['a', 'b']);
+      const season = await app.seasonService.createSeason({
+        crate,
+        name: 'S1',
+        startWeek: localDate(2026, 10, 12),
+        weeks: 1,
+        now,
+      });
+      const late = await addBot(crate.id);
+      expect((await app.seasons.getById(season.id))!.participantIds).toEqual(['a', 'b']);
+
+      // It still trains and shares with the Crate.
+      clockNow = utc(10, 26);
+      const from = utc(10, 12);
+      const done = await app.logs.sharedWith(crate.id, from, clockNow);
+      expect(done.some((l) => l.peachId === late.id)).toBe(true);
+      await app.crateService.removeBot(crate.id, 'a', late.id, utc(10, 19));
+      const after = await app.logs.sharedWith(crate.id, from, clockNow);
+      const theirs = after.filter((l) => l.peachId === late.id);
+      expect(theirs.length).toBeGreaterThan(0);
+      expect(theirs.every((l) => l.startedAt < utc(10, 19))).toBe(true);
+    });
+  });
+
   describe(`${backend} DemoSeeder`, () => {
     it('seeds a playable mid-season state', async () => {
-      const demo = await create();
+      const demo = await create(() => now);
       await new DemoSeeder(demo).seed(now);
       expect(await demo.peaches.getById('me')).not.toBeNull();
       const crates = await firstValueFrom(demo.crates.watchCratesFor('me'));

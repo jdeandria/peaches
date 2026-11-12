@@ -1,6 +1,7 @@
 import { FormatError, JsonMap } from '../core/json';
 import { localDate } from '../core/local-date';
 import { Ballot, ballotFromJson, ballotToJson } from './ballot';
+import { botId } from './bot';
 import {
   canManage,
   Crate,
@@ -129,6 +130,39 @@ describe('model JSON round trips', () => {
       inviteCode: 'PEACH1',
       timeZone: 'America/New_York',
       settings: crateSettings({ loggingGraceHours: 12 }),
+      bots: [],
+      createdAt: now,
+    };
+    expect(crateFromJson(viaJson(crateToJson(crate)))).toEqual(crate);
+  });
+
+  it('Crate with bots, one of them removed', () => {
+    const crate: Crate = {
+      id: 'c1',
+      name: 'Solo Crew',
+      description: '',
+      ownerPeachId: 'p1',
+      inviteCode: 'BOTS22',
+      timeZone: 'UTC',
+      settings: crateSettings(),
+      bots: [
+        {
+          id: botId('c1', 1),
+          name: 'Sprocket',
+          level: 'strong',
+          style: 'runner',
+          addedAt: now,
+          removedAt: null,
+        },
+        {
+          id: botId('c1', 2),
+          name: 'Gizmo',
+          level: 'easy',
+          style: 'lifter',
+          addedAt: now,
+          removedAt: new Date(now.getTime() + 86_400_000),
+        },
+      ],
       createdAt: now,
     };
     expect(crateFromJson(viaJson(crateToJson(crate)))).toEqual(crate);
@@ -145,6 +179,7 @@ describe('model JSON round trips', () => {
     expect(crate.settings).toEqual(DEFAULT_CRATE_SETTINGS);
     expect(crate.timeZone).toBe('UTC');
     expect(crate.description).toBe('');
+    expect(crate.bots).toEqual([]);
   });
 
   it('CrateMembership', () => {

@@ -7,11 +7,12 @@ import { AppContainer } from './app-container';
 
 runLifecycleSuite(
   'in-memory',
-  () =>
+  (clock) =>
     new AppContainer(
       inMemoryRepositories(),
       ExerciseCatalog.standard(),
       new SequentialIdGenerator('t'),
       new UtcZoneClock(),
+      clock,
     ),
 );

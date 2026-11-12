@@ -13,6 +13,7 @@ import { MatInput } from '@angular/material/input';
 import { MatSlider, MatSliderThumb } from '@angular/material/slider';
 
 import { addDays, LocalDate, startOfWeek } from '../../../domain/core/local-date';
+import { activeBots } from '../../../domain/models/bot';
 import { Crate } from '../../../domain/models/crate';
 import { SCORING_CATEGORIES } from '../../../domain/models/scoring';
 import { MAX_SEASON_WEEKS } from '../../../domain/models/season';
@@ -79,7 +80,8 @@ export function startWeekOptions(today: LocalDate): ButtonGroupOption<LocalDate>
       @if (alone()) {
         <p class="pch-body-medium alone" role="note">
           You’re the only Peach here, so every week would be a bye. Share invite code
-          {{ crate.inviteCode }} first: who plays is fixed when the Season is scheduled.
+          {{ crate.inviteCode }} or add a bot under Peaches first: who plays is fixed when the
+          Season is scheduled.
         </p>
       }
       <p class="pch-body-medium muted">
@@ -151,10 +153,17 @@ export class NewSeasonDialog {
   ).value;
 
   /** Whether nobody else would play: a Season of byes (participants freeze when scheduled). */
-  protected readonly alone = computed(() => this.memberCount() === 1);
-  private readonly memberCount = this.state.query(
+  protected readonly alone = computed(() => this.playerCount() === 1);
+  /** Members and bots: everyone a Season scheduled now would have. */
+  private readonly playerCount = this.state.query(
     () => this.crate.id,
-    async (id, app) => (await app.crateService.activeMembers(id)).length,
+    async (id, app) => {
+      const [members, crate] = await Promise.all([
+        app.crateService.activeMembers(id),
+        app.crates.getById(id),
+      ]);
+      return members.length + (crate ? activeBots(crate).length : 0);
+    },
   ).value;
 
   /** "Mon, Oct 19 – Sun, Nov 29": the days the Season will run. */

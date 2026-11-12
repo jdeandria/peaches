@@ -1,7 +1,8 @@
 import { Component } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 
 import { DEMO_PEACH_ID } from '../../../data/demo/demo-seeder';
 import { LocalDate } from '../../../domain/core/local-date';
@@ -11,6 +12,7 @@ import { matchup, Round } from '../../../domain/models/season';
 import { FIXED_NOW, seededBackend, settle, TestBackend } from '../../../../testing/test-app';
 import { CrateSheetData } from '../crates/crate-actions-sheet';
 import { CrateDetailPage, roundViews } from './crate-detail.page';
+import { AddBotDialog } from './add-bot-dialog';
 import { NewSeasonDialog, startWeekOptions } from './new-season-dialog';
 
 @Component({ template: '' })
@@ -197,6 +199,66 @@ describe('CrateDetailPage', () => {
     expect(el.querySelector('button[matFab]')?.textContent).toContain('Season');
     await show('activity');
     expect(el.textContent).toContain('Nothing logged yet.');
+  });
+
+  it('a Crate of one adds bots to play against, and can take them out again', async () => {
+    const crate = await backend.container.crateService.createCrate({
+      ownerPeachId: DEMO_PEACH_ID,
+      name: 'Garage Gym',
+      now: FIXED_NOW,
+    });
+    let el = await render(crate.id, 'peaches');
+    const headings = () =>
+      Array.from(el.querySelectorAll('pch-section')).map((h) => h.textContent?.trim());
+    expect(headings()).toEqual(['Invite', 'Peaches', 'Bots']);
+    expect(el.querySelector('button.add-bot')?.textContent).toContain('Add a bot');
+
+    // The dialog offers the next free name, then how it trains and what it likes.
+    el.querySelector<HTMLButtonElement>('button.add-bot')!.click();
+    await settle();
+    const ref = TestBed.inject(MatDialog).openDialogs[0];
+    const dialog = document.querySelector<HTMLElement>('pch-add-bot-dialog')!;
+    expect(dialog.querySelector('input')?.value).toBe('Sprocket');
+    const options = Array.from(dialog.querySelectorAll('[role=radio]')).map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(options).toEqual(['Easy', 'Steady', 'Strong', 'All-rounder', 'Lifter', 'Runner']);
+    expect(dialog.textContent).toContain('It plays in the next Season you start.');
+    const add = ref.componentInstance as AddBotDialog;
+    add.level.set('strong');
+    add.style.set('runner');
+    const closed = firstValueFrom(ref.afterClosed());
+    await add.add();
+    expect(await closed).toEqual(
+      expect.objectContaining({ name: 'Sprocket', level: 'strong', style: 'runner' }),
+    );
+
+    el = await render(crate.id, 'peaches');
+    const bots = () => Array.from(el.querySelectorAll('.bots pch-list-row'));
+    expect(bots().map((b) => b.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      'smart_toy Sprocket Bot · Strong runner',
+    ]);
+
+    // It plays: in the standings by name, with a matchup against me.
+    await backend.container.seasonService.createSeason({
+      crate,
+      name: 'Me v Sprocket',
+      startWeek: '2026-10-19' as LocalDate,
+      weeks: 2,
+      now: FIXED_NOW,
+    });
+    el = await render(crate.id);
+    expect(el.querySelector('pch-standings-table')?.textContent).toContain('Sprocket');
+    expect(el.textContent).toContain('vs Sprocket');
+
+    // Removing takes it out of the Crate (Undo puts it back).
+    await show('peaches');
+    el.querySelector<HTMLButtonElement>('button[aria-label="Remove Sprocket"]')!.click();
+    await settle();
+    await fixture.whenStable();
+    expect(bots()).toHaveLength(0);
+    const stored = (await backend.container.crates.getById(crate.id))!;
+    expect(stored.bots[0].removedAt).not.toBeNull();
   });
 
   it('says when a Crate does not exist', async () => {
