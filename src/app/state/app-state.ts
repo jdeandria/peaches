@@ -24,7 +24,7 @@ import {
 
 import { AppContainer } from '../application/app-container';
 import { AuthUser } from '../application/auth-service';
-import { errorMessage } from '../application/errors';
+import { DomainError, errorMessage } from '../application/errors';
 import { localDateOfLocal } from '../domain/core/local-date';
 import { UnitSystem } from '../domain/models/training';
 import { deviceTimeZone } from '../data/tz/intl-zone-clock';
@@ -35,6 +35,30 @@ export type SessionStatus = 'loading' | 'signedOut' | 'ready' | 'error';
 
 /** How often time-based views (countdowns, "today") refresh. */
 const TICK_MS = 30_000;
+
+/**
+ * How long signing in may take to load the profile before the splash says
+ * so. Firestore's offline cache never fails a write that can't reach the
+ * server, it waits, so without a limit the splash could wait forever.
+ */
+export const PROFILE_TIMEOUT_MS = 20_000;
+
+/** Rejects with `message` if `promise` hasn't settled within `ms`. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new DomainError(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 /**
  * App-wide reactive state: the signed-in Peach and their live data as
@@ -68,9 +92,14 @@ export class AppState {
   /** The signed-in Peach's id (the auth uid), or null. */
   readonly peachId = computed(() => this.authUser()?.id ?? null);
 
+  /** Why the session couldn't start, shown on the error splash. */
+  readonly startupError = signal<string | null>(null);
+
   /**
    * `loading` until auth is known and, once signed in, the Peach profile
-   * exists and Seasons are brought up to date.
+   * exists (Seasons are brought up to date behind the app, not before it).
+   * `error`, with {@link startupError} saying why, if the profile can't be
+   * loaded, including when it takes longer than {@link PROFILE_TIMEOUT_MS}.
    */
   readonly status = toSignal(
     this.auth.authState.pipe(
@@ -82,6 +111,7 @@ export class AppState {
           map((): SessionStatus => 'ready'),
           catchError((e: unknown) => {
             console.error('Session bootstrap failed', e);
+            this.startupError.set(errorMessage(e));
             return of<SessionStatus>('error');
           }),
           startWith<SessionStatus>('loading'),
@@ -227,9 +257,29 @@ export class AppState {
   /** Emits the session status as an Observable (for router guards). */
   readonly status$ = toObservable(this.status);
 
+  /**
+   * Loads (or creates) the signed-in Peach's profile; that's all the app
+   * waits for. Opening and closing weeks and updating commitments is
+   * housekeeping: it runs behind the app, and screens refresh when it's
+   * done, so a slow or stuck write can never hold the splash up.
+   */
   private async bootstrap(user: AuthUser): Promise<void> {
-    const peach = await this.app.sessionService.ensurePeach(user, this.now(), deviceTimeZone());
-    await this.app.seasonService.syncPeach(peach.id, this.now());
+    this.startupError.set(null);
+    await withTimeout(
+      this.app.sessionService.ensurePeach(user, this.now(), deviceTimeZone()),
+      PROFILE_TIMEOUT_MS,
+      'Peaches couldn’t reach its servers. Check your connection (or anything that blocks sites) and try again.',
+    );
+    void this.syncPeachInBackground(user.id);
+  }
+
+  private async syncPeachInBackground(peachId: string): Promise<void> {
+    try {
+      await this.app.seasonService.syncPeach(peachId, this.now());
+    } catch (e) {
+      console.error('Season sync failed', e);
+    }
+    this.nowTick.set(this.clock());
     this.bump();
   }
 }

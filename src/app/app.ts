@@ -22,7 +22,10 @@ import { Splash } from './ui/layout/splash';
       }
       @case ('error') {
         <pch-splash role="alert">
-          <p>Peaches could not load your profile. Check your connection and try again.</p>
+          <p>Peaches could not start.</p>
+          @if (state.startupError(); as why) {
+            <p class="why">{{ why }}</p>
+          }
           <button type="button" (click)="reload()">Try again</button>
         </pch-splash>
       }
