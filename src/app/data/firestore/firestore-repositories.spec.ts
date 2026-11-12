@@ -125,6 +125,7 @@ function crate(id: string, init: Partial<Crate> = {}): Crate {
     inviteCode: id.toUpperCase(),
     timeZone: 'UTC',
     settings: crateSettings(),
+    bots: [],
     createdAt: now,
     ...init,
   };

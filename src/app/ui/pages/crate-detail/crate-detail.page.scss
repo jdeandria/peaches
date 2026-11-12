@@ -105,3 +105,18 @@ pch-two-pane,
 .show-all {
   margin-top: 8px;
 }
+
+.bots {
+  display: block;
+}
+
+.bot {
+  display: flex;
+  align-items: center;
+
+  > [pch-list-row],
+  > pch-list-row {
+    flex: 1;
+    min-width: 0;
+  }
+}

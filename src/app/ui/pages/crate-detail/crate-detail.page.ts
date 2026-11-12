@@ -8,10 +8,12 @@ import {
   signal,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { MatButton, MatFabButton } from '@angular/material/button';
+import { MatButton, MatFabButton, MatIconButton } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
+import { MatTooltip } from '@angular/material/tooltip';
 
 import { addDays, LocalDate, localDateOfLocal, startOfWeek } from '../../../domain/core/local-date';
+import { CrateBot, isActiveBot, MAX_BOTS } from '../../../domain/models/bot';
 import { canManage, Crate } from '../../../domain/models/crate';
 import { onWinningStreak, streak } from '../../../domain/models/score';
 import {
@@ -37,10 +39,12 @@ import { Section } from '../../layout/section';
 import { Stagger } from '../../layout/stagger';
 import { StandingsRow, StandingsTable } from '../../layout/standings-table';
 import { StatusLabel } from '../../layout/status-label';
+import { SwipeRow } from '../../layout/swipe-row';
 import { TwoPane } from '../../layout/two-pane';
 import { CrateTitle, rememberCrate } from '../crates/crate-switcher';
 import { DisputeCard } from '../workout/dispute-card';
 import { MatchupCard } from '../matchup/matchup-card';
+import { AddBotData, AddBotDialog } from './add-bot-dialog';
 import { NewSeasonDialog } from './new-season-dialog';
 
 /** A Season's week as shown in the Weeks list. */
@@ -168,8 +172,8 @@ const VIEWS: readonly ButtonGroupOption<CrateView>[] = [
  * vote, this week's matchup or why there isn't one, standings, the weeks
  * with my result in each, and the rules), Activity (what members have been
  * logging, and every exercise they've logged, tagged with who) or the
- * Peaches (the invite code and members). Manager actions sit where they
- * apply.
+ * Peaches (the invite code, members and bots). Manager actions sit where
+ * they apply.
  */
 
 @Component({
@@ -186,6 +190,8 @@ const VIEWS: readonly ButtonGroupOption<CrateView>[] = [
     MatchupCard,
     MatButton,
     MatFabButton,
+    MatIconButton,
+    MatTooltip,
     Page,
     RouterLink,
     Section,
@@ -193,6 +199,7 @@ const VIEWS: readonly ButtonGroupOption<CrateView>[] = [
     Stagger,
     StandingsTable,
     StatusLabel,
+    SwipeRow,
     TwoPane,
   ],
   templateUrl: './crate-detail.page.html',
@@ -257,8 +264,20 @@ export class CrateDetailPage {
     },
   );
 
+  /** The Crate's bots, in the order they were added. */
+  protected readonly bots = computed(() =>
+    (this.crate.value()?.bots ?? [])
+      .filter((bot) => isActiveBot(bot))
+      .map((bot) => ({ bot, subtitle: Fmt.bot(bot) })),
+  );
+
+  /** Everyone's name by id, bots included (removed ones too: past Seasons have them). */
   private readonly names = computed(
-    () => new Map((this.members.value() ?? []).map((m) => [m.peach.id, m.peach.displayName])),
+    () =>
+      new Map([
+        ...(this.crate.value()?.bots ?? []).map((b) => [b.id, b.name] as const),
+        ...(this.members.value() ?? []).map((m) => [m.peach.id, m.peach.displayName] as const),
+      ]),
   );
 
   /** Owners and admins run Seasons. */
@@ -479,6 +498,33 @@ export class CrateDetailPage {
     } catch (e) {
       if (!(e instanceof DOMException && e.name === 'AbortError')) await this.copyCode(crate);
     }
+  }
+
+  protected readonly canAddBot = computed(() => this.canManage() && this.bots().length < MAX_BOTS);
+
+  protected addBot(crate: Crate): void {
+    const season = this.season();
+    this.dialog.open<AddBotDialog, AddBotData>(AddBotDialog, {
+      data: { crate, seasonOpen: !!season && isSeasonOpen(season) },
+      width: '440px',
+      maxWidth: 'calc(100vw - 32px)',
+    });
+  }
+
+  /** Takes a bot out at once, with Undo to put it back. */
+  protected async removeBot(crate: Crate, bot: CrateBot): Promise<void> {
+    const me = this.me();
+    if (!me) return;
+    const removed = await this.state.run((app) =>
+      app.crateService.removeBot(crate.id, me, bot.id, this.state.now()),
+    );
+    if (!removed) return;
+    const season = this.season();
+    const playing = !!season && isSeasonOpen(season) && season.participantIds.includes(bot.id);
+    this.state.toast(
+      playing ? `Removed ${bot.name}: it forfeits the rest of the Season.` : `Removed ${bot.name}.`,
+      () => void this.state.run((app) => app.crateService.restoreBot(crate.id, me, bot.id)),
+    );
   }
 
   protected newSeason(crate: Crate): void {

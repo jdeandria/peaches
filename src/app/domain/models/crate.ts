@@ -8,6 +8,7 @@ import {
   requireString,
   stringOrNull,
 } from '../core/json';
+import { botsFromJson, botToJson, CrateBot } from './bot';
 
 /**
  * Tunable behaviour of a Crate. Everything a Crate owner can change lives
@@ -53,6 +54,11 @@ export interface Crate {
   /** IANA time zone in which matchup weeks begin and end. */
   readonly timeZone: string;
   readonly settings: CrateSettings;
+  /**
+   * Computer-played crate-mates, for Crates short of Peaches, removed ones
+   * included (a Season may still have them). Owners and admins add them.
+   */
+  readonly bots: readonly CrateBot[];
   readonly createdAt: Date;
 }
 
@@ -66,6 +72,7 @@ export function crateFromJson(json: JsonMap): Crate {
     inviteCode: requireString(json['inviteCode'], 'inviteCode'),
     timeZone: stringOrNull(json['timeZone']) ?? 'UTC',
     settings: settings ? crateSettingsFromJson(settings) : DEFAULT_CRATE_SETTINGS,
+    bots: botsFromJson(json['bots']),
     createdAt: dateTimeFromJson(json['createdAt']),
   };
 }
@@ -79,6 +86,7 @@ export function crateToJson(c: Crate): JsonMap {
     inviteCode: c.inviteCode,
     timeZone: c.timeZone,
     settings: crateSettingsToJson(c.settings),
+    bots: c.bots.map(botToJson),
     createdAt: dateTimeToJson(c.createdAt),
   };
 }

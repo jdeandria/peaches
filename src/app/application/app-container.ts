@@ -11,8 +11,10 @@ import {
   WeekPlanRepository,
   WorkoutLogRepository,
 } from '../domain/repositories';
+import { BotTrainer } from '../domain/services/bot-trainer';
 import { RoundWindowService } from '../domain/services/round-window';
 import { ScoringService } from '../domain/services/scoring-service';
+import { withBots } from './bot-repositories';
 import { CrateService } from './crate-service';
 import { DisputeService } from './dispute-service';
 import { LoggingService } from './logging-service';
@@ -39,6 +41,8 @@ export interface Repositories {
  *
  * Only the repositories differ between backends (in memory for the demo and
  * tests, Firestore in production); services and the domain are shared.
+ * Crates' bots are layered over the backend's repositories here (see
+ * `withBots`), so everything reads them like any other crate-mate.
  */
 export class AppContainer implements Repositories {
   readonly peaches: PeachRepository;
@@ -52,6 +56,7 @@ export class AppContainer implements Repositories {
 
   readonly windows: RoundWindowService;
   readonly scoring = new ScoringService();
+  readonly botTrainer: BotTrainer;
   readonly crateService: CrateService;
   readonly loggingService: LoggingService;
   readonly routineService: RoutineService;
@@ -66,18 +71,29 @@ export class AppContainer implements Repositories {
     readonly catalog: ExerciseCatalog,
     readonly ids: IdGenerator,
     readonly zone: ZoneClock,
+    /** What time it is, for how far through their week the bots have got. */
+    readonly clock: () => Date = () => new Date(),
   ) {
     ({
-      peaches: this.peaches,
       crates: this.crates,
-      seasons: this.seasons,
-      logs: this.logs,
       ballots: this.ballots,
       disputes: this.disputes,
       routines: this.routines,
       plans: this.plans,
     } = repositories);
     this.windows = new RoundWindowService(zone);
+    this.botTrainer = new BotTrainer(catalog, zone);
+    ({
+      peaches: this.peaches,
+      seasons: this.seasons,
+      logs: this.logs,
+    } = withBots({
+      ...repositories,
+      trainer: this.botTrainer,
+      windows: this.windows,
+      scoring: this.scoring,
+      clock,
+    }));
     this.crateService = new CrateService(this.crates, ids);
     this.loggingService = new LoggingService({ logs: this.logs, crates: this.crates, ids });
     this.routineService = new RoutineService(this.routines, ids);

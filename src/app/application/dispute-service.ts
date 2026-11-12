@@ -1,3 +1,4 @@
+import { isBotId } from '../domain/models/bot';
 import { isActiveMembership } from '../domain/models/crate';
 import {
   Dispute,
@@ -63,6 +64,7 @@ export class DisputeService {
     const log = await this.deps.logs.getShared(crateId, args.logId);
     if (!log) throw new DomainError('Workout not found.');
     if (log.peachId === peachId) throw new DomainError('You can’t dispute your own workout.');
+    if (isBotId(log.peachId)) throw new DomainError('A bot’s numbers can’t be disputed.');
     await this.requireMember(crateId, peachId);
     if (!(await this.weekOpen(crateId, log.startedAt, now))) {
       throw new DomainError('That week is over, so its scores are final.');

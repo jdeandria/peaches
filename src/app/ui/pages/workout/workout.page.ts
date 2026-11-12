@@ -5,6 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 
 import { localDateOfLocal } from '../../../domain/core/local-date';
+import { isBotId } from '../../../domain/models/bot';
 import { DisputeVote, SESSION_TIME } from '../../../domain/models/dispute';
 import { AppState } from '../../../state/app-state';
 import { LoadingIndicator } from '../../expressive/loading-indicator';
@@ -68,7 +69,9 @@ interface MetricRow {
             <span class="material-symbols-rounded" aria-hidden="true">edit</span>
           </a>
         }
-        @if (!d.canDispute) {
+        @if (d.bot) {
+          <p class="pch-note" [pchStagger]="0">A bot’s workout: its numbers can’t be disputed.</p>
+        } @else if (!d.canDispute) {
           <p class="pch-note" [pchStagger]="0">Its week is over, so its scores are final.</p>
         }
         <pch-list-card [pchStagger]="1">
@@ -78,7 +81,7 @@ interface MetricRow {
                 <span class="pch-title-medium">{{ m.name }}</span>
                 <span class="pch-body-medium muted">{{ m.summary }}</span>
               </div>
-              @if (d.canDispute && !d.mine) {
+              @if (d.canDispute && !d.mine && !d.bot) {
                 <button
                   matIconButton
                   type="button"
@@ -169,12 +172,15 @@ export class WorkoutPage {
         app.disputeService.weekOpen(crateId, log.startedAt, now),
         app.crateService.activeMembers(crateId),
       ]);
-      const peaches = await app.peaches.getByIds(members.map((m) => m.peachId));
+      // A bot isn't a member, but its name is wanted for the title.
+      const peaches = await app.peaches.getByIds([...members.map((m) => m.peachId), log.peachId]);
       return {
         log,
         crate,
         disputes,
         canDispute,
+        // Bots' numbers are always plausible, and can't be disputed.
+        bot: isBotId(log.peachId),
         mine: log.peachId === me,
         names: new Map(peaches.map((p) => [p.id, p.displayName])),
       };

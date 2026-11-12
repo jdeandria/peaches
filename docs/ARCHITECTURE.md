@@ -63,7 +63,8 @@ Peach ──< WorkoutLog (private; shared on submit) ──> copies under each C
 | --- | --- | --- |
 | `Peach` | `id` | Global profile: time zone, units, and `locations` (where they train and the equipment there). |
 | `Exercise` | slug `id` | Reference data. Classified by movement pattern, muscles, equipment, modality, measurement, difficulty, MET. `distanceKindOf` says which distance category it scores. |
-| `Crate` | `id` | Group with `inviteCode`, time zone and `CrateSettings` (the grace period). |
+| `Crate` | `id` | Group with `inviteCode`, time zone, `CrateSettings` (the grace period) and its `bots`. |
+| `CrateBot` | `bot_<crateId>_<n>` (in the Crate) | A computer-played crate-mate: name, level, style, when it was added and removed. Plays under its id like a Peach; everything it does is derived (below). |
 | `CrateMembership` | `(crateId, peachId)` | Role and status. A Peach can be in many Crates. |
 | `Ballot` | `(crateId, peachId)` | A member's vote on the `ScoringRules`: a split of 100 points across the categories, and the plan rules. |
 | `SharedExercise` | `(crateId, exerciseId, peachId)` | An exercise a member has logged, as their Crate sees it: how it is logged and who logged it. Written whenever a log is shared. |
@@ -80,7 +81,23 @@ Peach ──< WorkoutLog (private; shared on submit) ──> copies under each C
 Derived, never stored: category totals and points, what a planned
 workout is worth, week scores (workouts and the plan's bonus or penalty),
 live matchup scores, the Crate's current rules (the tally of
-ballots), dispute outcomes, standings.
+ballots), dispute outcomes, standings, and everything bots do.
+
+### Bots
+
+A bot (`models/bot.ts`, DECISIONS.md #41) is stored only as an entry on
+its Crate. `BotTrainer` (`domain/services/bot-trainer.ts`) works out, as a
+pure function of the bot, the week and the Crate's zone, what it plans
+each week and the workouts it does. `withBots`
+(`application/bot-repositories.ts`) layers that over the backend's
+repositories in `AppContainer`: bot ids resolve to profiles, a Crate's
+shared logs include its bots' finished workouts (so its activity,
+exercises and matchups do), and a bot's commitment is its plan's worth
+under the Season's weights. So services and screens read bots like any
+crate-mate, and both backends stay unaware of them. Seasons add the
+Crate's bots to their participants when scheduled; memberships, ballots
+and dispute majorities are Peaches only. The container's clock decides
+which of a bot's workouts are done yet.
 
 ### Decisions worth knowing
 

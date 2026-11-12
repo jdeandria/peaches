@@ -36,6 +36,7 @@ export async function seededBackend(
     ExerciseCatalog.standard(),
     new SequentialIdGenerator('x'),
     new UtcZoneClock(),
+    () => FIXED_NOW,
   );
   if (options.seed ?? true) await new DemoSeeder(container).seed(FIXED_NOW, 'UTC');
   const auth = new DemoAuthService(

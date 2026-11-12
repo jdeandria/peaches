@@ -11,7 +11,9 @@ short costs points, and their opponent's plan shows as it grows, so there's
 a reason to plan big. Crate members vote on the rules (what miles run,
 weight moved, reps and active minutes are worth, and the plan bonus and
 penalty), see every exercise their crate-mates log, and can dispute dubious
-numbers by majority vote. The app has three tabs: **Plan**, **Crates** and
+numbers by majority vote. No friends to hand? A Crate's owner can add
+**bots**: computer-played crate-mates that plan, train and compete like
+anyone. The app has three tabs: **Plan**, **Crates** and
 **You** (docs/FLOW.md).
 
 Built as an installable **Progressive Web App** with Angular 22 and Angular
@@ -29,6 +31,7 @@ Android, iOS and desktop, and updates itself in the background.
 | Weekly plans with commitments (bonus or penalty), equipment locations | Done, tested |
 | Weekly round-robin seasons, rules voting, standings | Done, tested |
 | Exercises shared with Crates as they are logged; disputes by majority vote | Done, tested |
+| Bots: computer-played crate-mates (three levels, three styles) for Crates short of Peaches | Done, tested |
 | Angular UI (Material 3, light/dark, adaptive layout) | Done, unit + end-to-end tested |
 | PWA (manifest, service worker, offline, install, update prompts) | Done |
 | Persistence | In-memory demo backend and Firestore repositories (contract- and rules-tested on the Firestore emulator) |

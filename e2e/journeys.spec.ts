@@ -222,6 +222,35 @@ test('creating a crate opens its detail page', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Week 1 · Oct 12 – 18' })).toBeVisible();
 });
 
+test('alone in a Crate, add bots and play a Season against them', async ({ page }) => {
+  await openApp(page, '/crates');
+  await page.getByRole('button', { name: /switch Crate/ }).click();
+  await page.getByRole('button', { name: /Create a Crate/ }).click();
+  let dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Name').fill('Solo Squad');
+  await dialog.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('heading', { name: 'Solo Squad', level: 1 })).toBeVisible();
+
+  // Bots are with the Peaches: the next free name, a level and a style.
+  await page.getByRole('radio', { name: 'Peaches' }).click();
+  await page.getByRole('button', { name: /Add a bot/ }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Name')).toHaveValue('Sprocket');
+  await dialog.getByRole('radio', { name: 'Strong' }).click();
+  await dialog.getByRole('radio', { name: 'Runner' }).click();
+  await dialog.getByRole('button', { name: 'Add' }).click();
+  await expect(page.getByText('Bot · Strong runner')).toBeVisible();
+
+  // The Season plays them: next week, I'm up against Sprocket's plan.
+  await page.getByRole('radio', { name: 'Season' }).click();
+  await page.getByRole('button', { name: 'Season' }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog.getByText(/only Peach here/)).toBeHidden();
+  await dialog.getByRole('button', { name: 'Start' }).click();
+  await expect(page.getByRole('rowheader', { name: 'Sprocket' })).toBeVisible();
+  await expect(page.getByText(/vs Sprocket/).first()).toBeVisible();
+});
+
 test('joining with a bad invite code shows an error', async ({ page }) => {
   await openApp(page, '/crates');
   await page.getByRole('button', { name: /switch Crate/ }).click();
