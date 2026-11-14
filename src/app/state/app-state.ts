@@ -70,7 +70,8 @@ export class AppState {
 
   /**
    * `loading` until auth is known and, once signed in, the Peach profile
-   * exists and Seasons are brought up to date.
+   * exists. Seasons are brought up to date in the background after that
+   * (see {@link bootstrap}).
    */
   readonly status = toSignal(
     this.auth.authState.pipe(
@@ -144,7 +145,10 @@ export class AppState {
    */
   async syncSeasons(): Promise<void> {
     const id = this.peachId();
-    if (!id) return;
+    if (id) await this.syncSeasonsFor(id);
+  }
+
+  private async syncSeasonsFor(id: string): Promise<void> {
     try {
       await this.app.seasonService.syncPeach(id, this.now());
     } catch (e) {
@@ -227,9 +231,17 @@ export class AppState {
   /** Emits the session status as an Observable (for router guards). */
   readonly status$ = toObservable(this.status);
 
+  /**
+   * Makes sure the Peach exists, then starts bringing their Seasons up to
+   * date without waiting for it. Syncing writes (opening and closing weeks),
+   * and a Firestore write only resolves once the server acknowledges it: on
+   * a poor or no connection that can take minutes or never happen, which
+   * used to leave the app on the splash. The writes land in the local cache
+   * at once either way, and the sync bumps the revision when it finishes so
+   * every screen refetches.
+   */
   private async bootstrap(user: AuthUser): Promise<void> {
     const peach = await this.app.sessionService.ensurePeach(user, this.now(), deviceTimeZone());
-    await this.app.seasonService.syncPeach(peach.id, this.now());
-    this.bump();
+    void this.syncSeasonsFor(peach.id);
   }
 }
