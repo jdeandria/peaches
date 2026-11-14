@@ -14,3 +14,14 @@ export const CLOCK = new InjectionToken<() => Date>('CLOCK', {
   providedIn: 'root',
   factory: () => () => new Date(),
 });
+
+/**
+ * How long the splash waits for the session to load before offering to try
+ * again (ms). Longer than Firestore takes to give up on the server and read
+ * its cache (about 10 s), so only a write that never reaches the server
+ * trips it.
+ */
+export const STARTUP_TIMEOUT_MS = new InjectionToken<number>('STARTUP_TIMEOUT_MS', {
+  providedIn: 'root',
+  factory: () => 20_000,
+});

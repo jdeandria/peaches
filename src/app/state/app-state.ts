@@ -16,10 +16,14 @@ import {
   distinctUntilChanged,
   from,
   map,
+  merge,
   Observable,
   of,
+  share,
   startWith,
   switchMap,
+  takeUntil,
+  timer,
 } from 'rxjs';
 
 import { AppContainer } from '../application/app-container';
@@ -28,7 +32,7 @@ import { errorMessage } from '../application/errors';
 import { localDateOfLocal } from '../domain/core/local-date';
 import { UnitSystem } from '../domain/models/training';
 import { deviceTimeZone } from '../data/tz/intl-zone-clock';
-import { APP_CONTAINER, AUTH_SERVICE, CLOCK } from './tokens';
+import { APP_CONTAINER, AUTH_SERVICE, CLOCK, STARTUP_TIMEOUT_MS } from './tokens';
 
 /** Where the signed-in session is. */
 export type SessionStatus = 'loading' | 'signedOut' | 'ready' | 'error';
@@ -52,6 +56,7 @@ export class AppState {
   readonly auth = inject(AUTH_SERVICE);
   readonly catalog = this.app.catalog;
   private readonly clock = inject(CLOCK);
+  private readonly startupTimeout = inject(STARTUP_TIMEOUT_MS);
   private readonly snackBar = inject(MatSnackBar);
 
   /** Bumped after every mutation so one-shot queries refetch. */
@@ -70,7 +75,13 @@ export class AppState {
 
   /**
    * `loading` until auth is known and, once signed in, the Peach profile
-   * exists and Seasons are brought up to date.
+   * exists. Seasons are brought up to date in the background after that
+   * (see {@link bootstrap}).
+   *
+   * If that takes longer than {@link STARTUP_TIMEOUT_MS} (a new Peach's
+   * profile is a write, which waits for the server), it reports `error` so
+   * the splash offers to try again, and still moves on to `ready` if the
+   * load finishes after all.
    */
   readonly status = toSignal(
     this.auth.authState.pipe(
@@ -78,14 +89,22 @@ export class AppState {
       switchMap((user): Observable<SessionStatus> => {
         if (user === undefined) return of('loading');
         if (user === null) return of('signedOut');
-        return from(this.bootstrap(user)).pipe(
+        const settled = from(this.bootstrap(user)).pipe(
           map((): SessionStatus => 'ready'),
           catchError((e: unknown) => {
             console.error('Session bootstrap failed', e);
             return of<SessionStatus>('error');
           }),
-          startWith<SessionStatus>('loading'),
+          share(),
         );
+        const tooSlow = timer(this.startupTimeout).pipe(
+          map((): SessionStatus => {
+            console.error(`Session bootstrap took over ${this.startupTimeout} ms`);
+            return 'error';
+          }),
+          takeUntil(settled),
+        );
+        return merge(settled, tooSlow).pipe(startWith<SessionStatus>('loading'));
       }),
     ),
     { initialValue: 'loading' as SessionStatus },
@@ -144,7 +163,10 @@ export class AppState {
    */
   async syncSeasons(): Promise<void> {
     const id = this.peachId();
-    if (!id) return;
+    if (id) await this.syncSeasonsFor(id);
+  }
+
+  private async syncSeasonsFor(id: string): Promise<void> {
     try {
       await this.app.seasonService.syncPeach(id, this.now());
     } catch (e) {
@@ -227,9 +249,17 @@ export class AppState {
   /** Emits the session status as an Observable (for router guards). */
   readonly status$ = toObservable(this.status);
 
+  /**
+   * Makes sure the Peach exists, then starts bringing their Seasons up to
+   * date without waiting for it. Syncing writes (opening and closing weeks),
+   * and a Firestore write only resolves once the server acknowledges it: on
+   * a poor or no connection that can take minutes or never happen, which
+   * used to leave the app on the splash. The writes land in the local cache
+   * at once either way, and the sync bumps the revision when it finishes so
+   * every screen refetches.
+   */
   private async bootstrap(user: AuthUser): Promise<void> {
     const peach = await this.app.sessionService.ensurePeach(user, this.now(), deviceTimeZone());
-    await this.app.seasonService.syncPeach(peach.id, this.now());
-    this.bump();
+    void this.syncSeasonsFor(peach.id);
   }
 }
